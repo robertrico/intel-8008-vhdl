@@ -1,0 +1,177 @@
+Intel 8008 VHDL Implementation - v1.0
+======================================
+
+Copyright (c) 2025 Robert Rico
+
+This project is a cycle-accurate VHDL implementation of the Intel 8008
+microprocessor for FPGA deployment, including system integration, memory
+subsystem, comprehensive test suite, and interactive monitor.
+
+IMPLEMENTATION
+==============
+
+Intel 8008 VHDL Implementation
+-------------------------------
+All VHDL code is an original implementation by Robert Rico (2025),
+based on Intel's published specifications and datasheets.
+
+Reference Materials:
+- Intel 8008 Datasheet (1972, 1978)
+- Intel 8008 User's Manual (1973)
+- Intel SIM8-01 Reference Design Schematic
+
+Note: During development, other HDL implementations were reviewed as
+references for understanding different approaches to the 8008 architecture.
+
+Assembly Toolchain
+------------------
+All test programs are assembled using naken_asm by Michael Kohn:
+
+  Tool: naken_asm
+  Author: Michael Kohn
+  Repository: https://github.com/mikeakohn/naken_asm
+  License: GPL
+  Website: https://www.mikekohn.net/
+
+This project uses 8080 syntax (MOV, MVI, ADD) rather than original 8008
+mnemonics (Lrr, LrI, ADr) as supported by naken_asm.
+
+v1.0 Implementation by Robert Rico
+-----------------------------------
+
+Core Components (src/components/):
+- s8008.vhdl: Complete 8008 CPU (1795 lines, cycle-accurate)
+- i8008_alu.vhdl: Arithmetic Logic Unit
+- phase_clocks.vhdl: Two-phase clock generator
+- rom_2kx8.vhdl: 2KB ROM with program loading
+- ram_1kx8.vhdl: 1KB RAM
+- io_console.vhdl: I/O console for simulation
+
+Interactive Monitor (projects/monitor_8008/):
+- monitor.asm: Interactive monitor program
+- console_vhpi.c: C code for VHPIDIRECT terminal I/O
+- io_console_interactive.vhdl: VHDL I/O with C integration
+- s8008_monitor_tb.vhdl: Interactive testbench
+
+Test Infrastructure (sim/):
+- s8008_tb.vhdl: Comprehensive test suite
+- s8008_*_tb.vhdl: Test program runners
+- sim/units/*_tb.vhdl: Unit tests (ALU, I/O, stack, etc.)
+
+Test Programs (test_programs/):
+- simple_add.asm, search.asm, ram_test.asm, ram_intensive.asm
+
+Build System:
+- Makefile, common.mk: Unified build rules
+- hex_to_mem.py: HEX to MEM conversion utility
+
+Intel 8008 Specifications
+--------------------------
+Original Design: Intel Corporation (1970s)
+
+Documentation referenced:
+- Intel 8008 Datasheet (1972, 1978)
+- Intel 8008 User's Manual (1973)
+- Intel SIM8-01 Reference Design Schematic
+
+LICENSE TERMS
+=============
+
+MIT License
+-----------
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this hardware design and associated documentation files (the "Design"),
+to deal in the Design without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+sell copies of the Design, and to permit persons to whom the Design is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Design.
+
+THE DESIGN IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE DESIGN OR THE USE OR OTHER DEALINGS IN THE
+DESIGN.
+
+NATURE OF THIS WORK
+====================
+
+This v1.0 project is an original VHDL implementation of the Intel 8008
+microprocessor by Robert Rico (2025), including:
+
+1. Complete cycle-accurate 8008 CPU implementation
+2. Memory subsystem (ROM/RAM) and I/O console
+3. Interactive monitor with VHPIDIRECT
+4. Comprehensive test suite (12+ programs)
+5. Build system and FPGA synthesis support
+
+All VHDL code is original work based on Intel's published specifications.
+
+PROJECT EVOLUTION
+==================
+
+v1.0 - Monolithic Softcore (Current):
+- Complete 8008 in s8008.vhdl (1795 lines)
+- Cycle-accurate behavior per Intel specifications
+- Optimized for FPGA synthesis
+- Fully validated in simulation
+
+Earlier Iterations (src/iss/, archived):
+- Modular glue-logic components
+- Designed for real 8008 silicon interface
+- Preserved in git history
+
+DISCLAIMER
+==========
+
+This project is provided for educational and historical preservation purposes.
+Intel, 8008, and SIM8-01 are trademarks of Intel Corporation.
+
+This is an independent implementation for educational purposes, not an official
+product of Intel Corporation or any other company.
+
+NO WARRANTY - HARDWARE RISK
+============================
+
+This hardware design is provided "as-is" without warranty of any kind.
+Use at your own risk.
+
+SIMULATION VS. HARDWARE STATUS:
+- Simulation: Fully validated on macOS Sequoia 15.6.1
+- FPGA Synthesis: Verified for Lattice ECP5-5G
+- Hardware Deployment: Not yet tested on physical FPGA
+
+When deploying to FPGA hardware:
+- Verify board compatibility and pin constraints
+- Test thoroughly before use in critical applications
+- Proceed at your own risk
+
+VINTAGE HARDWARE INTERFACING (FUTURE):
+When interfacing with vintage Intel 8008 silicon:
+- Verify voltage levels carefully (PMOS: -9V/0V vs. FPGA: 3.3V)
+- Test with non-critical hardware first
+- Use appropriate level shifters and protection circuitry
+- The author is not responsible for any damage to vintage components
+- Proceed at your own risk
+
+ACKNOWLEDGMENTS
+===============
+
+- Intel Corporation for:
+  * Original 8008 microprocessor and documentation
+  * SIM8-01 reference design
+
+- Michael Kohn for:
+  * naken_asm assembler
+  * verilog 8008 implementation
+
+- Vintage computing community for:
+  * Documentation preservation and archiving
+
+- Open-source FPGA toolchain developers:
+  * GHDL, Yosys, nextpnr, OSS CAD Suite teams
