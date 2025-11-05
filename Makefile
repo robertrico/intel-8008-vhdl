@@ -20,8 +20,9 @@ RTL_SOURCES = $(SRC_DIR)/components/i8008_alu.vhdl \
 # Main comprehensive testbench
 TB_SOURCES = $(SIM_DIR)/s8008_tb.vhdl
 
-# All testbenches (main + units)
+# All testbenches (main + units + interrupt)
 ALL_TB_SOURCES = $(TB_SOURCES) \
+                 $(SRC_DIR)/testbench/s8008_interrupt_tb.vhdl \
                  $(wildcard $(SIM_DIR)/units/*_tb.vhdl)
 
 #==========================================
@@ -50,6 +51,7 @@ STOP_TIME_s8008_ram_intensive_tb = 20000us
 STOP_TIME_s8008_ram_test_tb = 3000us
 STOP_TIME_s8008_simple_add_tb = 1000us
 STOP_TIME_s8008_inp_cpi_tb = 1000us
+STOP_TIME_s8008_interrupt_tb = 5000us
 
 # Get stop time for active test, or use default
 SIM_STOP_TIME ?= $(or $(STOP_TIME_$(ACTIVE_TB_ENTITY)),1ms)
@@ -151,6 +153,55 @@ test-simple-add:
 
 test-inp-cpi:
 	@$(MAKE) sim TEST=s8008_inp_cpi_tb
+
+test-interrupt:
+	@$(MAKE) sim TEST=s8008_interrupt_tb
+
+# Run all assembly program tests
+test-all-programs:
+	@echo "=========================================="
+	@echo "Running All Assembly Program Tests"
+	@echo "=========================================="
+	@echo ""
+	@$(MAKE) --no-print-directory test-simple-add && echo "✓ simple_add PASSED" || echo "✗ simple_add FAILED"
+	@echo ""
+	@$(MAKE) --no-print-directory test-ram-test && echo "✓ ram_test PASSED" || echo "✗ ram_test FAILED"
+	@echo ""
+	@$(MAKE) --no-print-directory test-search && echo "✓ search PASSED" || echo "✗ search FAILED"
+	@echo ""
+	@$(MAKE) --no-print-directory test-ram-intensive && echo "✓ ram_intensive PASSED" || echo "✗ ram_intensive FAILED"
+	@echo ""
+	@echo "=========================================="
+	@echo "Assembly Program Tests Complete"
+	@echo "=========================================="
+
+# Quick test - run core unit tests only
+test-quick:
+	@echo "Running quick validation tests..."
+	@$(MAKE) --no-print-directory test-alu > /dev/null 2>&1 && echo "✓ ALU tests PASSED" || echo "✗ ALU tests FAILED"
+	@$(MAKE) --no-print-directory test-call-ret > /dev/null 2>&1 && echo "✓ CALL/RET tests PASSED" || echo "✗ CALL/RET tests FAILED"
+	@$(MAKE) --no-print-directory test-conditional > /dev/null 2>&1 && echo "✓ Conditional tests PASSED" || echo "✗ Conditional tests FAILED"
+	@$(MAKE) --no-print-directory test-rst > /dev/null 2>&1 && echo "✓ RST tests PASSED" || echo "✗ RST tests FAILED"
+
+# Show test programs with descriptions
+show-programs:
+	@echo "=========================================="
+	@echo "Available Assembly Test Programs"
+	@echo "=========================================="
+	@echo ""
+	@echo "simple_add       - Basic addition test (A + B)"
+	@echo "ram_test         - RAM read/write verification"
+	@echo "search           - Sequential search algorithm"
+	@echo "ram_intensive    - Comprehensive RAM stress test"
+	@echo ""
+	@echo "Run with:"
+	@echo "  make test-simple-add"
+	@echo "  make test-ram-test"
+	@echo "  make test-search"
+	@echo "  make test-ram-intensive"
+	@echo ""
+	@echo "Or run all:"
+	@echo "  make test-all-programs"
 
 #==========================================
 # Program Assembly and ROM Loading

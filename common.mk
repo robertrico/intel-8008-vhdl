@@ -11,6 +11,7 @@
 # Optional overrides:
 #   TEST            - Specify which test to run (e.g., make sim TEST=alu_test)
 #   SIM_STOP_TIME   - Simulation duration (default: 1ms)
+#   LPF_FILE        - Constraint file path (default: constraints/versa_ecp5.lpf)
 #   FPGA_DEVICE     - FPGA device (default: um5g-45k for ECP5)
 #   FPGA_PACKAGE    - Package type (default: CABGA381)
 #   FPGA_SPEED      - Speed grade (default: 8)
@@ -60,7 +61,8 @@ FPGA_SPEED ?= 8
 #==========================================
 # Build outputs
 #==========================================
-LPF_FILE = $(CONSTRAINTS_DIR)/versa_ecp5.lpf
+# Constraint file (can be overridden in project Makefile for custom pin assignments)
+LPF_FILE ?= $(CONSTRAINTS_DIR)/versa_ecp5.lpf
 JSON_FILE = $(BUILD_DIR)/$(TOP_ENTITY).json
 TEXTCFG_FILE = $(BUILD_DIR)/$(TOP_ENTITY).config
 BITSTREAM_FILE = $(BUILD_DIR)/$(TOP_ENTITY).bit
@@ -77,12 +79,14 @@ SIM_REPORT = $(REPORTS_DIR)/sim_$(ACTIVE_TB_ENTITY).txt
 # Simulation parameters
 #==========================================
 # If TEST is specified, override TB_ENTITY and TB_SOURCES
-# Check both sim/ and sim/units/ directories for test files
+# Check sim/units/, src/testbench/, and main sim/ directories for test files
 ifdef TEST
     ACTIVE_TB_ENTITY = $(TEST)
-    # Try units directory first, then main sim directory
+    # Try units directory first, then src/testbench, then main sim directory
     ifneq (,$(wildcard $(SIM_DIR)/units/$(TEST).vhdl))
         ACTIVE_TB_SOURCES = $(SIM_DIR)/units/$(TEST).vhdl
+    else ifneq (,$(wildcard $(SRC_DIR)/testbench/$(TEST).vhdl))
+        ACTIVE_TB_SOURCES = $(SRC_DIR)/testbench/$(TEST).vhdl
     else
         ACTIVE_TB_SOURCES = $(SIM_DIR)/$(TEST).vhdl
     endif
@@ -186,7 +190,7 @@ $(JSON_FILE): $(RTL_SOURCES) | $(BUILD_DIR) create-reports-dir
 	@echo "Analyzing VHDL for synthesis..."
 	$(GHDL) -a $(GHDL_FLAGS) $(RTL_SOURCES)
 	@echo "Synthesizing with GHDL and Yosys..."
-	$(GHDL) --synth $(GHDL_FLAGS) --out=verilog $(TOP_ENTITY) > $(BUILD_DIR)/$(TOP_ENTITY).v
+	$(GHDL) --synth $(GHDL_FLAGS) --latches --out=verilog $(TOP_ENTITY) > $(BUILD_DIR)/$(TOP_ENTITY).v
 	@echo "Running Yosys synthesis..."
 	$(YOSYS) -p "read_verilog $(BUILD_DIR)/$(TOP_ENTITY).v; synth_ecp5 -top $(TOP_ENTITY) -json $(JSON_FILE)" 2>&1 | tee $(SYNTH_REPORT)
 	@echo "Synthesis report saved to $(SYNTH_REPORT)"
@@ -236,7 +240,7 @@ program: $(BITSTREAM_FILE)
 .PHONY: flash
 flash: $(BITSTREAM_FILE)
 	@echo "Programming FPGA flash (persistent)..."
-	$(OPENFPGALOADER) -b versa_ecp5 $(BITSTREAM_FILE)
+	$(OPENFPGALOADER) -b ft2232 $(BITSTREAM_FILE)
 
 #==========================================
 # Utility Targets

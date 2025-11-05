@@ -14,7 +14,7 @@ use IEEE.STD_LOGIC_TEXTIO.ALL;
 entity rom_2kx8 is
     generic(
         -- ROM initialization file
-        ROM_FILE : string := "test_programs/simple_add.mem"
+        ROM_FILE : string := "test_programs/ram_intensive.mem"
     );
     port(
         -- 11-bit address (2^11 = 2048)
@@ -56,7 +56,7 @@ architecture rtl of rom_2kx8 is
             end loop;
             file_close(rom_file);
 
-            report "Loaded ROM from " & filename & " (" & integer'image(addr) & " bytes)" severity note;
+            -- report "Loaded ROM from " & filename & " (" & integer'image(addr) & " bytes)" severity note;
         else
             -- File not found, use default program
             -- report "ROM file " & filename & " not found, using default program" severity warning;

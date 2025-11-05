@@ -65,8 +65,9 @@ entity s8008 is
         READY : in std_logic;
 
         -- Interrupt request input
-        -- When INT=1 during T1, CPU performs interrupt acknowledge (T1I)
-        INT : in std_logic;
+        -- When INT=1 at end of PCI cycle (T3 of FETCH), CPU performs interrupt acknowledge (T1I)
+        -- Default='0' for testbenches that don't use interrupts
+        INT : in std_logic := '0';
 
         -- Debug outputs (for testbench verification)
         -- These expose internal state for testing purposes
@@ -119,6 +120,10 @@ architecture rtl of s8008 is
     -- Timing states (real 8008 hardware states)
     type timing_state_t is (T1, T1I, T2, TWAIT, T3, T4, T5, STOPPED);
     signal timing_state : timing_state_t := T1;
+
+    -- Interrupt synchronizer signals (per Rev 2 datasheet requirements)
+    signal int_latched : std_logic := '0';    -- Latched interrupt request
+    signal int_previous : std_logic := '0';   -- Previous INT value for edge detection
 
     -- Internal registers for address and data
     -- In a real 8008, these would come from the instruction decoder and register file
@@ -283,6 +288,52 @@ architecture rtl of s8008 is
 begin
 
     --===========================================
+    -- Interrupt Synchronizer (Rev 2 Datasheet Requirement)
+    --===========================================
+    -- Per Intel 8008 Rev 2 datasheet (November 1972):
+    -- "The interrupt line to the CPU must not be allowed to change within
+    --  200ns of the falling edge of φ1"
+    --
+    -- This synchronizer latches INT on rising edge and clears on acknowledge
+    -- Prevents metastability and re-triggering issues
+    interrupt_sync: process(phi1, reset_n)
+    begin
+        if reset_n = '0' then
+            int_latched <= '0';
+            int_previous <= '0';
+        elsif rising_edge(phi1) then
+            -- Sample INT (treat any non-'1' as '0' for safety)
+            if INT = '1' then
+                int_previous <= '1';
+            else
+                int_previous <= '0';
+            end if;
+
+            -- Latch logic: Set on rising edge, clear on falling edge OR acknowledge
+            -- IMPORTANT: Only respond to clean '1' and '0' values, ignore 'U'/'X'/'Z'/etc
+            if INT = '1' and int_previous = '0' then
+                -- Clean rising edge of INT: latch the request
+                int_latched <= '1';
+                if DEBUG_VERBOSE then
+                    report "Interrupt request latched (rising edge)";
+                end if;
+            elsif INT = '0' and int_previous = '1' then
+                -- Clean falling edge: clear latch if not yet acknowledged
+                int_latched <= '0';
+                if DEBUG_VERBOSE then
+                    report "Interrupt request cleared (falling edge)";
+                end if;
+            elsif timing_state = T1I and clock_phase = '1' then
+                -- CPU acknowledged interrupt: clear latch
+                int_latched <= '0';
+                if DEBUG_VERBOSE then
+                    report "Interrupt acknowledged, clearing latch";
+                end if;
+            end if;
+        end if;
+    end process;
+
+    --===========================================
     -- Instruction Cycle Length Decoder (SILICON-ACCURATE)
     --===========================================
     -- This represents the PLA decoder logic in the real 8008
@@ -439,17 +490,11 @@ begin
             if next_phase = '1' then
                 case timing_state is
                     when T1 =>
-                        -- Check for interrupt request
-                        if INT = '1' then
-                            timing_state <= T1I;
-                            if DEBUG_VERBOSE then
-                                report "T1 -> T1I (interrupt)";
-                            end if;
-                        else
-                            timing_state <= T2;
-                            if DEBUG_VERBOSE then
-                                report "T1 -> T2";
-                            end if;
+                        -- T1 always transitions to T2
+                        -- Interrupt check happens at T3 during FETCH only
+                        timing_state <= T2;
+                        if DEBUG_VERBOSE then
+                            report "T1 -> T2";
                         end if;
 
                     when T1I =>
@@ -488,8 +533,14 @@ begin
                         -- SILICON-ACCURATE: Use combinatorial decoder output during FETCH
                         -- In real 8008, PLA decoder directly drives timing state machine
                         if microcode_state = FETCH then
-                            -- Instruction just fetched - use combinatorial decode
-                            if is_halt_op = '1' then
+                            -- Instruction just fetched - check for interrupt FIRST
+                            -- Per Intel 8008 datasheet: INT sampled at end of PCI cycle (T3 of FETCH)
+                            if int_latched = '1' then
+                                timing_state <= T1I;
+                                if DEBUG_VERBOSE then
+                                    report "T3 -> T1I (interrupt during FETCH)";
+                                end if;
+                            elsif is_halt_op = '1' then
                                 timing_state <= STOPPED;
                                 if DEBUG_VERBOSE then
                                     report "T3 -> STOPPED (HLT instruction)";
@@ -534,8 +585,14 @@ begin
                         end if;
 
                     when STOPPED =>
-                        -- Remain stopped (HLT instruction executed)
-                        null;
+                        -- Remain stopped until interrupt
+                        -- Per Intel 8008 datasheet: interrupt exits STOPPED state
+                        if int_latched = '1' then
+                            timing_state <= T1I;
+                            if DEBUG_VERBOSE then
+                                report "STOPPED -> T1I (interrupt exits STOPPED state)";
+                            end if;
+                        end if;
                 end case;
             end if;
         end if;
@@ -1396,7 +1453,8 @@ begin
 
                         else
                             -- Other instructions not yet implemented
-                            report "WARNING: Unimplemented instruction" severity warning;
+                            report "WARNING: Unimplemented instruction 0x" & to_hstring(instruction_reg) &
+                                   " at PC=0x" & to_hstring(program_counter) severity warning;
                             microcode_state <= FETCH;
                             cycle_type_reg <= "00";  -- PCI (next instruction fetch)
                             skip_exec_states <= '1';  -- 3-state cycle
@@ -1760,11 +1818,14 @@ begin
                     -- 3-state cycles (T1-T2-T3): increment at end of T3
                     if timing_state = T3 and skip_exec_states = '1' then
                         -- Always increment for FETCH (instruction fetch) and IMMEDIATE (data fetch)
-                        if microcode_state = FETCH or microcode_state = IMMEDIATE or pc_should_increment = '1' then
+                        -- UNLESS we're about to take an interrupt (transitioning to T1I)
+                        if (microcode_state = FETCH or microcode_state = IMMEDIATE or pc_should_increment = '1') and not (microcode_state = FETCH and int_latched = '1') then
                             program_counter <= program_counter + 1;
                             if DEBUG_VERBOSE then
                                 report "PC incremented to " & integer'image(to_integer(program_counter + 1)) & " (3-state cycle)";
                             end if;
+                        elsif microcode_state = FETCH and int_latched = '1' and DEBUG_VERBOSE then
+                            report "PC increment skipped due to interrupt (PC=" & integer'image(to_integer(program_counter)) & ")";
                         end if;
                     -- 5-state cycles (T1-T2-T3-T4-T5): increment at end of T5 if pc_should_increment='1'
                     elsif timing_state = T5 and skip_exec_states = '0' and pc_should_increment = '1' then

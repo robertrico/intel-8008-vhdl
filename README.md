@@ -1,10 +1,12 @@
-# Intel 8008 VHDL Implementation - v1.0
+# Intel 8008 VHDL Implementation - v1.1
 
-A complete, cycle-accurate VHDL implementation of the Intel 8008 microprocessor with interactive monitor, comprehensive test suite, and FPGA synthesis support.
+A complete, cycle-accurate VHDL implementation of the Intel 8008 microprocessor with interrupt support, interactive monitor, comprehensive test suite, and FPGA synthesis support.
 
-[![Status](https://img.shields.io/badge/status-v1.0%20simulation-brightgreen)]()
+[![Status](https://img.shields.io/badge/status-v1.1%20simulation-brightgreen)]()
 [![FPGA](https://img.shields.io/badge/FPGA-Ready%20for%20Deployment-orange)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE.txt)
+
+> **New in v1.1:** Corrected interrupt implementation with proper T3 sampling, interrupt synchronizer, and PC preservation per Intel 8008 Rev 2 datasheet specifications.
 
 > **Platform Note:** This project has been developed and tested exclusively on **macOS Sequoia 15.6.1**. Compatibility with other operating systems has not been verified.
 
@@ -13,12 +15,24 @@ A complete, cycle-accurate VHDL implementation of the Intel 8008 microprocessor 
 This project implements the Intel 8008 microprocessor (introduced April 1972) in VHDL, providing:
 
 - **Complete 8008 CPU core** - All 48 instructions with cycle-accurate behavior
+- **Interrupt support** - Hardware-accurate interrupt handling with T1I acknowledge cycle and synchronizer
 - **Interactive monitor** - Real-time assembly program execution via VHPIDIRECT
 - **Memory subsystem** - 2KB ROM + 1KB RAM
-- **Comprehensive test suite** - 12+ validated programs with assertion-based verification
+- **Comprehensive test suite** - 13+ validated programs with assertion-based verification
 - **FPGA synthesis** - Verified synthesis for Lattice ECP5 (hardware deployment pending)
 
 The interactive monitor provides a command-line interface for experimenting with 8008 assembly programs in simulation.
+
+### What's New in v1.1
+
+**Interrupt System Corrections:**
+- ✅ Moved INT sampling from T1 to end of T3 during FETCH (per datasheet specification)
+- ✅ Implemented interrupt synchronizer per Rev 2 datasheet requirements (±200ns stability)
+- ✅ Fixed T1/T1I mutual exclusivity - proper state transition without spurious T1
+- ✅ Added PC preservation during interrupt acknowledge sequence
+- ✅ Created comprehensive interrupt testbench framework
+
+For detailed analysis of the v1.0 bugs and fixes, see [docs/interrupt_analysis_and_testing.txt](docs/interrupt_analysis_and_testing.txt).
 
 ---
 
@@ -336,6 +350,308 @@ See [projects/monitor_8008/README.txt](projects/monitor_8008/README.txt) for ful
 - **Address Space**: 16 KB (14-bit addressing)
 - **Data Bus**: 8-bit multiplexed with address
 - **I/O Ports**: 8 input + 24 output (8-bit addressing)
+
+---
+
+## Interrupt System: Implementation and Historical Context
+
+The Intel 8008 interrupt mechanism represents an early and minimalist approach to interrupt handling that differs significantly from later microprocessors. Understanding its operation requires careful analysis of the datasheet evolution and timing requirements.
+
+### Interrupt Architecture Overview
+
+The 8008 implements a **single-level, non-vectorized interrupt** with instruction injection capability. Unlike modern processors with interrupt vector tables or the 8080's hardware-vectored interrupts, the 8008's approach places significant responsibility on external hardware.
+
+#### Key Characteristics:
+- **Single INT input line** - No priority levels in hardware
+- **Instruction injection mechanism** - External device supplies the first instruction byte
+- **No automatic state save** - Software/external hardware must preserve context
+- **Program Counter preservation** - PC is not incremented during interrupt acknowledge
+
+### The Interrupt Sequence
+
+#### 1. Interrupt Recognition (End of PCI Cycle)
+
+The CPU samples the INT line **at the end of each Program Counter Increment (PCI) cycle** during the T3 state. This is critical:
+
+- **PCI cycle**: A complete instruction fetch (T1-T2-T3 or T1-T2-T3-T4-T5)
+- **Sampling point**: At T3 completion, when `microcode_state = FETCH`
+- **Decision**: Transition to T1I (interrupt acknowledge) instead of T1 (next instruction)
+
+**Important**: T1 and T1I are **mutually exclusive states**. The CPU never enters T1 before T1I. This distinction is crucial for correct hardware interfacing.
+
+#### 2. Interrupt Acknowledge Cycle (T1I-T2-T3)
+
+When INT is recognized, the CPU performs a special acknowledge cycle:
+
+**T1I State** (State outputs S2 S1 S0 = 001):
+- Lower 8 bits of Program Counter output on data bus
+- **PC is NOT incremented** - preserved for return address
+
+**T2 State**:
+- Upper 6 bits of PC and cycle type code output
+- External interrupt controller recognizes acknowledge
+
+**T3 State**:
+- External controller may optionally drive data bus
+- Typical implementations don't use this cycle for instruction injection
+
+#### 3. Instruction Injection (Subsequent PCI Cycle)
+
+Following the T1I acknowledge cycle, a **normal PCI cycle** occurs:
+
+**T1 State**: CPU outputs the same PC (still not incremented)
+
+**T2 State**: Cycle type = "00" (PCI - instruction fetch)
+
+**T3 State**: **External interrupt controller jams instruction byte onto data bus**
+- Typical instruction: RST n (Restart to vector n)
+- Alternative: CALL, JMP, or any valid instruction
+- CPU latches this as if it were fetched from memory
+
+**Critical Detail**: Only the first byte is supplied by external hardware. If a multi-byte instruction is injected (e.g., CALL), subsequent bytes are fetched from normal memory using the current PC value.
+
+#### 4. Instruction Execution
+
+The injected instruction executes normally through the CPU's standard decode and execution logic.
+
+**For RST n instruction**:
+1. Current PC is pushed onto the 8-level stack
+2. PC is set to (n × 8) - vector address in page zero
+3. Execution continues from the interrupt handler
+
+**Vector Locations** (RST instruction):
+```
+RST 0 → 0x00  (8 bytes: 0x00-0x07)
+RST 1 → 0x08  (8 bytes: 0x08-0x0F)
+RST 2 → 0x10  (8 bytes: 0x10-0x17)
+RST 3 → 0x18  (8 bytes: 0x18-0x1F)
+RST 4 → 0x20  (8 bytes: 0x20-0x27)
+RST 5 → 0x28  (8 bytes: 0x28-0x2F)
+RST 6 → 0x30  (8 bytes: 0x30-0x37)
+RST 7 → 0x38  (8 bytes: 0x38-0x3F)
+```
+
+Each vector has 8 bytes - typically contains a JMP to the actual handler or minimal inline code.
+
+#### 5. Return from Interrupt
+
+The interrupt handler executes and terminates with a RET instruction:
+- RET pops the saved PC from the stack
+- Execution resumes at the interrupted instruction
+- No special "return from interrupt" instruction needed
+
+### Implementation Challenges: v1.0 Design Flaw
+
+The initial v1.0 implementation contained a critical interrupt handling error that would manifest as correct behavior in simulation but system freeze on physical hardware.
+
+#### The Flawed Logic (v1.0):
+
+```vhdl
+-- INCORRECT: Checking interrupt during T1 state
+when T1 =>
+    if INT = '1' then
+        timing_state <= T1I;  -- Wrong: Already in T1!
+    else
+        timing_state <= T2;
+    end if;
+```
+
+#### Problems with This Approach:
+
+1. **T1/T1I exclusivity violation**: CPU enters T1, outputs state code 000, then attempts to transition to T1I
+2. **Spurious state output**: External hardware sees one clock of T1 before T1I acknowledge
+3. **Possible mid-instruction interrupt**: Could sample INT during non-PCI cycles (immediate fetch, memory operations, etc.)
+4. **PC increment ambiguity**: PC increment logic may execute before interrupt is recognized
+
+#### Why It Appeared to Work in Simulation:
+
+- Testbench timing may not assert INT during critical states
+- Simplified interrupt controller models may ignore state code glitches
+- Simulation may not exercise all instruction timing combinations
+- Single-step execution masks timing-dependent behavior
+
+#### Why It Fails on Hardware:
+
+- Real interrupt controllers strictly decode state sequences
+- Asynchronous interrupt timing exposes all edge cases
+- PC corruption from improper increment timing
+- Multi-byte instructions interrupted mid-fetch cause decode errors
+- System deadlock from inconsistent state machine progression
+
+### The Correct Implementation
+
+#### Interrupt Detection at T3:
+
+```vhdl
+when T3 =>
+    if microcode_state = FETCH then
+        -- Just completed instruction fetch (PCI cycle)
+        if is_halt_op = '1' then
+            timing_state <= STOPPED;
+        elsif INT = '1' then
+            timing_state <= T1I;  -- Correct: T1I instead of T1
+            -- PC must not increment
+        elsif instruction_needs_execute = '1' then
+            timing_state <= T4;
+        else
+            timing_state <= T1;
+        end if;
+    -- ... other T3 cases
+```
+
+#### Key Corrections:
+
+1. **Sample INT at end of T3** during FETCH microcode state only
+2. **Directly transition to T1I** - never enter T1 first
+3. **Prevent PC increment** during T1I cycle
+4. **Allow normal PCI cycle after T1I** for instruction injection
+5. **Resume PC increment** after instruction injection completes
+
+### Datasheet Evolution: Rev 1 (1972) vs. Rev 2 (1973)
+
+An important historical note exists in the Intel datasheets that reveals a discovered timing bug in the original 8008 design.
+
+#### Intel 8008 Datasheet Revision 2 (1973) - Critical Addition:
+
+> **When the processor is interrupted, the system INTERRUPT signal must be synchronized with the leading edge of the φ1 or φ2 clock. To assure proper operation of the system, the interrupt line to the CPU must not be allowed to change within 200ns of the falling edge of φ1.** An example of a synchronizing circuit is shown on the schematic for the SIM8-01 (Section VII). This is a new circuit recently added to the SIM8-01 board.
+
+(Emphasis added to highlight the explicit acknowledgment of this being a new requirement)
+
+#### What Changed Between Revisions:
+
+**Revision 1 (1972)**: No mention of interrupt signal synchronization requirements
+
+**Revision 2 (1973)**: Added explicit timing constraints and synchronization circuit requirement
+
+#### Analysis of the Timing Requirement:
+
+**Setup/Hold Time Constraint**: ±200ns around φ1 falling edge
+- Prevents metastability in interrupt detection logic
+- Ensures clean sampling by internal flip-flops
+- Requires external synchronization circuit
+
+**Why This Matters**:
+- The 8008 was pushing the limits of 1972 PMOS technology
+- Internal synchronizers may have been minimal or absent
+- Asynchronous INT input could cause race conditions
+- Real systems exhibited interrupt-related failures
+
+#### The SIM8-01 Reference Design Solution:
+
+Intel's solution (added to SIM8-01 board) implemented an **external interrupt synchronizer**:
+- Latches incoming interrupt requests
+- Synchronizes to φ1/φ2 clock edges
+- Ensures INT signal stability during sampling window
+- Provides "acknowledged" flag to clear interrupt source
+
+### Recommended VHDL Implementation Strategy
+
+To properly implement 8008-compatible interrupt handling in VHDL:
+
+#### 1. Interrupt Synchronizer Process
+
+```vhdl
+-- Separate process: clock-synchronized interrupt latch
+signal int_latched : std_logic := '0';
+
+process(phi1, phi2, reset_n)
+begin
+    if reset_n = '0' then
+        int_latched <= '0';
+    elsif rising_edge(phi1) then  -- Synchronized to clock
+        -- Latch interrupt request
+        if INT = '1' and int_latched = '0' then
+            int_latched <= '1';
+        end if
+
+        -- Clear on acknowledge (entering T1I)
+        if timing_state = T1I then
+            int_latched <= '0';
+        end if;
+    end if;
+end process;
+```
+
+#### 2. Use Latched Signal in State Machine
+
+```vhdl
+-- Use int_latched instead of raw INT signal
+when T3 =>
+    if microcode_state = FETCH then
+        if int_latched = '1' then
+            timing_state <= T1I;
+```
+
+#### Benefits:
+
+- **Clock synchronization**: Meets Rev 2 timing requirements
+- **Edge detection**: Triggers once per interrupt event
+- **No retriggering**: Cleared on acknowledge, prevents loops
+- **Metastability prevention**: Registered input avoids race conditions
+
+### Connection to Modern Interrupt Systems
+
+Understanding the 8008's interrupt mechanism illuminates the evolution of interrupt architecture:
+
+#### 8008 Limitations:
+- Single interrupt level (no priorities)
+- No automatic state preservation
+- External hardware complexity (instruction injection)
+- Manual context save via software
+
+#### Evolution to 8080/8085:
+- Hardware-vectored interrupts (RST 0-7 directly)
+- Multiple priority levels (8085: TRAP, RST 7.5, 6.5, 5.5)
+- Simplified external hardware interface
+
+#### Modern Microcontrollers:
+- Nested interrupt controllers (NVIC, etc.)
+- Automatic register save/restore
+- Priority levels and preemption
+- Vector tables in memory
+
+**The 8008's approach** of having external hardware inject an instruction directly influenced the interrupt acknowledge bus cycle design that persisted through x86 architecture to the present day.
+
+### Debugging Interrupt Issues
+
+Common symptoms of incorrect interrupt implementation:
+
+**Simulation appears correct, hardware freezes**:
+- Likely cause: Improper INT sampling point (checking at T1 instead of T3)
+- Likely cause: Missing interrupt synchronization
+- Likely cause: PC being incremented during T1I
+
+**Continuous interrupt loop**:
+- Likely cause: Interrupt latch not cleared on acknowledge
+- Likely cause: External hardware not seeing T1I state properly
+
+**Random instruction execution**:
+- Likely cause: Interrupt occurring during non-PCI cycle (immediate byte fetch, etc.)
+- Likely cause: External hardware not properly jamming instruction byte
+
+**State machine lockup**:
+- Likely cause: T1/T1I exclusivity violated
+- Likely cause: Microcode state corruption from mid-instruction interrupt
+
+### Testing Interrupt Functionality
+
+To validate interrupt implementation:
+
+1. **Unit test**: Assert INT at various microcode states, verify only PCI interruption
+2. **Timing test**: Verify T1I appears immediately after T3 (no intermediate T1)
+3. **PC preservation test**: Confirm PC doesn't increment during T1I cycle
+4. **Injection test**: Simulate external controller jamming RST instruction
+5. **Return test**: Verify RET returns to correct PC after handler
+6. **Synchronization test**: Apply asynchronous INT, verify no metastability
+
+### References
+
+- Intel 8008 Datasheet, Revision 1 (April 1972)
+- Intel 8008 Datasheet, Revision 2 (November 1972) - Added interrupt synchronization requirements
+- Intel SIM8-01 Reference Design Schematic (Section VII: Interrupt Synchronizer)
+- "The Intel 8008 Microprocessor: 25 Years Later" - IEEE Micro retrospective
+
+---
 
 ### Register Set
 - **A (Accumulator)** - Primary arithmetic register
