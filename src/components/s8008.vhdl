@@ -115,11 +115,20 @@ architecture rtl of s8008 is
     -- One clock period = φ1 rise → φ1 fall → dead → φ2 rise → φ2 fall → dead → φ1 rise (2.2µs)
     -- Therefore each state (T1, T2, T3, T4, T5) spans TWO φ1 rising edges (4.4µs)
     -- Initialize to '1' so that SYNC (not clock_phase) starts at '0' during reset
+
+    -- Synthesis attributes to prevent optimization
+    attribute syn_keep : boolean;
+    attribute syn_preserve : boolean;
+
     signal clock_phase : std_logic := '1';  -- Toggles every φ1 edge
+    attribute syn_keep of clock_phase : signal is true;
+    attribute syn_preserve of clock_phase : signal is true;
 
     -- Timing states (real 8008 hardware states)
     type timing_state_t is (T1, T1I, T2, TWAIT, T3, T4, T5, STOPPED);
     signal timing_state : timing_state_t := T1;
+    attribute syn_keep of timing_state : signal is true;
+    attribute syn_preserve of timing_state : signal is true;
 
     -- Interrupt synchronizer signals (per Rev 2 datasheet requirements)
     signal int_latched : std_logic := '0';    -- Latched interrupt request
