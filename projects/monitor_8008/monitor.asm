@@ -35,15 +35,16 @@ MONITOR_LOOP:
         mvi l, PROMPT & 0xFF
         call PRINT_STRING
 
+READ_CMD:
         ; Read command
         in 2                ; Port 2 - BLOCKS for input
         mov b, a            ; Save in B
 
-        ; Filter out newlines/carriage returns - ignore and re-prompt
+        ; Filter out newlines/carriage returns - ignore and keep reading
         cpi 0x0A            ; Check for LF (newline)
-        jz MONITOR_LOOP
+        jz READ_CMD         ; Read again without re-printing prompt
         cpi 0x0D            ; Check for CR (carriage return)
-        jz MONITOR_LOOP
+        jz READ_CMD         ; Read again without re-printing prompt
 
         ; Echo the actual command character
         out 8

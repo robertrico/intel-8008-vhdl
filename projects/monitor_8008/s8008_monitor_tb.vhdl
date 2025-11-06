@@ -256,32 +256,32 @@ begin
 
     -- ROM: addresses 0x0000 - 0x07FF (bit 11 = 0)
     rom_addr <= mem_addr(10 downto 0);
-    rom_cs_n <= '0' when mem_addr(11) = '0' else '1';
+    rom_cs_n <= '0' when reset_tb = '0' and mem_addr(11) = '0' else '1';
 
     -- RAM: addresses 0x0800 - 0x0BFF (bit 11 = 1, bit 10 = 0)
     ram_addr <= mem_addr(9 downto 0);
-    ram_cs_n <= '0' when mem_addr(11) = '1' and mem_addr(10) = '0' else '1';
+    ram_cs_n <= '0' when reset_tb = '0' and mem_addr(11) = '1' and mem_addr(10) = '0' else '1';
 
     --===========================================
     -- Memory Controller
     --===========================================
     -- Address capture process (synchronous on phi1)
-    addr_capture: process(phi1_tb)
+    addr_capture: process(phi1_tb, reset_tb)
     begin
-        if rising_edge(phi1_tb) then
-            -- T1 state: Capture low address byte (S2 S1 S0 = 0 0 0)
-            if S2_tb = '0' and S1_tb = '0' and S0_tb = '0' then
-                if data_bus_tb /= "ZZZZZZZZ" then
-                    addr_low_capture <= data_bus_tb;
-                end if;
+        if reset_tb = '1' then
+            addr_low_capture <= (others => '0');
+            addr_high_capture <= (others => '0');
+            cycle_type_capture <= (others => '0');
+        elsif rising_edge(phi1_tb) then
+            -- T1 state: Capture low address byte (S2 S1 S0 = 0 1 0)
+            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
+                addr_low_capture <= data_bus_tb;
             end if;
 
-            -- T2 state: Capture high address and cycle type (S2 S1 S0 = 0 1 0)
-            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
-                if data_bus_tb /= "ZZZZZZZZ" then
-                    addr_high_capture <= data_bus_tb(5 downto 0);
-                    cycle_type_capture <= data_bus_tb(7 downto 6);
-                end if;
+            -- T2 state: Capture high address and cycle type (S2 S1 S0 = 1 0 0)
+            if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
+                addr_high_capture <= data_bus_tb(5 downto 0);
+                cycle_type_capture <= data_bus_tb(7 downto 6);
             end if;
         end if;
     end process;
@@ -291,15 +291,13 @@ begin
     begin
         if rising_edge(phi1_tb) then
             -- T3/T4/T5 states with write cycle (PCW = "11")
-            if ((S2_tb = '1' and S1_tb = '0' and S0_tb = '0') or  -- T3
-                (S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T4
+            if ((S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
+                (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
                 (S2_tb = '1' and S1_tb = '0' and S0_tb = '1')) and -- T5
                cycle_type_capture = "11" then
                 -- PCW = memory write cycle
                 ram_rw_n <= '0';
-                if data_bus_tb /= "ZZZZZZZZ" then
-                    ram_data_in <= data_bus_tb;
-                end if;
+                ram_data_in <= data_bus_tb;
             else
                 ram_rw_n <= '1';
             end if;
@@ -314,8 +312,8 @@ begin
 
         -- T3/T4/T5 states with memory read cycle (PCI="00" or PCR="01")
         -- Do NOT drive during I/O cycles (PCC="10") - let io_console drive
-        if ((S2_tb = '1' and S1_tb = '0' and S0_tb = '0') or  -- T3
-            (S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T4
+        if ((S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
+            (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
             (S2_tb = '1' and S1_tb = '0' and S0_tb = '1')) and -- T5
            (cycle_type_capture = "00" or cycle_type_capture = "01") then
 
@@ -339,7 +337,7 @@ begin
     instr_counter: process(phi1_tb)
     begin
         if rising_edge(phi1_tb) then
-            if SYNC_tb = '1' and S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
+            if SYNC_tb = '1' and S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
                 if last_SYNC = '0' then
                     instruction_count <= instruction_count + 1;
                 end if;

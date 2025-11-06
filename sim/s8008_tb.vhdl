@@ -314,14 +314,14 @@ begin
     begin
         if rising_edge(phi1_tb) then
             -- Capture address during T1 state (when CPU drives lower address byte)
-            if S2_tb = '0' and S1_tb = '0' and S0_tb = '0' then
+            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_bus_tb /= "ZZZZZZZZ" then
                     captured_address(7 downto 0) := data_bus_tb;
                 end if;
             end if;
 
             -- Capture cycle type and upper address bits during T2 state
-            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
+            if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
                 if data_bus_tb /= "ZZZZZZZZ" then
                     cycle_type := data_bus_tb(7 downto 6);
                     captured_address(13 downto 8) := data_bus_tb(5 downto 0);
@@ -330,7 +330,7 @@ begin
             end if;
 
             -- During T3, handle read or write
-            if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
+            if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
                 if is_write then
                     -- Write cycle (PCW) - capture data from bus and write to RAM
                     if data_bus_tb /= "ZZZZZZZZ" then
@@ -405,14 +405,14 @@ begin
     begin
         state_bits := S2_tb & S1_tb & S0_tb;
         case state_bits is
-            when "000" => state_name <= "T1     ";
-            when "001" => state_name <= "T1I    ";
-            when "010" => state_name <= "T2     ";
-            when "011" => state_name <= "TWAIT  ";
-            when "100" => state_name <= "T3     ";
-            when "101" => state_name <= "STOPPED";
-            when "110" => state_name <= "T4     ";
-            when "111" => state_name <= "T5     ";
+            when "000" => state_name <= "WAIT   ";
+            when "001" => state_name <= "T3     ";
+            when "010" => state_name <= "T1     ";
+            when "011" => state_name <= "STOPPED";
+            when "100" => state_name <= "T2     ";
+            when "101" => state_name <= "T5     ";
+            when "110" => state_name <= "T1I    ";
+            when "111" => state_name <= "T4     ";
             when others => state_name <= "UNKNOWN";
         end case;
     end process;
@@ -461,7 +461,7 @@ begin
 
         -- Test 4: READY signal (insert wait states)
         report "TEST 4: READY signal and wait state insertion";
-        wait until S2_tb = '0' and S1_tb = '1' and S0_tb = '0';  -- Wait for T2
+        wait until S2_tb = '1' and S1_tb = '0' and S0_tb = '0';  -- Wait for T2
         wait for 1 us;
         READY_tb <= '0';  -- Assert wait
         report "PASS: READY deasserted during T2";
@@ -472,7 +472,7 @@ begin
 
         -- Test 5: INT signal (interrupt acknowledge)
         report "TEST 5: Interrupt request handling";
-        wait until S2_tb = '0' and S1_tb = '0' and S0_tb = '0';  -- Wait for T1
+        wait until S2_tb = '0' and S1_tb = '1' and S0_tb = '0';  -- Wait for T1
         wait for 1 us;
         INT_tb <= '1';    -- Assert interrupt
         report "PASS: INT asserted during T1";
@@ -486,21 +486,21 @@ begin
         report "Verifying 3-state cycle (T1->T2->T3->T1) for instruction fetch...";
 
         -- Wait for T1
-        wait until S2_tb = '0' and S1_tb = '0' and S0_tb = '0';
+        wait until S2_tb = '0' and S1_tb = '1' and S0_tb = '0';
         report "PASS: Entered T1 state";
         wait for 4.5 us;  -- Should be in T2 after 2 clock periods
 
-        assert S2_tb = '0' and S1_tb = '1' and S0_tb = '0'
+        assert S2_tb = '1' and S1_tb = '0' and S0_tb = '0'
             report "FAIL: Expected T2 state" severity error;
         report "PASS: Transitioned to T2 state";
         wait for 4.5 us;  -- Should be in T3
 
-        assert S2_tb = '1' and S1_tb = '0' and S0_tb = '0'
+        assert S2_tb = '0' and S1_tb = '0' and S0_tb = '1'
             report "FAIL: Expected T3 state" severity error;
         report "PASS: Transitioned to T3 state";
         wait for 4.5 us;  -- Should be back in T1 (3-state cycle)
 
-        assert S2_tb = '0' and S1_tb = '0' and S0_tb = '0'
+        assert S2_tb = '0' and S1_tb = '1' and S0_tb = '0'
             report "FAIL: Expected return to T1 state (3-state cycle)" severity error;
         report "PASS: Transitioned back to T1 state (3-state cycle verified)";
 
@@ -509,7 +509,7 @@ begin
         report "Verifying address/data bus behavior during complete cycle...";
 
         -- Wait for T1 state
-        wait until S2_tb = '0' and S1_tb = '0' and S0_tb = '0';
+        wait until S2_tb = '0' and S1_tb = '1' and S0_tb = '0';
         wait for 1 us;  -- Allow signals to stabilize
         report "PASS: In T1 state - data bus should contain lower 8 bits of address";
         -- Note: In T1, data_bus should equal program_counter(7:0)
@@ -521,7 +521,7 @@ begin
         end if;
 
         -- Wait for T2 state
-        wait until S2_tb = '0' and S1_tb = '1' and S0_tb = '0';
+        wait until S2_tb = '1' and S1_tb = '0' and S0_tb = '0';
         wait for 1 us;
         report "PASS: In T2 state - data bus should contain cycle type + address high";
         if data_bus_tb /= "ZZZZZZZZ" then
@@ -531,7 +531,7 @@ begin
         end if;
 
         -- Wait for T3 state
-        wait until S2_tb = '1' and S1_tb = '0' and S0_tb = '0';
+        wait until S2_tb = '0' and S1_tb = '0' and S0_tb = '1';
         wait for 1 us;
         report "PASS: In T3 state - checking data bus direction";
         -- During PCI (instruction fetch), T3 is a READ cycle
@@ -549,16 +549,16 @@ begin
 
         -- Now wait for T4 state (should occur during EXECUTE cycle)
         report "Waiting for T4 state during execution cycle...";
-        wait until S2_tb = '1' and S1_tb = '1' and S0_tb = '0';  -- T4 state
+        wait until S2_tb = '1' and S1_tb = '1' and S0_tb = '1';  -- T4 state
         report "PASS: Entered T4 state (5-state execution cycle)";
         wait for 4.5 us;  -- Should be in T5 after 2 clock periods
 
-        assert S2_tb = '1' and S1_tb = '1' and S0_tb = '1'
+        assert S2_tb = '1' and S1_tb = '0' and S0_tb = '1'
             report "FAIL: Expected T5 state after T4" severity error;
         report "PASS: Transitioned to T5 state";
         wait for 4.5 us;  -- Should be back in T1 after T5
 
-        assert S2_tb = '0' and S1_tb = '0' and S0_tb = '0'
+        assert S2_tb = '0' and S1_tb = '1' and S0_tb = '0'
             report "FAIL: Expected return to T1 after T5" severity error;
         report "PASS: Transitioned back to T1 after T5 (5-state cycle verified)";
 
@@ -1053,8 +1053,8 @@ begin
         -- TEST 63: HLT instruction at address 63
         report "TEST 63: Verifying final HLT instruction";
         wait for 15 us;  -- Need time for HLT to execute (3-state cycle = ~6.6us) plus margin
-        assert S2_tb = '1' and S1_tb = '0' and S0_tb = '1'
-            report "FAIL: After HLT, state should be STOPPED (S2=1,S1=0,S0=1)"
+        assert S2_tb = '0' and S1_tb = '1' and S0_tb = '1'
+            report "FAIL: After HLT, state should be STOPPED (S2=0,S1=1,S0=1)"
             severity error;
         report "PASS: Final HLT - CPU in STOPPED state";
 
@@ -1092,14 +1092,14 @@ begin
     begin
         state_bits := S2_tb & S1_tb & S0_tb;
         case state_bits is
-            when "000" => decoded_state := "T1     ";
-            when "001" => decoded_state := "T1I    ";
-            when "010" => decoded_state := "T2     ";
-            when "011" => decoded_state := "TWAIT  ";
-            when "100" => decoded_state := "T3     ";
-            when "101" => decoded_state := "STOPPED";
-            when "110" => decoded_state := "T4     ";
-            when "111" => decoded_state := "T5     ";
+            when "000" => decoded_state := "WAIT   ";
+            when "001" => decoded_state := "T3     ";
+            when "010" => decoded_state := "T1     ";
+            when "011" => decoded_state := "STOPPED";
+            when "100" => decoded_state := "T2     ";
+            when "101" => decoded_state := "T5     ";
+            when "110" => decoded_state := "T1I    ";
+            when "111" => decoded_state := "T4     ";
             when others => decoded_state := "UNKNOWN";
         end case;
 

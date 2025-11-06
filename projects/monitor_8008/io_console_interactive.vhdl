@@ -116,15 +116,15 @@ begin
                 drive_bus <= '0';
                 need_new_char <= false;
             else
-                -- T1 (S2S1S0 = 000): Capture port address from data bus
-                if S2 = '0' and S1 = '0' and S0 = '0' then
+                -- T1 (S2S1S0 = 010): Capture port address from data bus
+                if S2 = '0' and S1 = '1' and S0 = '0' then
                     port_addr <= data_bus;
                     is_io_cycle <= false;  -- Not confirmed as I/O yet
                     drive_bus <= '0';       -- Don't drive during T1
                     need_new_char <= false;
 
-                -- T2 (S2S1S0 = 010): Capture cycle type from data bus
-                elsif S2 = '0' and S1 = '1' and S0 = '0' then
+                -- T2 (S2S1S0 = 001): Capture cycle type from data bus
+                elsif S2 = '1' and S1 = '0' and S0 = '0' then
                     cycle_type <= data_bus(7 downto 6);
                     -- Check if this is a PCC cycle (I/O operation)
                     if data_bus(7 downto 6) = "10" then
@@ -143,10 +143,10 @@ begin
                     end if;
                     drive_bus <= '0';  -- Don't drive during T2
 
-                -- T3 (S2S1S0 = 100): Data transfer
+                -- T3 (S2S1S0 = 001): Data transfer
                 -- For INP (read), drive the bus
                 -- For OUT (write), tri-state the bus (CPU drives it)
-                elsif S2 = '1' and S1 = '0' and S0 = '0' then
+                elsif S2 = '0' and S1 = '0' and S0 = '1' then
                     if is_io_cycle and is_read then
                         -- INP: Drive input data on bus
                         drive_bus <= '1';
@@ -155,6 +155,8 @@ begin
                         drive_bus <= '0';
                     end if;
                     need_new_char <= false;  -- Clear flag after T3
+                    -- Clear is_io_cycle immediately to prevent double-triggering
+                    is_io_cycle <= false;
 
                 -- Other states: Don't drive bus
                 else
@@ -243,13 +245,15 @@ begin
         variable char : character;
         variable last_state : std_logic_vector(2 downto 0) := "000";
         variable current_state : std_logic_vector(2 downto 0);
+        variable last_is_io_cycle : boolean := false;
     begin
         if rising_edge(phi1) then
             current_state := S2 & S1 & S0;
 
-            -- Detect rising edge of T3 (transition to S2S1S0=100)
+            -- Detect rising edge of T3 (transition to S2S1S0=001)
             -- During T3 of an OUT to port 0
-            if current_state = "100" and last_state /= "100" then
+            -- ALSO check that is_io_cycle just became true to avoid double-trigger
+            if current_state = "001" and last_state /= "001" then
                 if is_io_cycle and not is_read and port_addr(2 downto 0) = "000" then
                     -- Convert byte to character
                     char := character'val(to_integer(unsigned(data_bus)));
@@ -264,6 +268,7 @@ begin
 
             -- Track state for edge detection
             last_state := current_state;
+            last_is_io_cycle := is_io_cycle;
         end if;
     end process;
 

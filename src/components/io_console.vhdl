@@ -79,15 +79,15 @@ begin
                 is_io_cycle <= false;
                 drive_bus <= '0';
             else
-                -- T1 (S2S1S0 = 000): Capture port address from data bus
-                if S2 = '0' and S1 = '0' and S0 = '0' then
+                -- T1 (S2S1S0 = 010): Capture port address from data bus
+                if S2 = '0' and S1 = '1' and S0 = '0' then
                     port_addr <= data_bus;
                     is_io_cycle <= false;  -- Not confirmed as I/O yet
                     drive_bus <= '0';       -- Don't drive during T1
                     report "I/O Console: T1 detected, capturing port_addr from data_bus=0x" & to_hstring(unsigned(data_bus));
 
-                -- T2 (S2S1S0 = 010): Capture cycle type from data bus
-                elsif S2 = '0' and S1 = '1' and S0 = '0' then
+                -- T2 (S2S1S0 = 100): Capture cycle type from data bus
+                elsif S2 = '1' and S1 = '0' and S0 = '0' then
                     cycle_type <= data_bus(7 downto 6);
                     report "I/O Console: T2 detected, data_bus=0x" & to_hstring(unsigned(data_bus)) &
                            ", cycle_type=" & std_logic'image(data_bus(7)) & std_logic'image(data_bus(6));
@@ -105,10 +105,10 @@ begin
                     end if;
                     drive_bus <= '0';  -- Don't drive during T2
 
-                -- T3 (S2S1S0 = 100): Data transfer
+                -- T3 (S2S1S0 = 001): Data transfer
                 -- For INP (read), drive the bus
                 -- For OUT (write), tri-state the bus (CPU drives it)
-                elsif S2 = '1' and S1 = '0' and S0 = '0' then
+                elsif S2 = '0' and S1 = '0' and S0 = '1' then
                     if is_io_cycle and is_read then
                         -- INP: Drive input data on bus
                         drive_bus <= '1';
@@ -181,9 +181,9 @@ begin
                 report "I/O Console: Output file opened: " & OUTPUT_FILE;
             end if;
 
-            -- Detect rising edge of T3 (transition to S2S1S0=100)
+            -- Detect rising edge of T3 (transition to S2S1S0=001)
             -- During T3 of an OUT to port 0
-            if current_state = "100" and last_state /= "100" then
+            if current_state = "001" and last_state /= "001" then
                 if is_io_cycle and not is_read and port_addr(2 downto 0) = "000" then
                     -- Convert byte to character
                     char := character'val(to_integer(unsigned(data_bus)));

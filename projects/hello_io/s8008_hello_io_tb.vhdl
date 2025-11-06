@@ -275,15 +275,15 @@ begin
     addr_capture: process(phi1_tb)
     begin
         if rising_edge(phi1_tb) then
-            -- T1 state: Capture low address byte (S2 S1 S0 = 0 0 0)
-            if S2_tb = '0' and S1_tb = '0' and S0_tb = '0' then
+            -- T1 state: Capture low address byte (S2 S1 S0 = 0 1 0)
+            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_bus_tb /= "ZZZZZZZZ" then
                     addr_low_capture <= data_bus_tb;
                 end if;
             end if;
 
-            -- T2 state: Capture high address and cycle type (S2 S1 S0 = 0 1 0)
-            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
+            -- T2 state: Capture high address and cycle type (S2 S1 S0 = 1 0 0)
+            if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
                 if data_bus_tb /= "ZZZZZZZZ" then
                     addr_high_capture <= data_bus_tb(5 downto 0);
                     cycle_type_capture <= data_bus_tb(7 downto 6);
@@ -297,8 +297,8 @@ begin
     begin
         if rising_edge(phi1_tb) then
             -- T3/T4/T5 states with write cycle
-            if ((S2_tb = '1' and S1_tb = '0' and S0_tb = '0') or  -- T3
-                (S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T4
+            if ((S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
+                (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
                 (S2_tb = '1' and S1_tb = '0' and S0_tb = '1')) and -- T5
                cycle_type_capture = "10" then
                 -- PCW = write cycle
@@ -319,8 +319,8 @@ begin
         data_bus_tb <= (others => 'Z');
 
         -- T3/T4/T5 states with read cycle (PCI or PCR)
-        if ((S2_tb = '1' and S1_tb = '0' and S0_tb = '0') or  -- T3
-            (S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T4
+        if ((S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
+            (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
             (S2_tb = '1' and S1_tb = '0' and S0_tb = '1')) and -- T5
            (cycle_type_capture = "00" or cycle_type_capture = "01") then
 
@@ -406,7 +406,7 @@ begin
         report "" severity note;
 
         -- Verify STOPPED state (HLT instruction reached)
-        assert S2_tb = '1' and S1_tb = '0' and S0_tb = '1'
+        assert S2_tb = '0' and S1_tb = '1' and S0_tb = '1'
             report "FAIL: CPU should be in STOPPED state after HLT (S2=1,S1=0,S0=1)"
             severity error;
         report "SUCCESS: CPU in STOPPED state" severity note;

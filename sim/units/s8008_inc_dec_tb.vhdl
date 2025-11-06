@@ -242,14 +242,14 @@ begin
     begin
         if rising_edge(phi1_tb) then
             -- T1: Capture low address byte
-            if S2_tb = '0' and S1_tb = '0' and S0_tb = '0' then
+            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_tb /= "ZZZZZZZZ" then
                     captured_address(7 downto 0) := data_tb;
                 end if;
             end if;
 
             -- T2: Capture high address bits and cycle type
-            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
+            if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
                 if data_tb /= "ZZZZZZZZ" then
                     cycle_type := data_tb(7 downto 6);
                     captured_address(13 downto 8) := data_tb(5 downto 0);
@@ -258,7 +258,7 @@ begin
             end if;
 
             -- T3: Provide data for reads
-            if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
+            if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
                 if not is_write and cycle_type /= "11" then
                     rom_data <= ROM(to_integer(unsigned(captured_address)));
                     rom_enable <= '1';
@@ -296,7 +296,7 @@ begin
         wait for 550 us;
 
         -- Verify STOPPED state
-        assert S2_tb = '1' and S1_tb = '0' and S0_tb = '1'
+        assert S2_tb = '0' and S1_tb = '1' and S0_tb = '1'
             report "FAIL: CPU should be in STOPPED state after HLT"
             severity error;
 

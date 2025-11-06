@@ -171,14 +171,14 @@ begin
     begin
         if rising_edge(phi1_tb) then
             -- T1: Capture low address byte
-            if S2_tb = '0' and S1_tb = '0' and S0_tb = '0' then
+            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_tb /= "ZZZZZZZZ" then
                     captured_address(7 downto 0) := data_tb;
                 end if;
             end if;
 
             -- T2: Capture high address bits and cycle type
-            if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
+            if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
                 if data_tb /= "ZZZZZZZZ" then
                     cycle_type := data_tb(7 downto 6);
                     captured_address(13 downto 8) := data_tb(5 downto 0);
@@ -187,7 +187,7 @@ begin
             end if;
 
             -- T3: Enable ROM for read cycles only (not I/O)
-            if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
+            if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
                 if is_write then
                     rom_enable <= '0';
                     rom_data <= (others => 'Z');
@@ -212,8 +212,8 @@ begin
                 is_io_cycle <= false;
                 io_drive_bus <= '0';
             else
-                -- T1 (S2S1S0 = 000): Capture port address from data bus
-                if S2_tb = '0' and S1_tb = '0' and S0_tb = '0' then
+                -- T1 (S2S1S0 = 010): Capture port address from data bus
+                if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                     if data_tb /= "ZZZZZZZZ" then
                         io_port_addr <= data_tb;
                         report "IO T1: port_addr=0x" & to_hstring(unsigned(data_tb));
@@ -221,8 +221,8 @@ begin
                     is_io_cycle <= false;  -- Not confirmed as I/O yet
                     io_drive_bus <= '0';   -- Don't drive during T1
 
-                -- T2 (S2S1S0 = 010): Capture cycle type from data bus
-                elsif S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
+                -- T2 (S2S1S0 = 100): Capture cycle type from data bus
+                elsif S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
                     if data_tb /= "ZZZZZZZZ" then
                         io_cycle_type <= data_tb(7 downto 6);
                         report "IO T2: cycle_type=" & std_logic'image(data_tb(7)) & std_logic'image(data_tb(6));
@@ -244,7 +244,7 @@ begin
                 -- T3 (S2S1S0 = 100): Data transfer
                 -- For INP (read), drive the bus
                 -- For OUT (write), tri-state the bus (CPU drives it)
-                elsif S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
+                elsif S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
                     if is_io_cycle and is_io_read then
                         -- INP: Drive input data on bus
                         io_drive_bus <= '1';
@@ -284,12 +284,12 @@ begin
             current_state := S2_tb & S1_tb & S0_tb;
 
             -- Capture cycle type during T2
-            if current_state = "010" and data_tb /= "ZZZZZZZZ" then
+            if current_state = "100" and data_tb /= "ZZZZZZZZ" then
                 cycle_type := data_tb(7 downto 6);
             end if;
 
             -- Detect rising edge of T3 during PCC (I/O) write cycle
-            if current_state = "100" and last_state /= "100" and cycle_type = "10" then
+            if current_state = "001" and last_state /= "001" and cycle_type = "10" then
                 -- Capture output data
                 if data_tb /= "ZZZZZZZZ" then
                     last_output <= data_tb;
