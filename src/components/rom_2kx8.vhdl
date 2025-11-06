@@ -34,29 +34,29 @@ architecture rtl of rom_2kx8 is
 
     -- Function to load ROM from file
     impure function load_rom(filename : string) return rom_array is
-        file rom_file : text;
+        file file_handle : text;
         variable file_line : line;
         variable rom_data : rom_array := (others => x"FF");
         variable hex_value : std_logic_vector(7 downto 0);
-        variable addr : integer := 0;
+        variable load_addr : integer := 0;
         variable status : file_open_status;
     begin
         -- Try to open the file
-        file_open(status, rom_file, filename, read_mode);
+        file_open(status, file_handle, filename, read_mode);
 
         if status = open_ok then
             -- File opened successfully, read data
-            while not endfile(rom_file) and addr < 2048 loop
-                readline(rom_file, file_line);
+            while not endfile(file_handle) and load_addr < 2048 loop
+                readline(file_handle, file_line);
                 if file_line'length > 0 then
                     hread(file_line, hex_value);
-                    rom_data(addr) := hex_value;
-                    addr := addr + 1;
+                    rom_data(load_addr) := hex_value;
+                    load_addr := load_addr + 1;
                 end if;
             end loop;
-            file_close(rom_file);
+            file_close(file_handle);
 
-            -- report "Loaded ROM from " & filename & " (" & integer'image(addr) & " bytes)" severity note;
+            -- report "Loaded ROM from " & filename & " (" & integer'image(load_addr) & " bytes)" severity note;
         else
             -- File not found, use default program
             -- report "ROM file " & filename & " not found, using default program" severity warning;

@@ -6,7 +6,7 @@
 -- Interrupt Mechanism:
 --   1. Detects rising and falling edges on button input
 --   2. Asserts INT pin to CPU (active high)
---   3. Waits for CPU interrupt acknowledge (T1I state: S2,S1,S0 = 001)
+--   3. Waits for CPU interrupt acknowledge (T1I state: S2=1, S1=1, S0=0)
 --   4. Drives RST 0 opcode (0x05) on data bus during T1I
 --   5. Clears INT after acknowledgment
 --
@@ -70,7 +70,7 @@ architecture rtl of interrupt_controller is
     signal startup_done   : std_logic;
 
     -- Interrupt state machine
-    type int_state_t is (STARTUP_INT, IDLE, INT_PENDING, WAIT_T1I, DRIVE_RST, CLEAR_INT);
+    type int_state_t is (STARTUP_INT, IDLE, INT_PENDING, DRIVE_RST, CLEAR_INT);
     signal int_state : int_state_t;
 
     -- Interrupt acknowledge detection
@@ -82,7 +82,7 @@ architecture rtl of interrupt_controller is
 
 begin
     -- T1I state detection (interrupt acknowledge)
-    is_t1i <= '1' when (S2 = '0' and S1 = '0' and S0 = '1') else '0';
+    is_t1i <= '1' when (S2 = '1' and S1 = '1' and S0 = '0') else '0';
 
     -- Data bus control: Drive RST opcode only during T1I
     data_bus <= RST_0_OPCODE when data_bus_drive = '1' else (others => 'Z');
@@ -137,7 +137,7 @@ begin
             startup_done   <= '0';
 
         elsif rising_edge(clk) then
-            -- Default: Don't drive data bus
+            -- Default outputs
             data_bus_drive <= '0';
 
             case int_state is
@@ -161,18 +161,15 @@ begin
                     -- Assert INT and wait for CPU acknowledgment
                     INT <= '1';
 
-                    -- Check for interrupt acknowledge (T1I state during SYNC)
-                    if SYNC = '1' and is_t1i = '1' then
-                        int_state <= WAIT_T1I;
+                    -- Check for interrupt acknowledge (T1I state)
+                    -- Drive RST opcode IMMEDIATELY when T1I is detected
+                    if is_t1i = '1' then
+                        data_bus_drive <= '1';  -- Drive RST during T1I
+                        int_state      <= DRIVE_RST;
                     end if;
 
-                when WAIT_T1I =>
-                    -- T1I state detected, prepare to drive RST opcode
-                    INT <= '1';  -- Keep INT asserted
-                    int_state <= DRIVE_RST;
-
                 when DRIVE_RST =>
-                    -- Drive RST 0 opcode on data bus during T1I
+                    -- Continue driving for one more cycle (T2 after T1I)
                     INT            <= '1';
                     data_bus_drive <= '1';
                     int_state      <= CLEAR_INT;

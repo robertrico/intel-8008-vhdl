@@ -31,6 +31,7 @@ RTL_SOURCES = src/blinky_top.vhdl \
               $(PROJECT_ROOT)/src/components/ram_1kx8.vhdl
 
 TB_SOURCES = blinky_tb.vhdl
+INT_CTL_TB = src/interrupt_controller_tb.vhdl
 
 #==========================================
 # Constraint File Override
@@ -130,3 +131,13 @@ check-constraints:
 
 # Override bitstream target to check constraints first
 bitstream: check-constraints hex2mem $(BITSTREAM_FILE)
+
+# Test interrupt controller
+.PHONY: test-interrupt-controller
+test-interrupt-controller:
+	@echo "=== Testing Interrupt Controller ==="
+	/Users/hackbook/oss-cad-suite/bin/ghdl -a --std=08 --workdir=work src/interrupt_controller.vhdl
+	/Users/hackbook/oss-cad-suite/bin/ghdl -a --std=08 --workdir=work $(INT_CTL_TB)
+	/Users/hackbook/oss-cad-suite/bin/ghdl -e --std=08 --workdir=work interrupt_controller_tb
+	/Users/hackbook/oss-cad-suite/bin/ghdl -r --std=08 --workdir=work interrupt_controller_tb
+	@echo "✓ Interrupt Controller test complete"

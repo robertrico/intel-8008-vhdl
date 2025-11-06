@@ -97,7 +97,7 @@ test-units:
 	@echo "✓ All Unit Tests Passed"
 	@echo "========================================"
 
-# Run everything: comprehensive + all units
+# Run comprehensive + unit tests (legacy target)
 .PHONY: test-all
 test-all: test test-units
 	@echo ""
@@ -105,6 +105,18 @@ test-all: test test-units
 	@echo "✓ ALL TESTS PASSED"
 	@echo "  - Comprehensive test: PASS"
 	@echo "  - Unit tests: PASS"
+	@echo "========================================"
+
+# Run EVERYTHING: comprehensive, units, programs, and interrupt tests
+.PHONY: test-complete
+test-complete: test test-units test-all-programs test-interrupt
+	@echo ""
+	@echo "========================================"
+	@echo "✓ COMPLETE TEST SUITE PASSED"
+	@echo "  - Comprehensive test: PASS"
+	@echo "  - Unit tests: PASS"
+	@echo "  - Assembly programs: PASS"
+	@echo "  - Interrupt test: PASS"
 	@echo "========================================"
 
 # Quick shortcuts for specific unit tests
