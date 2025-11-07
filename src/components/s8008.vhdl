@@ -106,7 +106,7 @@ architecture rtl of s8008 is
     -- Debug Configuration
     --===========================================
     -- Set to false to reduce simulation noise (hides clock toggle messages)
-    constant DEBUG_VERBOSE : boolean := false;
+    constant DEBUG_VERBOSE : boolean := true;
 
     --===========================================
     -- Internal Signals
@@ -320,19 +320,14 @@ begin
                 int_previous <= '0';
             end if;
 
-            -- Latch logic: Set on rising edge, clear on falling edge OR acknowledge
+            -- Latch logic: Set on rising edge, clear ONLY on acknowledge
             -- IMPORTANT: Only respond to clean '1' and '0' values, ignore 'U'/'X'/'Z'/etc
+            -- Once latched, the interrupt remains pending until CPU acknowledges it in T1I
             if INT = '1' and int_previous = '0' then
                 -- Clean rising edge of INT: latch the request
                 int_latched <= '1';
                 if DEBUG_VERBOSE then
                     report "Interrupt request latched (rising edge)";
-                end if;
-            elsif INT = '0' and int_previous = '1' then
-                -- Clean falling edge: clear latch if not yet acknowledged
-                int_latched <= '0';
-                if DEBUG_VERBOSE then
-                    report "Interrupt request cleared (falling edge)";
                 end if;
             elsif timing_state = T1I and clock_phase = '1' then
                 -- CPU acknowledged interrupt: clear latch

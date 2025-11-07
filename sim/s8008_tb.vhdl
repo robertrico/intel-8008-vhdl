@@ -498,7 +498,7 @@ begin
 
         -- Test 6: Verify variable-length cycle sequencing
         report "TEST 6: Variable-length cycle verification";
-        report "Verifying 3-state cycle (T1->T2->T3->T1) for instruction fetch...";
+        report "Verifying cycle state transitions (T1->T2->T3->...)";
 
         -- Wait for T1
         wait until S2_tb = '0' and S1_tb = '1' and S0_tb = '0';
@@ -513,11 +513,24 @@ begin
         assert S2_tb = '0' and S1_tb = '0' and S0_tb = '1'
             report "FAIL: Expected T3 state" severity error;
         report "PASS: Transitioned to T3 state";
-        wait for 4.5 us;  -- Should be back in T1 (3-state cycle)
+        wait for 4.5 us;  -- Check next state (T1 for 3-state, T4 for 5-state)
 
-        assert S2_tb = '0' and S1_tb = '1' and S0_tb = '0'
-            report "FAIL: Expected return to T1 state (3-state cycle)" severity error;
-        report "PASS: Transitioned back to T1 state (3-state cycle verified)";
+        -- Could be either 3-state or 5-state cycle depending on instruction
+        if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
+            report "PASS: Returned to T1 state (3-state cycle verified)";
+        elsif S2_tb = '1' and S1_tb = '1' and S0_tb = '1' then
+            report "PASS: Transitioned to T4 state (5-state cycle detected)";
+            wait for 4.5 us;  -- Wait for T5
+            assert S2_tb = '1' and S1_tb = '0' and S0_tb = '1'
+                report "FAIL: Expected T5 state after T4" severity error;
+            report "PASS: Transitioned to T5 state";
+            wait for 4.5 us;  -- Should return to T1
+            assert S2_tb = '0' and S1_tb = '1' and S0_tb = '0'
+                report "FAIL: Expected return to T1 after T5" severity error;
+            report "PASS: Returned to T1 state (5-state cycle verified)";
+        else
+            report "FAIL: Unexpected state after T3" severity error;
+        end if;
 
         -- Test 7: Data bus multiplexing verification
         report "TEST 7: Data bus multiplexing verification";
