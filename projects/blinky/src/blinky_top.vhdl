@@ -61,25 +61,27 @@ architecture rtl of blinky_top is
     --------------------------------------------------------------------------------
     component s8008 is
         port (
-            phi1        : in    std_logic;
-            phi2        : in    std_logic;
-            reset_n     : in    std_logic;
-            data_bus    : inout std_logic_vector(7 downto 0);
-            S0          : out   std_logic;
-            S1          : out   std_logic;
-            S2          : out   std_logic;
-            SYNC        : out   std_logic;
-            READY       : in    std_logic;
-            INT         : in    std_logic;
-            debug_reg_A : out   std_logic_vector(7 downto 0);
-            debug_reg_B : out   std_logic_vector(7 downto 0);
-            debug_reg_C : out   std_logic_vector(7 downto 0);
-            debug_reg_D : out   std_logic_vector(7 downto 0);
-            debug_reg_E : out   std_logic_vector(7 downto 0);
-            debug_reg_H : out   std_logic_vector(7 downto 0);
-            debug_reg_L : out   std_logic_vector(7 downto 0);
-            debug_pc    : out   std_logic_vector(13 downto 0);
-            debug_flags : out   std_logic_vector(3 downto 0)
+            phi1            : in    std_logic;
+            phi2            : in    std_logic;
+            reset_n         : in    std_logic;
+            data_bus_in     : in    std_logic_vector(7 downto 0);
+            data_bus_out    : out   std_logic_vector(7 downto 0);
+            data_bus_enable : out   std_logic;
+            S0              : out   std_logic;
+            S1              : out   std_logic;
+            S2              : out   std_logic;
+            SYNC            : out   std_logic;
+            READY           : in    std_logic;
+            INT             : in    std_logic;
+            debug_reg_A     : out   std_logic_vector(7 downto 0);
+            debug_reg_B     : out   std_logic_vector(7 downto 0);
+            debug_reg_C     : out   std_logic_vector(7 downto 0);
+            debug_reg_D     : out   std_logic_vector(7 downto 0);
+            debug_reg_E     : out   std_logic_vector(7 downto 0);
+            debug_reg_H     : out   std_logic_vector(7 downto 0);
+            debug_reg_L     : out   std_logic_vector(7 downto 0);
+            debug_pc        : out   std_logic_vector(13 downto 0);
+            debug_flags     : out   std_logic_vector(3 downto 0)
         );
     end component;
 
@@ -166,11 +168,13 @@ architecture rtl of blinky_top is
     attribute syn_preserve of phi2 : signal is true;
 
     -- CPU interface signals
-    signal data_bus     : std_logic_vector(7 downto 0);
-    signal S0, S1, S2   : std_logic;
-    signal SYNC         : std_logic;
-    signal READY        : std_logic;
-    signal INT          : std_logic;
+    signal data_bus         : std_logic_vector(7 downto 0);
+    signal cpu_data_out     : std_logic_vector(7 downto 0);
+    signal cpu_data_enable  : std_logic;
+    signal S0, S1, S2       : std_logic;
+    signal SYNC             : std_logic;
+    signal READY            : std_logic;
+    signal INT              : std_logic;
 
     -- Memory address capture (captured from data bus during T1/T2)
     signal addr_low_capture  : std_logic_vector(7 downto 0);
@@ -201,16 +205,9 @@ architecture rtl of blinky_top is
     signal debug_flags_int : std_logic_vector(3 downto 0);
     signal debug_byte_0    : std_logic_vector(7 downto 0);
 
-    -- Clock dividers for phi LEDs
-    signal phi1_div_counter : unsigned(23 downto 0) := (others => '0');
-    signal phi2_div_counter : unsigned(23 downto 0) := (others => '0');
-    signal phi1_divided     : std_logic := '0';
-    signal phi2_divided     : std_logic := '0';
-    signal phi1_prev        : std_logic := '0';
-    signal phi2_prev        : std_logic := '0';
-
-    -- I/O write detection
-    signal io_write_active  : std_logic := '0';
+    -- Debug signals for LED output
+    signal io_cycle_detected : std_logic := '0';
+    signal led_written       : std_logic := '0';
 
     -- Synchronized reset to avoid metastability
     signal rst_sync : std_logic_vector(1 downto 0) := (others => '1');
@@ -258,26 +255,65 @@ begin
     --------------------------------------------------------------------------------
     u_cpu : s8008
         port map (
-            phi1        => phi1,
-            phi2        => phi2,
-            reset_n     => reset_n,
-            data_bus    => data_bus,
-            S0          => S0,
-            S1          => S1,
-            S2          => S2,
-            SYNC        => SYNC,
-            READY       => READY,
-            INT         => INT,
-            debug_reg_A => debug_reg_A,
-            debug_reg_B => debug_reg_B,
-            debug_reg_C => debug_reg_C,
-            debug_reg_D => debug_reg_D,
-            debug_reg_E => debug_reg_E,
-            debug_reg_H => debug_reg_H,
-            debug_reg_L => debug_reg_L,
-            debug_pc    => debug_pc_int,
-            debug_flags => debug_flags_int
+            phi1            => phi1,
+            phi2            => phi2,
+            reset_n         => reset_n,
+            data_bus_in     => data_bus,
+            data_bus_out    => cpu_data_out,
+            data_bus_enable => cpu_data_enable,
+            S0              => S0,
+            S1              => S1,
+            S2              => S2,
+            SYNC            => SYNC,
+            READY           => READY,
+            INT             => INT,
+            debug_reg_A     => debug_reg_A,
+            debug_reg_B     => debug_reg_B,
+            debug_reg_C     => debug_reg_C,
+            debug_reg_D     => debug_reg_D,
+            debug_reg_E     => debug_reg_E,
+            debug_reg_H     => debug_reg_H,
+            debug_reg_L     => debug_reg_L,
+            debug_pc        => debug_pc_int,
+            debug_flags     => debug_flags_int
         );
+
+    --------------------------------------------------------------------------------
+    -- Tri-State Bus Logic
+    --------------------------------------------------------------------------------
+    -- The CPU drives the data bus when cpu_data_enable is active
+    -- Memory drives during memory read cycles
+    -- I/O controllers drive during their respective cycles (handled by their own tri-state logic)
+    process(cpu_data_enable, cpu_data_out, rom_data, ram_data_out, S2, S1, S0, cycle_type_capture, mem_addr)
+    begin
+        -- Default: tri-state (allows I/O controllers to drive)
+        data_bus <= (others => 'Z');
+
+        -- CPU drives bus when enabled (during T1, T2, and write cycles)
+        if cpu_data_enable = '1' then
+            data_bus <= cpu_data_out;
+        -- Memory drives bus only during memory read cycles in T3/T4/T5 states
+        -- PCI="00" (instruction fetch) or PCR="01" (memory read)
+        -- Do NOT drive during I/O cycles (PCC="10") - let I/O controllers drive
+        elsif ((S0 = '1' and S1 = '0' and S2 = '0') or  -- T3 (100)
+               (S0 = '1' and S1 = '1' and S2 = '1') or  -- T4 (111)
+               (S0 = '1' and S1 = '0' and S2 = '1')) and -- T5 (101)
+              (cycle_type_capture = "00" or cycle_type_capture = "01") then
+            -- Select memory source based on address
+            if mem_addr(13 downto 11) = "000" then
+                -- ROM space (0x0000 - 0x07FF)
+                data_bus <= rom_data;
+            elsif mem_addr(13 downto 10) = "0010" then
+                -- RAM space (0x0800 - 0x0BFF)
+                data_bus <= ram_data_out;
+            else
+                -- Unmapped memory
+                data_bus <= x"FF";
+            end if;
+        -- For I/O cycles (PCC="10"), I/O controllers manage the bus themselves
+        -- For interrupt cycles, interrupt controller manages the bus
+        end if;
+    end process;
 
     --------------------------------------------------------------------------------
     -- Memory Subsystem
@@ -285,7 +321,7 @@ begin
     -- ROM: 2KB at 0x0000-0x07FF
     u_rom : rom_2kx8
         generic map (
-            ROM_FILE => "blinky_simple.mem"
+            ROM_FILE => "blinky.mem"
         )
         port map (
             ADDR     => rom_addr,
@@ -325,15 +361,15 @@ begin
     addr_capture: process(phi1)
     begin
         if rising_edge(phi1) then
-            -- T1 state: Capture low address byte (S2 S1 S0 = 0 0 0)
-            if S2 = '0' and S1 = '0' and S0 = '0' then
+            -- T1 state: Capture low address byte (S0 S1 S2 = 0 1 0)
+            if S0 = '0' and S1 = '1' and S2 = '0' then
                 if data_bus /= "ZZZZZZZZ" then
                     addr_low_capture <= data_bus;
                 end if;
             end if;
 
-            -- T2 state: Capture high address and cycle type (S2 S1 S0 = 0 1 0)
-            if S2 = '0' and S1 = '1' and S0 = '0' then
+            -- T2 state: Capture high address and cycle type (S0 S1 S2 = 0 0 1)
+            if S0 = '0' and S1 = '0' and S2 = '1' then
                 if data_bus /= "ZZZZZZZZ" then
                     addr_high_capture <= data_bus(5 downto 0);
                     cycle_type_capture <= data_bus(7 downto 6);
@@ -347,9 +383,9 @@ begin
     begin
         if rising_edge(phi1) then
             -- T3/T4/T5 states with write cycle (PCW = "11")
-            if ((S2 = '1' and S1 = '0' and S0 = '0') or  -- T3
-                (S2 = '0' and S1 = '1' and S0 = '1') or  -- T4
-                (S2 = '1' and S1 = '1' and S0 = '1')) and -- T5
+            if ((S0 = '1' and S1 = '0' and S2 = '0') or  -- T3 (100)
+                (S0 = '1' and S1 = '1' and S2 = '1') or  -- T4 (111)
+                (S0 = '1' and S1 = '0' and S2 = '1')) and -- T5 (101)
                cycle_type_capture = "11" then
                 -- PCW = memory write cycle
                 ram_rw_n <= '0';
@@ -358,33 +394,6 @@ begin
                 end if;
             else
                 ram_rw_n <= '1';
-            end if;
-        end if;
-    end process;
-
-    -- Bus multiplexer (combinational) - EXACTLY like monitor_8008
-    bus_mux: process(S2, S1, S0, cycle_type_capture, mem_addr, rom_data, ram_data_out)
-    begin
-        -- Default: tri-state
-        data_bus <= (others => 'Z');
-
-        -- T3/T4/T5 states with memory read cycle (PCI="00" or PCR="01")
-        -- Do NOT drive during I/O cycles (PCC="10") - let I/O controllers drive
-        if ((S2 = '1' and S1 = '0' and S0 = '0') or  -- T3
-            (S2 = '0' and S1 = '1' and S0 = '1') or  -- T4
-            (S2 = '1' and S1 = '1' and S0 = '1')) and -- T5
-           (cycle_type_capture = "00" or cycle_type_capture = "01") then
-
-            -- Select memory source based on address
-            if mem_addr(13 downto 11) = "000" then
-                -- ROM space (0x0000 - 0x07FF)
-                data_bus <= rom_data;
-            elsif mem_addr(13 downto 10) = "0010" then
-                -- RAM space (0x0800 - 0x0BFF)
-                data_bus <= ram_data_out;
-            else
-                -- Unmapped
-                data_bus <= x"FF";
             end if;
         end if;
     end process;
@@ -443,62 +452,29 @@ begin
     cpu_int     <= INT;
 
     --------------------------------------------------------------------------------
-    -- Phase Clock Divider for Visible LED Display
+    -- Debug: I/O Cycle Detection
     --------------------------------------------------------------------------------
-    -- Divide phi1/phi2 by large factor to make blinking visible to human eye
-    -- Target: ~10 Hz blink rate (100ms period)
-    -- Phi1 runs at ~455 kHz, so divide by ~45,000 for ~10 Hz
-    phi_divider: process(clk, reset_n)
+    -- Detect when an I/O cycle occurs and capture LED state
+    process(phi2, reset_n)
     begin
         if reset_n = '0' then
-            phi1_div_counter <= (others => '0');
-            phi2_div_counter <= (others => '0');
-            phi1_divided     <= '0';
-            phi2_divided     <= '0';
-            phi1_prev        <= '0';
-            phi2_prev        <= '0';
-        elsif rising_edge(clk) then
-            -- Store previous phi1/phi2 values for edge detection
-            phi1_prev <= phi1;
-            phi2_prev <= phi2;
-
-            -- Phi1 divider: count rising edges of phi1
-            if phi1 = '1' and phi1_prev = '0' then
-                if phi1_div_counter < 45000 then
-                    phi1_div_counter <= phi1_div_counter + 1;
+            io_cycle_detected <= '0';
+            led_written <= '0';
+        elsif rising_edge(phi2) then
+            -- Detect I/O cycle in T2 state with PCC="01" and port 8
+            if S0 = '0' and S1 = '0' and S2 = '1' then
+                if data_bus(7 downto 6) = "01" and data_bus(4 downto 0) = "01000" then
+                    io_cycle_detected <= '1';  -- Set flag: saw OUT 8 instruction
                 else
-                    phi1_div_counter <= (others => '0');
-                    phi1_divided <= not phi1_divided;
+                    io_cycle_detected <= '0';  -- Clear if not OUT 8
                 end if;
             end if;
 
-            -- Phi2 divider: count rising edges of phi2
-            if phi2 = '1' and phi2_prev = '0' then
-                if phi2_div_counter < 45000 then
-                    phi2_div_counter <= phi2_div_counter + 1;
-                else
-                    phi2_div_counter <= (others => '0');
-                    phi2_divided <= not phi2_divided;
+            -- Capture LED state when written (T3 of I/O cycle)
+            if S0 = '1' and S1 = '0' and S2 = '0' then  -- T3
+                if io_cycle_detected = '1' then
+                    led_written <= led_out(0);  -- Continuously capture LED0 state
                 end if;
-            end if;
-        end if;
-    end process;
-
-    --------------------------------------------------------------------------------
-    -- I/O Write Detection
-    --------------------------------------------------------------------------------
-    -- Detect when an I/O write operation is occurring (S2,S1,S0 = 010 during I/O cycle)
-    -- This happens during the T2 state of an OUT instruction
-    process(clk, reset_n)
-    begin
-        if reset_n = '0' then
-            io_write_active <= '0';
-        elsif rising_edge(clk) then
-            -- I/O write occurs when S2='0', S1='1', S0='0' (state 010)
-            if S2 = '0' and S1 = '1' and S0 = '0' then
-                io_write_active <= '1';
-            else
-                io_write_active <= '0';
             end if;
         end if;
     end process;
@@ -506,16 +482,19 @@ begin
     --------------------------------------------------------------------------------
     -- LED Outputs (all active low)
     --------------------------------------------------------------------------------
-    -- KEEP - Phase clock LEDs (divided for visibility)
-    led_phi1   <= not phi1_divided;   -- D17: Phi1 clock divided
-    led_phi2   <= not phi2_divided;   -- D18: Phi2 clock divided
+    -- Debug LEDs (active low, so '0' = LED ON, '1' = LED OFF)
+    led_phi1   <= not SYNC;               -- D17: SYNC signal (should toggle every cycle)
+    led_phi2   <= not io_cycle_detected;  -- D18: Saw OUT 8 in T2 (toggling = working)
 
-    -- Diagnostic LEDs
-    led_test1  <= rom_cs_n;           -- E18: ROM chip select (active low, so LED on when ROM active)
-    led_test2  <= not SYNC;           -- F17: CPU SYNC signal (LED on during SYNC)
-    led_test3  <= ram_rw_n;           -- F18: RAM write strobe (active low, so LED on when writing)
-    led_test4  <= not io_write_active;-- E17: I/O write strobe (LED on when I/O write)
-    led_test5  <= not INT;            -- F16: Interrupt signal (LED on when interrupt pending)
+    -- Show when ALL conditions for OUT 8 are met simultaneously
+    led_test1  <= '0' when (S0='0' and S1='0' and S2='1' and
+                            data_bus(7 downto 6) = "01" and
+                            data_bus(4 downto 0) = "01000") else '1';  -- E18: Complete OUT 8 in T2
+
+    led_test2  <= '0' when (data_bus = x"48") else '1';   -- F17: 0x48 on bus (dim = working)
+    led_test3  <= '0' when (data_bus = x"FE") else '1';   -- F18: 0xFE on bus
+    led_test4  <= not led_out(0);         -- E17: LED0 from I/O controller (should blink!)
+    led_test5  <= not led_out(1);         -- F16: LED1 for comparison
 
     -- Raw phi1 signal (should be ~455kHz, will appear dim if oscillating)
     led_phi1_raw <= not phi1;         -- M20: Direct phi1 (active low LED)

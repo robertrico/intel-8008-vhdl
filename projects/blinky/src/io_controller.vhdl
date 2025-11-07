@@ -61,8 +61,8 @@ architecture rtl of io_controller is
     signal data_bus_out   : std_logic_vector(7 downto 0);
 
 begin
-    -- I/O cycle detection: PCC = "10" (I/O cycle)
-    is_io_cycle <= '1' when cycle_type = "10" else '0';
+    -- I/O cycle detection: PCC = "01" (I/O cycle)
+    is_io_cycle <= '1' when cycle_type = "01" else '0';
 
     -- Data bus control: Drive bus only during INP T3 cycle
     data_bus <= data_bus_out when data_bus_drive = '1' else (others => 'Z');
@@ -100,8 +100,8 @@ begin
                     cycle_type <= data_bus(7 downto 6);
                     port_addr  <= data_bus(4 downto 0);
 
-                    -- Check if this is an I/O cycle
-                    if data_bus(7 downto 6) = "10" then
+                    -- Check if this is an I/O cycle (PCC = "01" for I/O operations)
+                    if data_bus(7 downto 6) = "01" then
                         io_state <= T3;
                     else
                         -- Not an I/O cycle, return to idle

@@ -42,7 +42,7 @@ LPF_FILE = $(PROJECT_ROOT)/projects/blinky/constraints/blinky.lpf
 #==========================================
 # Program Assembly Configuration
 #==========================================
-NAKEN_ASM ?= /Users/hackbook/Development/naken_asm/naken_asm
+NAKEN_ASM ?= /Users/${USERNAME}/Development/naken_asm/naken_asm
 PYTHON = python3
 
 #==========================================
@@ -61,14 +61,6 @@ asm:
 	$(NAKEN_ASM) -I . -l -type hex -o blinky.hex blinky.asm
 	@echo "✓ Assembly complete"
 
-# Assemble the simple blinky program (minimal test)
-.PHONY: asm-simple
-asm-simple:
-	@echo "=== Assembling blinky_simple.asm ==="
-	$(NAKEN_ASM) -I . -l -type hex -o blinky_simple.hex blinky_simple.asm
-	$(PYTHON) $(PROJECT_ROOT)/hex_to_mem.py blinky_simple.hex blinky_simple.mem
-	@echo "✓ Generated blinky_simple.mem"
-
 # Convert to MEM format
 .PHONY: hex2mem
 hex2mem: asm
@@ -78,12 +70,13 @@ hex2mem: asm
 
 # Build everything (assemble simple program + synthesize FPGA)
 .PHONY: all
-all: asm-simple bitstream
+all: asm hex2mem bitstream
 
 # Clean project files
 .PHONY: clean-proj
 clean-proj: clean
 	rm -f blinky.hex blinky.lst blinky.mem
+	rm -f build/*
 
 .PHONY: help-proj
 help-proj:
@@ -136,8 +129,8 @@ bitstream: check-constraints hex2mem $(BITSTREAM_FILE)
 .PHONY: test-interrupt-controller
 test-interrupt-controller:
 	@echo "=== Testing Interrupt Controller ==="
-	/Users/hackbook/oss-cad-suite/bin/ghdl -a --std=08 --workdir=work src/interrupt_controller.vhdl
-	/Users/hackbook/oss-cad-suite/bin/ghdl -a --std=08 --workdir=work $(INT_CTL_TB)
-	/Users/hackbook/oss-cad-suite/bin/ghdl -e --std=08 --workdir=work interrupt_controller_tb
-	/Users/hackbook/oss-cad-suite/bin/ghdl -r --std=08 --workdir=work interrupt_controller_tb
+	/Users/${USERNAME}/oss-cad-suite/bin/ghdl -a --std=08 --workdir=work src/interrupt_controller.vhdl
+	/Users/${USERNAME}/oss-cad-suite/bin/ghdl -a --std=08 --workdir=work $(INT_CTL_TB)
+	/Users/${USERNAME}/oss-cad-suite/bin/ghdl -e --std=08 --workdir=work interrupt_controller_tb
+	/Users/${USERNAME}/oss-cad-suite/bin/ghdl -r --std=08 --workdir=work interrupt_controller_tb
 	@echo "✓ Interrupt Controller test complete"

@@ -38,29 +38,30 @@ IOBUF PORT "rst" IO_TYPE=LVCMOS15;
 # These expose the 15 non-power pins of the Intel 8008 CPU plus one extra
 
 # 8008 Data Bus (D0-D7) - 8 pins
+# Using 12mA drive strength for better signal integrity on logic analyzer
 LOCATE COMP "cpu_d[0]" SITE "A12";
-IOBUF PORT "cpu_d[0]" IO_TYPE=LVCMOS33;
+IOBUF PORT "cpu_d[0]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 LOCATE COMP "cpu_d[1]" SITE "A13";
-IOBUF PORT "cpu_d[1]" IO_TYPE=LVCMOS33;
+IOBUF PORT "cpu_d[1]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 LOCATE COMP "cpu_d[2]" SITE "B13";
-IOBUF PORT "cpu_d[2]" IO_TYPE=LVCMOS33;
+IOBUF PORT "cpu_d[2]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 LOCATE COMP "cpu_d[3]" SITE "C13";
-IOBUF PORT "cpu_d[3]" IO_TYPE=LVCMOS33;
+IOBUF PORT "cpu_d[3]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 LOCATE COMP "cpu_d[4]" SITE "D13";
-IOBUF PORT "cpu_d[4]" IO_TYPE=LVCMOS33;
+IOBUF PORT "cpu_d[4]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 LOCATE COMP "cpu_d[5]" SITE "E13";
-IOBUF PORT "cpu_d[5]" IO_TYPE=LVCMOS33;
+IOBUF PORT "cpu_d[5]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 LOCATE COMP "cpu_d[6]" SITE "A14";
-IOBUF PORT "cpu_d[6]" IO_TYPE=LVCMOS33;
+IOBUF PORT "cpu_d[6]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 LOCATE COMP "cpu_d[7]" SITE "C14";
-IOBUF PORT "cpu_d[7]" IO_TYPE=LVCMOS33;
+IOBUF PORT "cpu_d[7]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 # 8008 State Outputs (S0, S1, S2) - 3 pins
 LOCATE COMP "cpu_s0" SITE "D14";
