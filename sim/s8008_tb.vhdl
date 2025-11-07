@@ -25,16 +25,18 @@ architecture sim of s8008_tb is
     -- Component declaration
     component s8008 is
         port (
-            phi1 : in std_logic;
-            phi2 : in std_logic;
-            reset_n : in std_logic;
-            data_bus : inout std_logic_vector(7 downto 0);
-            S0 : out std_logic;
-            S1 : out std_logic;
-            S2 : out std_logic;
-            SYNC : out std_logic;
-            READY : in std_logic;
-            INT : in std_logic;
+            phi1            : in  std_logic;
+            phi2            : in  std_logic;
+            reset_n         : in  std_logic;
+            data_bus_in     : in  std_logic_vector(7 downto 0);
+            data_bus_out    : out std_logic_vector(7 downto 0);
+            data_bus_enable : out std_logic;
+            S0              : out std_logic;
+            S1              : out std_logic;
+            S2              : out std_logic;
+            SYNC            : out std_logic;
+            READY           : in  std_logic;
+            INT             : in  std_logic;
             debug_reg_A : out std_logic_vector(7 downto 0);
             debug_reg_B : out std_logic_vector(7 downto 0);
             debug_reg_C : out std_logic_vector(7 downto 0);
@@ -70,6 +72,10 @@ architecture sim of s8008_tb is
     signal SYNC_tb : std_logic;
     signal READY_tb : std_logic := '1';
     signal INT_tb : std_logic := '0';
+
+    -- Separate data bus signals for new port structure
+    signal cpu_data_out_tb     : std_logic_vector(7 downto 0);
+    signal cpu_data_enable_tb  : std_logic;
 
     -- Debug signals for assertion testing
     signal debug_reg_A_tb : std_logic_vector(7 downto 0);
@@ -277,16 +283,18 @@ begin
     -- Instantiate the Unit Under Test (UUT)
     uut: s8008
         port map (
-            phi1 => phi1_tb,
-            phi2 => phi2_tb,
-            reset_n => reset_n_tb,
-            data_bus => data_bus_tb,
-            S0 => S0_tb,
-            S1 => S1_tb,
-            S2 => S2_tb,
-            SYNC => SYNC_tb,
-            READY => READY_tb,
-            INT => INT_tb,
+            phi1            => phi1_tb,
+            phi2            => phi2_tb,
+            reset_n         => reset_n_tb,
+            data_bus_in     => data_bus_tb,
+            data_bus_out    => cpu_data_out_tb,
+            data_bus_enable => cpu_data_enable_tb,
+            S0              => S0_tb,
+            S1              => S1_tb,
+            S2              => S2_tb,
+            SYNC            => SYNC_tb,
+            READY           => READY_tb,
+            INT             => INT_tb,
             debug_reg_A => debug_reg_A_tb,
             debug_reg_B => debug_reg_B_tb,
             debug_reg_C => debug_reg_C_tb,
@@ -297,6 +305,13 @@ begin
             debug_pc => debug_pc_tb,
             debug_flags => debug_flags_tb
         );
+
+    --===========================================
+    -- Tri-state Reconstruction
+    --===========================================
+    -- Reconstruct tri-state behavior for simulation compatibility
+    -- CPU drives bus when enabled, otherwise testbench memory/IO drives it
+    data_bus_tb <= cpu_data_out_tb when cpu_data_enable_tb = '1' else (others => 'Z');
 
     --===========================================
     -- ROM/RAM Model (simulates memory device)

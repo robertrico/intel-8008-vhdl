@@ -64,7 +64,7 @@ include common.mk
 #==========================================
 # Program Assembly Configuration
 #==========================================
-NAKEN_ASM ?= /Users/hackbook/Development/naken_asm/naken_asm
+NAKEN_ASM ?= /Users/$(USERNAME)/Development/naken_asm/naken_asm
 TEST_PROG_DIR = test_programs
 PROJECTS_DIR = projects
 PYTHON = python3

@@ -32,7 +32,9 @@ architecture behavior of s8008_interrupt_tb is
             SYNC : out std_logic;
             READY : in std_logic;
             INT : in std_logic;
-            data_bus : inout std_logic_vector(7 downto 0);
+            data_bus_in     : in  std_logic_vector(7 downto 0);
+            data_bus_out    : out std_logic_vector(7 downto 0);
+            data_bus_enable : out std_logic;
             S0 : out std_logic;
             S1 : out std_logic;
             S2 : out std_logic;
@@ -56,6 +58,8 @@ architecture behavior of s8008_interrupt_tb is
     signal READY : std_logic := '1';
     signal INT : std_logic := '0';
     signal data_bus : std_logic_vector(7 downto 0);
+    signal cpu_data_out_tb     : std_logic_vector(7 downto 0);
+    signal cpu_data_enable_tb  : std_logic;
     signal S0, S1, S2 : std_logic;
     signal reset_n : std_logic := '0';
 
@@ -128,7 +132,9 @@ begin
             SYNC => SYNC,
             READY => READY,
             INT => INT,
-            data_bus => data_bus,
+            data_bus_in     => data_bus,
+            data_bus_out    => cpu_data_out_tb,
+            data_bus_enable => cpu_data_enable_tb,
             S0 => S0,
             S1 => S1,
             S2 => S2,
@@ -231,6 +237,10 @@ begin
 
         wait;
     end process;
+
+    -- Reconstruct tri-state behavior for simulation compatibility
+    -- CPU drives bus when enabled, otherwise testbench memory/IO drives it
+    data_bus <= cpu_data_out_tb when cpu_data_enable_tb = '1' else (others => 'Z');
 
     -- Address capture process (clocked)
     addr_capture: process(phi2)

@@ -15,7 +15,7 @@ WORK_DIR = work
 #==========================================
 # Simulation Configuration
 #==========================================
-STOP_TIME_s8008_hello_io_tb = 3050us
+STOP_TIME_s8008_hello_io_tb = 5000us
 SIM_STOP_TIME ?= $(or $(STOP_TIME_$(TB_ENTITY)),1ms)
 
 #==========================================
@@ -38,7 +38,7 @@ TB_SOURCES = s8008_hello_io_tb.vhdl
 #==========================================
 # Program Assembly Configuration
 #==========================================
-NAKEN_ASM ?= /Users/hackbook/Development/naken_asm/naken_asm
+NAKEN_ASM ?= /Users/${USERNAME}/Development/naken_asm/naken_asm
 PYTHON = python3
 
 #==========================================

@@ -33,11 +33,13 @@ entity s8008 is
         -- Reset (active low)
         reset_n : in std_logic;
 
-        -- 8-bit multiplexed address/data bus (bidirectional)
+        -- 8-bit multiplexed address/data bus (separate in/out/enable for FPGA synthesis compatibility)
         -- During T1: D7-D0 = A7-A0 (lower 8 bits of address)
         -- During T2: D7-D6 = cycle type, D5-D0 = A13-A8 (upper 6 bits of address)
         -- During T3: D7-D0 = data (read or write)
-        data_bus : inout std_logic_vector(7 downto 0);
+        data_bus_in     : in  std_logic_vector(7 downto 0);
+        data_bus_out    : out std_logic_vector(7 downto 0);
+        data_bus_enable : out std_logic;
 
         -- State outputs (timing state indication)
         -- S2 S1 S0 = State encoding:
@@ -190,7 +192,7 @@ architecture rtl of s8008 is
 
     -- Data bus direction control
     signal data_bus_output : std_logic_vector(7 downto 0);
-    signal data_bus_enable : std_logic;
+    signal data_bus_enable_internal : std_logic;
     signal is_read_cycle : std_logic;  -- '1' for read (PCI, PCR), '0' for write (PCW)
 
     -- ALU signals
@@ -654,38 +656,39 @@ begin
                 -- Output lower 8 bits of address
                 -- For I/O, this is the port address
                 data_bus_output <= std_logic_vector(effective_address(7 downto 0));
-                data_bus_enable <= '1';
+                data_bus_enable_internal <= '1';
 
             when T2 =>
                 -- Output cycle type (D7-D6) and upper 6 bits of address (D5-D0)
                 data_bus_output <= cycle_type_reg & std_logic_vector(effective_address(13 downto 8));
-                data_bus_enable <= '1';
+                data_bus_enable_internal <= '1';
 
             when T3 =>
                 -- Bidirectional data transfer
                 if is_read_cycle = '1' then
                     -- READ: Hi-Z (memory/IO device drives the bus)
                     data_bus_output <= (others => '0');
-                    data_bus_enable <= '0';
+                    data_bus_enable_internal <= '0';
                 elsif microcode_state = IO_TRANSFER and is_out_op_latched = '1' then
                     -- OUT: Drive accumulator on bus (always from accumulator)
                     data_bus_output <= registers(REG_A);
-                    data_bus_enable <= '1';
+                    data_bus_enable_internal <= '1';
                 else
                     -- WRITE: CPU drives the bus
                     data_bus_output <= data_out;
-                    data_bus_enable <= '1';
+                    data_bus_enable_internal <= '1';
                 end if;
 
             when others =>
                 -- Hi-Z during T4, T5, TWAIT, STOPPED
                 data_bus_output <= (others => '0');
-                data_bus_enable <= '0';
+                data_bus_enable_internal <= '0';
         end case;
     end process;
 
-    -- Tri-state buffer control
-    data_bus <= data_bus_output when data_bus_enable = '1' else (others => 'Z');
+    -- Export data bus signals (tri-state mux happens at top level)
+    data_bus_out    <= data_bus_output;
+    data_bus_enable <= data_bus_enable_internal;
 
     --===========================================
     -- Data Input Capture
@@ -700,13 +703,13 @@ begin
         elsif rising_edge(phi2) then
             -- Capture data during T3 of read cycles
             if timing_state = T3 and is_read_cycle = '1' then
-                data_in <= data_bus;
+                data_in <= data_bus_in;
 
                 -- If this is an instruction fetch (PCI), also update instruction register
                 if cycle_type_reg = "00" then
-                    instruction_reg <= data_bus;
+                    instruction_reg <= data_bus_in;
                     if DEBUG_VERBOSE then
-                        report "Instruction fetched: 0x" & to_hstring(unsigned(data_bus));
+                        report "Instruction fetched: 0x" & to_hstring(unsigned(data_bus_in));
                     end if;
                 end if;
             end if;
@@ -723,13 +726,13 @@ begin
     reg_read_data <= registers(reg_read_addr);
 
     -- Write data multiplexer: Select source for register write
-    -- For INP operations during T3, sample data_bus directly
+    -- For INP operations during T3, sample data_bus_in directly
     -- For all other operations, use reg_write_data set by microcode
-    reg_write_data_mux: process(microcode_state, is_inp_op_latched, timing_state, data_bus, reg_write_data)
+    reg_write_data_mux: process(microcode_state, is_inp_op_latched, timing_state, data_bus_in, reg_write_data)
     begin
         if microcode_state = IO_TRANSFER and is_inp_op_latched = '1' and timing_state = T3 then
-            -- INP T3: Sample data_bus directly (will be latched on phi2)
-            reg_write_data_actual <= data_bus;
+            -- INP T3: Sample data_bus_in directly (will be latched on phi2)
+            reg_write_data_actual <= data_bus_in;
         else
             -- All other cases: Use data prepared by microcode sequencer
             reg_write_data_actual <= reg_write_data;

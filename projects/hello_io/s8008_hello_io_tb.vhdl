@@ -44,7 +44,9 @@ architecture sim of s8008_hello_io_tb is
             phi1 : in std_logic;
             phi2 : in std_logic;
             reset_n : in std_logic;
-            data_bus : inout std_logic_vector(7 downto 0);
+            data_bus_in     : in  std_logic_vector(7 downto 0);
+            data_bus_out    : out std_logic_vector(7 downto 0);
+            data_bus_enable : out std_logic;
             S0 : out std_logic;
             S1 : out std_logic;
             S2 : out std_logic;
@@ -100,13 +102,15 @@ architecture sim of s8008_hello_io_tb is
             OUTPUT_FILE : string := "console_output.txt"
         );
         port(
-            phi1 : in std_logic;
-            phi2 : in std_logic;
-            reset : in std_logic;
-            S0 : in std_logic;
-            S1 : in std_logic;
-            S2 : in std_logic;
-            data_bus : inout std_logic_vector(7 downto 0)
+            phi1            : in  std_logic;
+            phi2            : in  std_logic;
+            reset           : in  std_logic;
+            S0              : in  std_logic;
+            S1              : in  std_logic;
+            S2              : in  std_logic;
+            data_bus_in     : in  std_logic_vector(7 downto 0);
+            data_bus_out    : out std_logic_vector(7 downto 0);
+            data_bus_enable : out std_logic
         );
     end component;
 
@@ -119,6 +123,10 @@ architecture sim of s8008_hello_io_tb is
 
     -- CPU signals
     signal data_bus_tb : std_logic_vector(7 downto 0);
+    signal cpu_data_out_tb     : std_logic_vector(7 downto 0);
+    signal cpu_data_enable_tb  : std_logic;
+    signal io_data_out_tb      : std_logic_vector(7 downto 0);
+    signal io_data_enable_tb   : std_logic;
     signal S0_tb : std_logic;
     signal S1_tb : std_logic;
     signal S2_tb : std_logic;
@@ -193,13 +201,21 @@ begin
             phi2   => phi2_tb
         );
 
+    -- Reconstruct tri-state behavior for simulation compatibility
+    -- Priority mux: CPU > I/O Console > Memory (via ROM/RAM)
+    data_bus_tb <= cpu_data_out_tb when cpu_data_enable_tb = '1' else
+                   io_data_out_tb  when io_data_enable_tb  = '1' else
+                   (others => 'Z');
+
     -- CPU
     cpu: s8008
         port map (
             phi1 => phi1_tb,
             phi2 => phi2_tb,
             reset_n => reset_n_tb,
-            data_bus => data_bus_tb,
+            data_bus_in     => data_bus_tb,
+            data_bus_out    => cpu_data_out_tb,
+            data_bus_enable => cpu_data_enable_tb,
             S0 => S0_tb,
             S1 => S1_tb,
             S2 => S2_tb,
@@ -246,13 +262,15 @@ begin
             OUTPUT_FILE => "console_output.txt"
         )
         port map (
-            phi1 => phi1_tb,
-            phi2 => phi2_tb,
-            reset => reset_tb,
-            S0 => S0_tb,
-            S1 => S1_tb,
-            S2 => S2_tb,
-            data_bus => data_bus_tb
+            phi1            => phi1_tb,
+            phi2            => phi2_tb,
+            reset           => reset_tb,
+            S0              => S0_tb,
+            S1              => S1_tb,
+            S2              => S2_tb,
+            data_bus_in     => data_bus_tb,
+            data_bus_out    => io_data_out_tb,
+            data_bus_enable => io_data_enable_tb
         );
 
     --===========================================

@@ -53,7 +53,7 @@ C_LIB = libconsole_vhpi.so
 #==========================================
 # Program Assembly Configuration
 #==========================================
-NAKEN_ASM ?= /Users/hackbook/Development/naken_asm/naken_asm
+NAKEN_ASM ?= /Users/${USERNAME}/Development/naken_asm/naken_asm
 PYTHON = python3
 
 #==========================================

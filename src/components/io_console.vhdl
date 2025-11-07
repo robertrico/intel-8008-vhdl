@@ -39,7 +39,9 @@ entity io_console is
         S0 : in std_logic;                              -- State bit 0
         S1 : in std_logic;                              -- State bit 1
         S2 : in std_logic;                              -- State bit 2
-        data_bus : inout std_logic_vector(7 downto 0)  -- Bidirectional data bus
+        data_bus_in     : in  std_logic_vector(7 downto 0);  -- Data bus input
+        data_bus_out    : out std_logic_vector(7 downto 0);  -- Data bus output
+        data_bus_enable : out std_logic                      -- Data bus output enable
     );
 end io_console;
 
@@ -59,10 +61,14 @@ architecture rtl of io_console is
     signal is_read : boolean := false;  -- True for INP, false for OUT
 
     -- Bus driver control
-    signal drive_bus : std_logic := '0';
-    signal bus_data : std_logic_vector(7 downto 0) := (others => '0');
+    signal drive_bus_internal : std_logic := '0';
+    signal bus_data_internal : std_logic_vector(7 downto 0) := (others => '0');
 
 begin
+
+    -- Export data bus signals (tri-state mux happens at top level)
+    data_bus_out    <= bus_data_internal;
+    data_bus_enable <= drive_bus_internal;
 
     --===========================================
     -- I/O Cycle Decoder
@@ -77,33 +83,33 @@ begin
                 port_addr <= (others => '0');
                 cycle_type <= "00";
                 is_io_cycle <= false;
-                drive_bus <= '0';
+                drive_bus_internal <= '0';
             else
                 -- T1 (S2S1S0 = 010): Capture port address from data bus
                 if S2 = '0' and S1 = '1' and S0 = '0' then
-                    port_addr <= data_bus;
+                    port_addr <= data_bus_in;
                     is_io_cycle <= false;  -- Not confirmed as I/O yet
-                    drive_bus <= '0';       -- Don't drive during T1
-                    report "I/O Console: T1 detected, capturing port_addr from data_bus=0x" & to_hstring(unsigned(data_bus));
+                    drive_bus_internal <= '0';       -- Don't drive during T1
+                    report "I/O Console: T1 detected, capturing port_addr from data_bus=0x" & to_hstring(unsigned(data_bus_in));
 
                 -- T2 (S2S1S0 = 100): Capture cycle type from data bus
                 elsif S2 = '1' and S1 = '0' and S0 = '0' then
-                    cycle_type <= data_bus(7 downto 6);
-                    report "I/O Console: T2 detected, data_bus=0x" & to_hstring(unsigned(data_bus)) &
-                           ", cycle_type=" & std_logic'image(data_bus(7)) & std_logic'image(data_bus(6));
+                    cycle_type <= data_bus_in(7 downto 6);
+                    report "I/O Console: T2 detected, data_bus=0x" & to_hstring(unsigned(data_bus_in)) &
+                           ", cycle_type=" & std_logic'image(data_bus_in(7)) & std_logic'image(data_bus_in(6));
                     -- Check if this is a PCC cycle (I/O operation)
-                    if data_bus(7 downto 6) = "10" then
+                    if data_bus_in(7 downto 6) = "10" then
                         is_io_cycle <= true;
-                        -- Determine if INP or OUT based on port address
-                        -- INP: port_addr bits 7-3 are all 0 (00000MMM)
-                        -- OUT: port_addr bits 7-5 are 0, bits 4-3 can be non-zero (000RRMMM)
-                        is_read <= (port_addr(7 downto 3) = "00000");
+                        -- Determine if INP or OUT based on port address bit 3
+                        -- INP: port_addr bit 3 = 0 (00000MMM) - ports 0-7
+                        -- OUT: port_addr bit 3 = 1 (000RRMMM) - ports 8-31
+                        is_read <= (port_addr(3) = '0');
                         report "I/O Console: PCC cycle detected, port_addr=0x" & to_hstring(unsigned(port_addr)) &
-                               ", is_read=" & boolean'image(port_addr(7 downto 3) = "00000");
+                               ", is_read=" & boolean'image(port_addr(3) = '0');
                     else
                         is_io_cycle <= false;
                     end if;
-                    drive_bus <= '0';  -- Don't drive during T2
+                    drive_bus_internal <= '0';  -- Don't drive during T2
 
                 -- T3 (S2S1S0 = 001): Data transfer
                 -- For INP (read), drive the bus
@@ -111,15 +117,15 @@ begin
                 elsif S2 = '0' and S1 = '0' and S0 = '1' then
                     if is_io_cycle and is_read then
                         -- INP: Drive input data on bus
-                        drive_bus <= '1';
+                        drive_bus_internal <= '1';
                     else
                         -- OUT or non-I/O: Don't drive bus
-                        drive_bus <= '0';
+                        drive_bus_internal <= '0';
                     end if;
 
                 -- Other states: Don't drive bus
                 else
-                    drive_bus <= '0';
+                    drive_bus_internal <= '0';
                 end if;
             end if;
         end if;
@@ -136,28 +142,25 @@ begin
         case port_addr(2 downto 0) is
             when "000" =>
                 -- Port 0: TX Data (write-only, return 0)
-                bus_data <= x"00";
+                bus_data_internal <= x"00";
 
             when "001" =>
                 -- Port 1: TX Status (bit 0 = ready, always 1)
-                bus_data <= x"01";
+                bus_data_internal <= x"01";
 
             when "010" =>
                 -- Port 2: RX Data (not implemented, return 0)
-                bus_data <= x"00";
+                bus_data_internal <= x"00";
 
             when "011" =>
                 -- Port 3: RX Status (not implemented, return 0)
-                bus_data <= x"00";
+                bus_data_internal <= x"00";
 
             when others =>
                 -- Ports 4-7: Unused
-                bus_data <= x"00";
+                bus_data_internal <= x"00";
         end case;
     end process;
-
-    -- Tri-state bus driver: only drive when drive_bus='1'
-    data_bus <= bus_data when drive_bus = '1' else (others => 'Z');
 
     --===========================================
     -- Console Output Process
@@ -186,27 +189,27 @@ begin
             if current_state = "001" and last_state /= "001" then
                 if is_io_cycle and not is_read and port_addr(2 downto 0) = "000" then
                     -- Convert byte to character
-                    char := character'val(to_integer(unsigned(data_bus)));
+                    char := character'val(to_integer(unsigned(data_bus_in)));
 
                     -- Write to file
                     write(file_line, char);
-                    if data_bus = x"0A" or data_bus = x"0D" then
+                    if data_bus_in = x"0A" or data_bus_in = x"0D" then
                         -- Flush line on newline characters
                         writeline(output_file_handle, file_line);
                     end if;
 
                     -- Report to simulation console
-                    if data_bus = x"0A" then
+                    if data_bus_in = x"0A" then
                         report "I/O Console TX: [LF]" severity note;
-                    elsif data_bus = x"0D" then
+                    elsif data_bus_in = x"0D" then
                         report "I/O Console TX: [CR]" severity note;
-                    elsif data_bus >= x"20" and data_bus <= x"7E" then
+                    elsif data_bus_in >= x"20" and data_bus_in <= x"7E" then
                         -- Printable ASCII
                         report "I/O Console TX: '" & char & "' (0x" &
-                               to_hstring(unsigned(data_bus)) & ")" severity note;
+                               to_hstring(unsigned(data_bus_in)) & ")" severity note;
                     else
                         -- Non-printable
-                        report "I/O Console TX: [0x" & to_hstring(unsigned(data_bus)) & "]" severity note;
+                        report "I/O Console TX: [0x" & to_hstring(unsigned(data_bus_in)) & "]" severity note;
                     end if;
 
                     -- Increment character counter

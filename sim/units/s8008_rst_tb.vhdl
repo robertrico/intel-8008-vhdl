@@ -45,7 +45,9 @@ architecture behavior of s8008_rst_tb is
             phi1 : in std_logic;
             phi2 : in std_logic;
             reset_n : in std_logic;
-            data_bus : inout std_logic_vector(7 downto 0);
+            data_bus_in     : in  std_logic_vector(7 downto 0);
+            data_bus_out    : out std_logic_vector(7 downto 0);
+            data_bus_enable : out std_logic;
             S0 : out std_logic;
             S1 : out std_logic;
             S2 : out std_logic;
@@ -73,6 +75,8 @@ architecture behavior of s8008_rst_tb is
     signal ready_tb : std_logic := '1';
     signal int_tb : std_logic := '0';
     signal data_tb : std_logic_vector(7 downto 0);
+    signal cpu_data_out_tb     : std_logic_vector(7 downto 0);
+    signal cpu_data_enable_tb  : std_logic;
     signal S0_tb, S1_tb, S2_tb : std_logic;
     signal sync_tb : std_logic;
 
@@ -175,13 +179,19 @@ architecture behavior of s8008_rst_tb is
     signal rom_enable : std_logic := '0';
 
 begin
+    -- Reconstruct tri-state behavior for simulation compatibility
+    -- CPU drives bus when enabled, otherwise testbench memory/IO drives it
+    data_tb <= cpu_data_out_tb when cpu_data_enable_tb = '1' else (others => 'Z');
+
     -- Instantiate DUT (Device Under Test)
     dut: s8008
         port map (
             phi1 => phi1_tb,
             phi2 => phi2_tb,
             reset_n => reset_n_tb,
-            data_bus => data_tb,
+            data_bus_in     => data_tb,
+            data_bus_out    => cpu_data_out_tb,
+            data_bus_enable => cpu_data_enable_tb,
             S0 => S0_tb,
             S1 => S1_tb,
             S2 => S2_tb,
