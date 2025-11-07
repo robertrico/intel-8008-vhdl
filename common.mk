@@ -141,9 +141,9 @@ analyze-tb: analyze-rtl
 
 # Elaborate (build) testbench
 .PHONY: elaborate
-elaborate: analyze-tb
+elaborate: analyze-tb | $(BUILD_DIR)
 	@echo "Elaborating $(ACTIVE_TB_ENTITY)..."
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(WORK_DIR) $(ACTIVE_TB_ENTITY)
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(WORK_DIR) -o $(BUILD_DIR)/$(ACTIVE_TB_ENTITY) $(ACTIVE_TB_ENTITY)
 
 # Run simulation, generate GHW, and optionally open GTKWave
 # Use WAVE=1 to launch GTKWave after simulation: make sim WAVE=1
@@ -155,7 +155,7 @@ sim: elaborate | create-reports-dir
 	@echo "Testbench: $(ACTIVE_TB_ENTITY)" >> $(SIM_REPORT)
 	@echo "==========================================" >> $(SIM_REPORT)
 	@echo "" >> $(SIM_REPORT)
-	@set -o pipefail; $(GHDL) -r $(GHDL_FLAGS) --workdir=$(WORK_DIR) $(ACTIVE_TB_ENTITY) \
+	@set -o pipefail; $(BUILD_DIR)/$(ACTIVE_TB_ENTITY) \
 		--stop-time=$(SIM_STOP_TIME) \
 		--wave=$(WAVE_FILE) \
 		--assert-level=error \
@@ -312,7 +312,7 @@ clean:
 	@echo "Cleaning simulation files..."
 	@$(GHDL) --clean $(GHDL_FLAGS) --workdir=$(WORK_DIR) 2>/dev/null || true
 	@rm -rf $(WORK_DIR)
-	@rm -f $(TB_ENTITY) $(ACTIVE_TB_ENTITY)
+	@rm -f $(BUILD_DIR)/*_tb
 	@rm -f *.cf
 	@rm -f $(SIM_DIR)/*.vcd $(SIM_DIR)/*.ghw
 	@rm -f $(REPORTS_DIR)/*.ghw
