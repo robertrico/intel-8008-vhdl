@@ -50,7 +50,10 @@ entity blinky_top is
         cpu_phi1    : out std_logic;
         cpu_phi2    : out std_logic;
         cpu_ready   : out std_logic;
-        cpu_int     : out std_logic
+        cpu_int     : out std_logic;
+
+        -- Extra debug output for logic analyzer
+        cpu_data_en : out std_logic                       -- B12: CPU data bus enable
     );
 end entity blinky_top;
 
@@ -439,7 +442,7 @@ begin
         );
 
     --------------------------------------------------------------------------------
-    -- CPU Debug Output Assignments (16 signals)
+    -- CPU Debug Output Assignments (16 signals + extra)
     --------------------------------------------------------------------------------
     cpu_d       <= data_bus;
     cpu_s0      <= S0;
@@ -450,6 +453,7 @@ begin
     cpu_phi2    <= phi2;
     cpu_ready   <= READY;
     cpu_int     <= INT;
+    cpu_data_en <= cpu_data_enable;  -- Extra debug for logic analyzer
 
     --------------------------------------------------------------------------------
     -- Debug: I/O Cycle Detection
@@ -491,7 +495,7 @@ begin
                             data_bus(7 downto 6) = "01" and
                             data_bus(4 downto 0) = "01000") else '1';  -- E18: Complete OUT 8 in T2
 
-    led_test2  <= '0' when (data_bus = x"48") else '1';   -- F17: 0x48 on bus (dim = working)
+    led_test2  <= not cpu_data_enable;                    -- F17: CPU driving bus (should be dim/on during cycles)
     led_test3  <= '0' when (data_bus = x"FE") else '1';   -- F18: 0xFE on bus
     led_test4  <= not led_out(0);         -- E17: LED0 from I/O controller (should blink!)
     led_test5  <= not led_out(1);         -- F16: LED1 for comparison

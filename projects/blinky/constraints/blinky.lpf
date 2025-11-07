@@ -92,6 +92,10 @@ IOBUF PORT "cpu_ready" IO_TYPE=LVCMOS33;
 LOCATE COMP "cpu_int" SITE "E12";
 IOBUF PORT "cpu_int" IO_TYPE=LVCMOS33;
 
+# Extra debug output - CPU data bus enable
+LOCATE COMP "cpu_data_en" SITE "B12";
+IOBUF PORT "cpu_data_en" IO_TYPE=LVCMOS33 DRIVE=12;
+
 # ====================================================================================
 # Memory Interface - Managed by memory_controller module
 # ====================================================================================
