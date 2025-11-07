@@ -43,14 +43,14 @@ entity s8008 is
 
         -- State outputs (timing state indication)
         -- S2 S1 S0 = State encoding:
-        --   000 = T1    (address low byte)
-        --   001 = T1I   (interrupt acknowledge)
-        --   010 = T2    (address high byte + cycle type)
-        --   011 = WAIT  (wait state)
-        --   100 = T3    (data transfer)
-        --   101 = STOPPED (halted)
-        --   110 = T4    (data hold)
-        --   111 = T5    (cycle complete)
+        --   000 = TWAIT  (wait state)
+        --   001 = T3     (data transfer)
+        --   010 = T1     (address low byte)
+        --   011 = STOPPED (halted)
+        --   100 = T2     (address high byte + cycle type)
+        --   101 = T5     (cycle complete)
+        --   110 = T1I    (interrupt acknowledge)
+        --   111 = T4     (data hold)
         S0 : out std_logic;
         S1 : out std_logic;
         S2 : out std_logic;
@@ -470,11 +470,11 @@ begin
     begin
         case timing_state is
             when T1      => S0 <= '0'; S1 <= '1'; S2 <= '0';  -- 010
-            when T1I     => S0 <= '0'; S1 <= '1'; S2 <= '1';  -- 011
-            when T2      => S0 <= '0'; S1 <= '0'; S2 <= '1';  -- 001
+            when T1I     => S0 <= '0'; S1 <= '1'; S2 <= '1';  -- 110
+            when T2      => S0 <= '0'; S1 <= '0'; S2 <= '1';  -- 100
             when TWAIT   => S0 <= '0'; S1 <= '0'; S2 <= '0';  -- 000
-            when T3      => S0 <= '1'; S1 <= '0'; S2 <= '0';  -- 100
-            when STOPPED => S0 <= '1'; S1 <= '1'; S2 <= '0';  -- 110
+            when T3      => S0 <= '1'; S1 <= '0'; S2 <= '0';  -- 001
+            when STOPPED => S0 <= '1'; S1 <= '1'; S2 <= '0';  -- 011
             when T4      => S0 <= '1'; S1 <= '1'; S2 <= '1';  -- 111
             when T5      => S0 <= '1'; S1 <= '0'; S2 <= '1';  -- 101
         end case;

@@ -16,8 +16,8 @@
 --
 -- Per Intel 8008 datasheet, I/O operations use PCC cycles (cycle type "10"):
 --   T1 (S2S1S0=010): CPU outputs port address (00000MMM for INP, 000RRMMM for OUT)
---   T2 (S2S1S0=001): CPU outputs cycle type "10" on D7-D6
---   T3 (S2S1S0=100): Data transfer (OUT: CPU drives, INP: device drives)
+--   T2 (S2S1S0=100): CPU outputs cycle type "10" on D7-D6
+--   T3 (S2S1S0=001): Data transfer (OUT: CPU drives, INP: device drives)
 -------------------------------------------------------------------------------
 
 library IEEE;

@@ -68,6 +68,8 @@ architecture rtl of interrupt_controller is
     -- Startup interrupt generation
     -- Per Intel 8008 datasheet: CPU requires an interrupt pulse after power-on to exit STOPPED state
     signal startup_done   : std_logic;
+    signal startup_delay  : integer range 0 to 255;  -- Delay counter for startup interrupt
+    constant STARTUP_DELAY_CYCLES : integer := 100;  -- Wait 100 phi1 cycles after reset
 
     -- Interrupt state machine
     type int_state_t is (STARTUP_INT, IDLE, INT_PENDING, DRIVE_RST, CLEAR_INT);
@@ -131,10 +133,11 @@ begin
     int_controller_proc: process(clk, reset_n)
     begin
         if reset_n = '0' then
-            int_state      <= STARTUP_INT;  -- Start with startup interrupt
+            int_state      <= STARTUP_INT;  -- ENABLED: Generate startup interrupt per datasheet
             INT            <= '0';
             data_bus_drive <= '0';
-            startup_done   <= '0';
+            startup_done   <= '0';  -- Not done yet, will generate startup interrupt
+            startup_delay  <= 0;
 
         elsif rising_edge(clk) then
             -- Default outputs
@@ -144,9 +147,14 @@ begin
                 when STARTUP_INT =>
                     -- Generate startup interrupt to release CPU from STOPPED state
                     -- Per Intel 8008 datasheet section 2: "START-UP OF THE 8008"
+                    -- Wait for CPU to stabilize after reset before asserting interrupt
                     if startup_done = '0' then
-                        int_state    <= INT_PENDING;
-                        startup_done <= '1';
+                        if startup_delay < STARTUP_DELAY_CYCLES then
+                            startup_delay <= startup_delay + 1;
+                        else
+                            int_state    <= INT_PENDING;
+                            startup_done <= '1';
+                        end if;
                     else
                         int_state <= IDLE;
                     end if;
@@ -158,26 +166,28 @@ begin
                     end if;
 
                 when INT_PENDING =>
-                    -- Assert INT and wait for CPU acknowledgment
-                    INT <= '1';
+                    -- Assert INT and drive RST opcode continuously
+                    -- Per Intel 8008 datasheet: interrupt vector must be available
+                    -- on data bus during T1I and T2 states
+                    INT            <= '1';
+                    data_bus_drive <= '1';  -- Drive RST opcode while INT is asserted
 
                     -- Check for interrupt acknowledge (T1I state)
-                    -- Drive RST opcode IMMEDIATELY when T1I is detected
                     if is_t1i = '1' then
-                        data_bus_drive <= '1';  -- Drive RST during T1I
-                        int_state      <= DRIVE_RST;
+                        int_state <= DRIVE_RST;
                     end if;
 
                 when DRIVE_RST =>
-                    -- Continue driving for one more cycle (T2 after T1I)
+                    -- Continue driving during T2 after T1I
                     INT            <= '1';
                     data_bus_drive <= '1';
                     int_state      <= CLEAR_INT;
 
                 when CLEAR_INT =>
-                    -- Clear interrupt after one more cycle
-                    INT       <= '0';
-                    int_state <= IDLE;
+                    -- Clear interrupt and stop driving bus
+                    INT            <= '0';
+                    data_bus_drive <= '0';
+                    int_state      <= IDLE;
 
                 when others =>
                     int_state <= IDLE;

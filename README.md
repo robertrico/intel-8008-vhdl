@@ -383,7 +383,7 @@ The CPU samples the INT line **at the end of each Program Counter Increment (PCI
 
 When INT is recognized, the CPU performs a special acknowledge cycle:
 
-**T1I State** (State outputs S2 S1 S0 = 001):
+**T1I State** (State outputs S2 S1 S0 = 110):
 - Lower 8 bits of Program Counter output on data bus
 - **PC is NOT incremented** - preserved for return address
 

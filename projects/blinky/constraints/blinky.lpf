@@ -151,43 +151,40 @@ LOCATE COMP "speed_btn" SITE "B19";
 IOBUF PORT "speed_btn" IO_TYPE=LVCMOS33 PULLMODE=UP;
 
 # ====================================================================================
-# LED Outputs
+# LED Outputs (named by physical FPGA pin)
 # ====================================================================================
 
-# Main Program LED (active low)
-LOCATE COMP "debug_led" SITE "E16";
-IOBUF PORT "debug_led" IO_TYPE=LVCMOS25;
+# All LEDs are active low: '0' = LED ON/lit, '1' = LED OFF/dark
 
-# Phase clock indicator LEDs (active low) - KEEP
-LOCATE COMP "led_phi1" SITE "D17";
-IOBUF PORT "led_phi1" IO_TYPE=LVCMOS25;
+LOCATE COMP "led_E16" SITE "E16";
+IOBUF PORT "led_E16" IO_TYPE=LVCMOS25;
 
-LOCATE COMP "led_phi2" SITE "D18";
-IOBUF PORT "led_phi2" IO_TYPE=LVCMOS25;
+LOCATE COMP "led_D17" SITE "D17";
+IOBUF PORT "led_D17" IO_TYPE=LVCMOS25;
 
-# Diagnostic Test LEDs (active low)
-LOCATE COMP "led_test1" SITE "E18";
-IOBUF PORT "led_test1" IO_TYPE=LVCMOS25;
+LOCATE COMP "led_D18" SITE "D18";
+IOBUF PORT "led_D18" IO_TYPE=LVCMOS25;
 
-LOCATE COMP "led_test2" SITE "F17";
-IOBUF PORT "led_test2" IO_TYPE=LVCMOS25;
+LOCATE COMP "led_E18" SITE "E18";
+IOBUF PORT "led_E18" IO_TYPE=LVCMOS25;
 
-LOCATE COMP "led_test3" SITE "F18";
-IOBUF PORT "led_test3" IO_TYPE=LVCMOS25;
+LOCATE COMP "led_F17" SITE "F17";
+IOBUF PORT "led_F17" IO_TYPE=LVCMOS25;
 
-LOCATE COMP "led_test4" SITE "E17";
-IOBUF PORT "led_test4" IO_TYPE=LVCMOS25;
+LOCATE COMP "led_F18" SITE "F18";
+IOBUF PORT "led_F18" IO_TYPE=LVCMOS25;
 
-LOCATE COMP "led_test5" SITE "F16";
-IOBUF PORT "led_test5" IO_TYPE=LVCMOS25;
+LOCATE COMP "led_E17" SITE "E17";
+IOBUF PORT "led_E17" IO_TYPE=LVCMOS25;
 
-# Raw phi1 diagnostic LED (active low)
-LOCATE COMP "led_phi1_raw" SITE "M20";
-IOBUF PORT "led_phi1_raw" IO_TYPE=LVCMOS25;
+LOCATE COMP "led_F16" SITE "F16";
+IOBUF PORT "led_F16" IO_TYPE=LVCMOS25;
 
-# Reference LED (always on for brightness comparison)
-LOCATE COMP "led_ref_on" SITE "L18";
-IOBUF PORT "led_ref_on" IO_TYPE=LVCMOS25;
+LOCATE COMP "led_M20" SITE "M20";
+IOBUF PORT "led_M20" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_L18" SITE "L18";
+IOBUF PORT "led_L18" IO_TYPE=LVCMOS25;
 
 # ====================================================================================
 # Configuration

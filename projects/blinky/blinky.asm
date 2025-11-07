@@ -19,9 +19,8 @@
 ; RST 0 VECTOR - Interrupt Entry Point
 ; ================================================================================
 rst0_vector:
-    ret                         ; Return immediately if interrupt occurs
-    hlt                         ; Padding
-    hlt                         ; Padding
+    jmp main                    ; Jump to main program (handles startup interrupt)
+    ; Note: JMP is 3 bytes (44 LL HH), fills the RST 0 vector perfectly
 
 ; ================================================================================
 ; MAIN PROGRAM

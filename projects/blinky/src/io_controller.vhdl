@@ -9,8 +9,8 @@
 --   Port 0x02-0x1F: Reserved for future expansion
 --
 -- I/O Cycle Detection:
---   - S2,S1,S0 = 100 (INP) or 010 (OUT) during T2 state
---   - D5-D0 during T2 = I/O port address (lower 5 bits used by 8008)
+--   - D7-D6 during T2 = "11" (PCC = I/O cycle)
+--   - D4-D0 during T2 = I/O port address (bit 3: 0=INP, 1=OUT; bits 2-0: port number)
 --   - D7-D0 during T3 = data (OUT writes) or data to provide (INP reads)
 --
 -- Copyright (c) 2025 Robert Rico
@@ -61,8 +61,8 @@ architecture rtl of io_controller is
     signal data_bus_out   : std_logic_vector(7 downto 0);
 
 begin
-    -- I/O cycle detection: PCC = "01" (I/O cycle)
-    is_io_cycle <= '1' when cycle_type = "01" else '0';
+    -- I/O cycle detection: PCC = "11" (I/O cycle)
+    is_io_cycle <= '1' when cycle_type = "11" else '0';
 
     -- Data bus control: Drive bus only during INP T3 cycle
     data_bus <= data_bus_out when data_bus_drive = '1' else (others => 'Z');
@@ -100,8 +100,8 @@ begin
                     cycle_type <= data_bus(7 downto 6);
                     port_addr  <= data_bus(4 downto 0);
 
-                    -- Check if this is an I/O cycle (PCC = "01" for I/O operations)
-                    if data_bus(7 downto 6) = "01" then
+                    -- Check if this is an I/O cycle (PCC = "11" for I/O operations)
+                    if data_bus(7 downto 6) = "11" then
                         io_state <= T3;
                     else
                         -- Not an I/O cycle, return to idle

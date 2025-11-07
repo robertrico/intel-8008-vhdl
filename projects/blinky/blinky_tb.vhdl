@@ -34,7 +34,16 @@ architecture sim of blinky_tb is
         port (
             clk         : in  std_logic;
             rst         : in  std_logic;
-            debug_led   : out std_logic;
+            led_E16     : out std_logic;
+            led_D17     : out std_logic;
+            led_D18     : out std_logic;
+            led_E18     : out std_logic;
+            led_F17     : out std_logic;
+            led_F18     : out std_logic;
+            led_E17     : out std_logic;
+            led_F16     : out std_logic;
+            led_M20     : out std_logic;
+            led_L18     : out std_logic;
             speed_btn   : in  std_logic;
             cpu_d       : out std_logic_vector(7 downto 0);
             cpu_s0      : out std_logic;
@@ -44,7 +53,8 @@ architecture sim of blinky_tb is
             cpu_phi1    : out std_logic;
             cpu_phi2    : out std_logic;
             cpu_ready   : out std_logic;
-            cpu_int     : out std_logic
+            cpu_int     : out std_logic;
+            cpu_data_en : out std_logic
         );
     end component;
 
@@ -58,8 +68,19 @@ architecture sim of blinky_tb is
     --------------------------------------------------------------------------------
     signal clk         : std_logic := '0';
     signal rst         : std_logic := '1';
-    signal debug_led   : std_logic;
     signal speed_btn   : std_logic := '0';
+
+    -- Board LEDs (testbench signals)
+    signal tb_led_E16  : std_logic;
+    signal tb_led_D17  : std_logic;
+    signal tb_led_D18  : std_logic;
+    signal tb_led_E18  : std_logic;
+    signal tb_led_F17  : std_logic;
+    signal tb_led_F18  : std_logic;
+    signal tb_led_E17  : std_logic;
+    signal tb_led_F16  : std_logic;
+    signal tb_led_M20  : std_logic;
+    signal tb_led_L18  : std_logic;
 
     -- CPU debug signals
     signal cpu_d       : std_logic_vector(7 downto 0);
@@ -71,6 +92,7 @@ architecture sim of blinky_tb is
     signal cpu_phi2    : std_logic;
     signal cpu_ready   : std_logic;
     signal cpu_int     : std_logic;
+    signal cpu_data_en : std_logic;
 
     -- Test control
     signal sim_done : boolean := false;
@@ -102,7 +124,16 @@ begin
         port map (
             clk         => clk,
             rst         => rst,
-            debug_led   => debug_led,
+            led_E16     => tb_led_E16,
+            led_D17     => tb_led_D17,
+            led_D18     => tb_led_D18,
+            led_E18     => tb_led_E18,
+            led_F17     => tb_led_F17,
+            led_F18     => tb_led_F18,
+            led_E17     => tb_led_E17,
+            led_F16     => tb_led_F16,
+            led_M20     => tb_led_M20,
+            led_L18     => tb_led_L18,
             speed_btn   => speed_btn,
             cpu_d       => cpu_d,
             cpu_s0      => cpu_s0,
@@ -112,7 +143,8 @@ begin
             cpu_phi1    => cpu_phi1,
             cpu_phi2    => cpu_phi2,
             cpu_ready   => cpu_ready,
-            cpu_int     => cpu_int
+            cpu_int     => cpu_int,
+            cpu_data_en => cpu_data_en
         );
 
     --------------------------------------------------------------------------------
@@ -121,10 +153,10 @@ begin
     led_monitor: process(clk)
     begin
         if rising_edge(clk) then
-            if debug_led /= led_prev then
+            if tb_led_E16 /= led_prev then
                 led_changed <= true;
-                led_prev    <= debug_led;
-                report "LED changed to: " & std_logic'image(debug_led)
+                led_prev    <= tb_led_E16;
+                report "LED E16 changed to: " & std_logic'image(tb_led_E16)
                        severity note;
             else
                 led_changed <= false;

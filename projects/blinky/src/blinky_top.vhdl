@@ -18,25 +18,17 @@ entity blinky_top is
         clk         : in  std_logic;
         rst         : in  std_logic;
 
-        -- KEEP - Main program LED
-        debug_led   : out std_logic;  -- B16 - blinky program output
-
-        -- KEEP - Phase clock LEDs (divided for visibility)
-        led_phi1    : out std_logic;  -- D17 - phi1 clock divided
-        led_phi2    : out std_logic;  -- D18 - phi2 clock divided
-
-        -- RECYCLE + NEW - Diagnostic LEDs (5 total)
-        led_test1   : out std_logic;  -- E18 - RECYCLE: ROM chip select
-        led_test2   : out std_logic;  -- F17 - RECYCLE: CPU SYNC signal
-        led_test3   : out std_logic;  -- F18 - NEW: RAM write strobe
-        led_test4   : out std_logic;  -- E17 - NEW: I/O write strobe
-        led_test5   : out std_logic;  -- F16 - NEW: Interrupt pending
-
-        -- Raw phi1 diagnostic (M20 - free LED)
-        led_phi1_raw : out std_logic;  -- M20 - Direct phi1 signal (not divided)
-
-        -- Reference LED for brightness comparison (L18 - always on)
-        led_ref_on   : out std_logic;  -- L18 - Always ON for brightness reference
+        -- Board LEDs (named by physical FPGA pin number)
+        led_E16     : out std_logic;  -- Main blinky LED (debug_led)
+        led_D17     : out std_logic;  -- SYNC indicator
+        led_D18     : out std_logic;  -- I/O cycle detector
+        led_E18     : out std_logic;  -- Diagnostic test 1
+        led_F17     : out std_logic;  -- CPU data enable
+        led_F18     : out std_logic;  -- Diagnostic test 3
+        led_E17     : out std_logic;  -- Diagnostic test 4
+        led_F16     : out std_logic;  -- Diagnostic test 5
+        led_M20     : out std_logic;  -- Raw phi1 clock
+        led_L18     : out std_logic;  -- Always-on reference
 
         -- Single button input (B19 - speed_btn)
         speed_btn   : in  std_logic;
@@ -284,24 +276,25 @@ begin
     --------------------------------------------------------------------------------
     -- Tri-State Bus Logic
     --------------------------------------------------------------------------------
-    -- The CPU drives the data bus when cpu_data_enable is active
-    -- Memory drives during memory read cycles
-    -- I/O controllers drive during their respective cycles (handled by their own tri-state logic)
+    -- Priority-based tri-state bus arbitration to prevent contention:
+    -- 1. CPU drives during T1, T2, and write cycles (cpu_data_enable = '1')
+    -- 2. I/O controllers drive during I/O read cycles (handled by their tri-state)
+    -- 3. Memory drives during memory read cycles (PCI/PCR only, not during writes)
+    -- 4. Default: Hi-Z (no driver active)
     process(cpu_data_enable, cpu_data_out, rom_data, ram_data_out, S2, S1, S0, cycle_type_capture, mem_addr)
     begin
-        -- Default: tri-state (allows I/O controllers to drive)
+        -- Default: tri-state (no driver active)
         data_bus <= (others => 'Z');
 
-        -- CPU drives bus when enabled (during T1, T2, and write cycles)
+        -- Priority 1: CPU drives bus when enabled (during T1, T2, and write cycles)
         if cpu_data_enable = '1' then
             data_bus <= cpu_data_out;
-        -- Memory drives bus only during memory read cycles in T3/T4/T5 states
-        -- PCI="00" (instruction fetch) or PCR="01" (memory read)
-        -- Do NOT drive during I/O cycles (PCC="10") - let I/O controllers drive
-        elsif ((S0 = '1' and S1 = '0' and S2 = '0') or  -- T3 (100)
-               (S0 = '1' and S1 = '1' and S2 = '1') or  -- T4 (111)
-               (S0 = '1' and S1 = '0' and S2 = '1')) and -- T5 (101)
-              (cycle_type_capture = "00" or cycle_type_capture = "01") then
+        -- Priority 2: Memory drives bus ONLY during memory READ cycles in T3 state
+        -- Check that we're in T3 (001), and cycle type is PCI="00" or PCR="01"
+        -- CRITICAL: Do NOT drive during write cycles (PCW="10") - CPU drives during writes!
+        -- CRITICAL: Do NOT drive during I/O cycles (PCC="11") - I/O controllers drive!
+        elsif (S0 = '1' and S1 = '0' and S2 = '0') and  -- T3 state only (001)
+              (cycle_type_capture = "00" or cycle_type_capture = "01") then  -- PCI or PCR only
             -- Select memory source based on address
             if mem_addr(13 downto 11) = "000" then
                 -- ROM space (0x0000 - 0x07FF)
@@ -313,8 +306,9 @@ begin
                 -- Unmapped memory
                 data_bus <= x"FF";
             end if;
-        -- For I/O cycles (PCC="10"), I/O controllers manage the bus themselves
-        -- For interrupt cycles, interrupt controller manages the bus
+        -- Priority 3: For I/O cycles (PCC="01") and interrupt acknowledge,
+        -- I/O and interrupt controllers manage the bus via their own tri-state logic
+        -- (Default Hi-Z allows them to drive)
         end if;
     end process;
 
@@ -408,7 +402,7 @@ begin
 
     u_io_controller : io_controller
         port map (
-            clk      => phi2,
+            clk      => phi1,  -- Changed from phi2 to phi1 to match CPU state timing
             reset_n  => reset_n,
             S2       => S2,
             S1       => S1,
@@ -419,8 +413,6 @@ begin
             buttons  => button_in
         );
 
-    debug_led <= led_out(0);  -- Use only LED0
-
     --------------------------------------------------------------------------------
     -- Interrupt Controller
     --------------------------------------------------------------------------------
@@ -430,7 +422,7 @@ begin
             DEBOUNCE_MS => 50
         )
         port map (
-            clk        => phi2,
+            clk        => phi1,  -- Changed from phi2 to phi1 to match CPU state timing
             reset_n    => reset_n,
             S2         => S2,
             S1         => S1,
@@ -465,9 +457,9 @@ begin
             io_cycle_detected <= '0';
             led_written <= '0';
         elsif rising_edge(phi2) then
-            -- Detect I/O cycle in T2 state with PCC="01" and port 8
+            -- Detect I/O cycle in T2 state with PCC="11" and port 8
             if S0 = '0' and S1 = '0' and S2 = '1' then
-                if data_bus(7 downto 6) = "01" and data_bus(4 downto 0) = "01000" then
+                if data_bus(7 downto 6) = "11" and data_bus(4 downto 0) = "01000" then
                     io_cycle_detected <= '1';  -- Set flag: saw OUT 8 instruction
                 else
                     io_cycle_detected <= '0';  -- Clear if not OUT 8
@@ -484,26 +476,38 @@ begin
     end process;
 
     --------------------------------------------------------------------------------
-    -- LED Outputs (all active low)
+    -- LED Outputs (all active low: '0' = LED ON/lit, '1' = LED OFF/dark)
     --------------------------------------------------------------------------------
-    -- Debug LEDs (active low, so '0' = LED ON, '1' = LED OFF)
-    led_phi1   <= not SYNC;               -- D17: SYNC signal (should toggle every cycle)
-    led_phi2   <= not io_cycle_detected;  -- D18: Saw OUT 8 in T2 (toggling = working)
+    -- E16: Main blinky LED (should blink ~1Hz)
+    led_E16 <= led_out(0);
 
-    -- Show when ALL conditions for OUT 8 are met simultaneously
-    led_test1  <= '0' when (S0='0' and S1='0' and S2='1' and
-                            data_bus(7 downto 6) = "01" and
-                            data_bus(4 downto 0) = "01000") else '1';  -- E18: Complete OUT 8 in T2
+    -- D17: SYNC signal indicator (should appear dim = rapid toggling)
+    led_D17 <= not SYNC;
 
-    led_test2  <= not cpu_data_enable;                    -- F17: CPU driving bus (should be dim/on during cycles)
-    led_test3  <= '0' when (data_bus = x"FE") else '1';   -- F18: 0xFE on bus
-    led_test4  <= not led_out(0);         -- E17: LED0 from I/O controller (should blink!)
-    led_test5  <= not led_out(1);         -- F16: LED1 for comparison
+    -- D18: OUT 8 cycle detector (should flash briefly when OUT 8 executes)
+    led_D18 <= not io_cycle_detected;
 
-    -- Raw phi1 signal (should be ~455kHz, will appear dim if oscillating)
-    led_phi1_raw <= not phi1;         -- M20: Direct phi1 (active low LED)
+    -- E18: OUT 8 in T2 state (all conditions met simultaneously)
+    led_E18 <= '0' when (S0='0' and S1='0' and S2='1' and
+                         data_bus(7 downto 6) = "11" and
+                         data_bus(4 downto 0) = "01000") else '1';
 
-    -- Reference LED (always on for brightness comparison)
-    led_ref_on <= reset_n;                -- L18: Always ON (active low)
+    -- F17: CPU data enable (should be dim = CPU driving bus intermittently)
+    led_F17 <= not cpu_data_enable;
+
+    -- F18: 0xFE on data bus detector (should flash when LED turns ON)
+    led_F18 <= '0' when (data_bus = x"FE") else '1';
+
+    -- E17: LED0 from I/O controller, inverted (should blink opposite of E16)
+    led_E17 <= not led_out(0);
+
+    -- F16: LED1 from I/O controller (should stay OFF since not written)
+    led_F16 <= not led_out(1);
+
+    -- M20: Raw phi1 clock (should be dim = ~455kHz oscillation)
+    led_M20 <= not phi1;
+
+    -- L18: Always-on reference LED (for brightness comparison)
+    led_L18 <= reset_n;
 
 end architecture rtl;
