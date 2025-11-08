@@ -47,21 +47,38 @@ architecture rtl of phase_clocks is
 
     signal counter : integer := 0;
     signal current_phase : clk_phase;
+
+    -- Internal signals to avoid glitches
+    signal phi1_next : std_logic;
+    signal phi2_next : std_logic;
 begin
+    -- Registered outputs to eliminate glitches
+    process(clk_in, reset)
+    begin
+        if reset = '1' then
+            phi1 <= '1';
+            phi2 <= '0';
+        elsif rising_edge(clk_in) then
+            phi1 <= phi1_next;
+            phi2 <= phi2_next;
+        end if;
+    end process;
+
+    -- State machine and counter logic
     process(clk_in, reset)
     begin
         if reset = '1' then
             counter <= 0;
-            phi1 <= '1';
-            phi2 <= '0';
+            phi1_next <= '1';
+            phi2_next <= '0';
             current_phase <= PHI_1;
         elsif rising_edge(clk_in) then
             case current_phase is
                 -- PHI1 active phase
                 when PHI_1 =>
                     if counter = PHI1_DIVIDER - 1 then
-                        phi1 <= '0';
-                        phi2 <= '0';
+                        phi1_next <= '0';
+                        phi2_next <= '0';
                         current_phase <= DEAD_PHI_2;
                         counter <= 0;
                     else
@@ -71,7 +88,8 @@ begin
                 -- Dead time before PHI2
                 when DEAD_PHI_2 =>
                     if counter = DEAD_DIVIDER - 1 then
-                        phi2 <= '1';
+                        phi1_next <= '0';
+                        phi2_next <= '1';
                         current_phase <= PHI_2;
                         counter <= 0;
                     else
@@ -81,8 +99,8 @@ begin
                 -- PHI2 active phase
                 when PHI_2 =>
                     if counter = PHI2_DIVIDER - 1 then
-                        phi1 <= '0';
-                        phi2 <= '0';
+                        phi1_next <= '0';
+                        phi2_next <= '0';
                         current_phase <= DEAD_PHI;
                         counter <= 0;
                     else
@@ -92,7 +110,8 @@ begin
                 -- Dead time before PHI1
                 when DEAD_PHI =>
                     if counter = DEAD_DIVIDER - 1 then
-                        phi1 <= '1';
+                        phi1_next <= '1';
+                        phi2_next <= '0';
                         current_phase <= PHI_1;
                         counter <= 0;
                     else

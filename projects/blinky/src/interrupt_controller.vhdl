@@ -75,19 +75,69 @@ architecture rtl of interrupt_controller is
     type int_state_t is (STARTUP_INT, IDLE, INT_PENDING, DRIVE_RST, CLEAR_INT);
     signal int_state : int_state_t;
 
-    -- Interrupt acknowledge detection
-    signal is_t1i : std_logic;
+    -- Synchronized CPU state detection (sample on SYNC to avoid glitches)
+    signal sync_prev      : std_logic;
+    signal sync_rising    : std_logic;
+    signal state_sampled  : std_logic_vector(2 downto 0);  -- S2, S1, S0
+    signal is_t1i_sampled : std_logic;
+    signal is_t3_sampled  : std_logic;
+
+    -- Latched state detection (stays high until cleared)
+    signal t1i_detected   : std_logic;
+    signal t3_detected    : std_logic;
 
     -- Data bus control
     signal data_bus_drive : std_logic;
     constant RST_0_OPCODE : std_logic_vector(7 downto 0) := "00000101";  -- RST 0 = 0x05
 
 begin
-    -- T1I state detection (interrupt acknowledge)
-    is_t1i <= '1' when (S2 = '1' and S1 = '1' and S0 = '0') else '0';
+    -- Sample state signals on SYNC rising edge to avoid glitches
+    sync_rising <= '1' when (SYNC = '1' and sync_prev = '0') else '0';
+
+    -- T1I state detection (interrupt acknowledge) - use sampled values
+    is_t1i_sampled <= '1' when (state_sampled = "110") else '0';  -- S2=1, S1=1, S0=0
+
+    -- T3 state detection (end of instruction fetch) - use sampled values
+    is_t3_sampled <= '1' when (state_sampled = "001") else '0';  -- S2=0, S1=0, S0=1
 
     -- Data bus control: Drive RST opcode only during T1I
     data_bus <= RST_0_OPCODE when data_bus_drive = '1' else (others => 'Z');
+
+    -- State signal sampling on SYNC rising edge
+    state_sample_proc: process(clk, reset_n)
+    begin
+        if reset_n = '0' then
+            sync_prev     <= '0';
+            state_sampled <= "000";
+            t1i_detected  <= '0';
+            t3_detected   <= '0';
+        elsif rising_edge(clk) then
+            sync_prev <= SYNC;
+
+            -- Sample state signals only on SYNC rising edge
+            if sync_rising = '1' then
+                state_sampled <= S2 & S1 & S0;
+
+                -- Latch T1I and T3 detections
+                if is_t1i_sampled = '1' then
+                    t1i_detected <= '1';
+                end if;
+
+                if is_t3_sampled = '1' then
+                    t3_detected <= '1';
+                end if;
+            end if;
+
+            -- Clear latches when state machine consumes them
+            if int_state = DRIVE_RST then
+                t1i_detected <= '0';
+            end if;
+
+            if int_state = CLEAR_INT then
+                t3_detected <= '0';
+            end if;
+        end if;
+    end process state_sample_proc;
 
     -- Button debounce and synchronization process
     debounce_proc: process(clk, reset_n)
@@ -172,16 +222,21 @@ begin
                     INT            <= '1';
                     data_bus_drive <= '1';  -- Drive RST opcode while INT is asserted
 
-                    -- Check for interrupt acknowledge (T1I state)
-                    if is_t1i = '1' then
+                    -- Check for interrupt acknowledge (T1I state) - use latched detection
+                    if t1i_detected = '1' then
                         int_state <= DRIVE_RST;
                     end if;
 
                 when DRIVE_RST =>
                     -- Continue driving during T2 after T1I
+                    -- Stay in this state until T3 begins (when CPU captures the instruction)
                     INT            <= '1';
                     data_bus_drive <= '1';
-                    int_state      <= CLEAR_INT;
+
+                    -- Wait for T3 state before clearing (instruction has been fetched)
+                    if t3_detected = '1' then
+                        int_state <= CLEAR_INT;
+                    end if;
 
                 when CLEAR_INT =>
                     -- Clear interrupt and stop driving bus

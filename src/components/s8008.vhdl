@@ -135,6 +135,7 @@ architecture rtl of s8008 is
     -- Interrupt synchronizer signals (per Rev 2 datasheet requirements)
     signal int_latched : std_logic := '0';    -- Latched interrupt request
     signal int_previous : std_logic := '0';   -- Previous INT value for edge detection
+    signal in_int_ack_cycle : std_logic := '0';  -- Registered: '1' during entire T1I→T2→T3 sequence
 
     -- Internal registers for address and data
     -- In a real 8008, these would come from the instruction decoder and register file
@@ -487,6 +488,7 @@ begin
     begin
         if reset_n = '0' then
             timing_state <= T1;
+            in_int_ack_cycle <= '0';
 
         elsif rising_edge(phi1) then
             -- Get next clock phase value immediately
@@ -499,14 +501,16 @@ begin
                         -- T1 always transitions to T2
                         -- Interrupt check happens at T3 during FETCH only
                         timing_state <= T2;
+                        in_int_ack_cycle <= '0';  -- Normal cycle, not interrupt acknowledge
                         if DEBUG_VERBOSE then
                             report "T1 -> T2";
                         end if;
 
                     when T1I =>
                         timing_state <= T2;
+                        in_int_ack_cycle <= '1';  -- Set flag for entire interrupt acknowledge sequence
                         if DEBUG_VERBOSE then
-                            report "T1I -> T2";
+                            report "T1I -> T2 (interrupt acknowledge)";
                         end if;
 
                     when T2 =>
@@ -533,20 +537,17 @@ begin
                         end if;
 
                     when T3 =>
+                        -- Clear interrupt acknowledge flag when leaving T3
+                        in_int_ack_cycle <= '0';
+
                         -- Variable-length cycles per Intel 8008 datasheet
                         -- Most instructions don't need T4/T5 execution states
                         --
                         -- SILICON-ACCURATE: Use combinatorial decoder output during FETCH
                         -- In real 8008, PLA decoder directly drives timing state machine
                         if microcode_state = FETCH then
-                            -- Instruction just fetched - check for interrupt FIRST
-                            -- Per Intel 8008 datasheet: INT sampled at end of PCI cycle (T3 of FETCH)
-                            if int_latched = '1' then
-                                timing_state <= T1I;
-                                if DEBUG_VERBOSE then
-                                    report "T3 -> T1I (interrupt during FETCH)";
-                                end if;
-                            elsif is_halt_op = '1' then
+                            -- Instruction just fetched - check what to do next
+                            if is_halt_op = '1' then
                                 timing_state <= STOPPED;
                                 if DEBUG_VERBOSE then
                                     report "T3 -> STOPPED (HLT instruction)";
@@ -557,17 +558,34 @@ begin
                                     report "T3 -> T4 (5-state cycle - instruction needs EXECUTE)";
                                 end if;
                             else
-                                timing_state <= T1;
-                                if DEBUG_VERBOSE then
-                                    report "T3 -> T1 (3-state cycle - no EXECUTE needed)";
+                                -- 3-state cycle complete - check for interrupt
+                                -- Per Intel 8008 datasheet state diagram: interrupt check at cycle end
+                                if int_latched = '1' then
+                                    timing_state <= T1I;
+                                    if DEBUG_VERBOSE then
+                                        report "T3 -> T1I (interrupt pending at end of 3-state cycle)";
+                                    end if;
+                                else
+                                    timing_state <= T1;
+                                    if DEBUG_VERBOSE then
+                                        report "T3 -> T1 (3-state cycle - no interrupt)";
+                                    end if;
                                 end if;
                             end if;
                         else
                             -- Other microcode states - use runtime tracking
                             if skip_exec_states = '1' then
-                                timing_state <= T1;
-                                if DEBUG_VERBOSE then
-                                    report "T3 -> T1 (3-state cycle)";
+                                -- 3-state cycle complete - check for interrupt
+                                if int_latched = '1' then
+                                    timing_state <= T1I;
+                                    if DEBUG_VERBOSE then
+                                        report "T3 -> T1I (interrupt pending at end of 3-state cycle)";
+                                    end if;
+                                else
+                                    timing_state <= T1;
+                                    if DEBUG_VERBOSE then
+                                        report "T3 -> T1 (3-state cycle - no interrupt)";
+                                    end if;
                                 end if;
                             else
                                 timing_state <= T4;
@@ -578,16 +596,25 @@ begin
                         end if;
 
                     when T4 =>
+                        -- T4 always continues to T5 for 5-state cycles
                         timing_state <= T5;
                         if DEBUG_VERBOSE then
                             report "T4 -> T5";
                         end if;
 
                     when T5 =>
-                        -- Return to T1 after execution states
-                        timing_state <= T1;
-                        if DEBUG_VERBOSE then
-                            report "T5 -> T1 (cycle complete)";
+                        -- 5-state cycle complete - check for interrupt
+                        -- Per Intel 8008 datasheet state diagram: interrupt check at cycle end
+                        if int_latched = '1' then
+                            timing_state <= T1I;
+                            if DEBUG_VERBOSE then
+                                report "T5 -> T1I (interrupt pending at end of 5-state cycle)";
+                            end if;
+                        else
+                            timing_state <= T1;
+                            if DEBUG_VERBOSE then
+                                report "T5 -> T1 (5-state cycle complete - no interrupt)";
+                            end if;
                         end if;
 
                     when STOPPED =>
@@ -647,16 +674,29 @@ begin
         end if;
 
         case timing_state is
-            when T1 | T1I =>
+            when T1 =>
                 -- Output lower 8 bits of address
-                -- For I/O, this is the port address
                 data_bus_output <= std_logic_vector(effective_address(7 downto 0));
                 data_bus_enable_internal <= '1';
 
+            when T1I =>
+                -- Interrupt acknowledge: CPU does NOT drive bus
+                -- External interrupt controller will drive the interrupt vector
+                data_bus_output <= (others => '0');
+                data_bus_enable_internal <= '0';
+
             when T2 =>
                 -- Output cycle type (D7-D6) and upper 6 bits of address (D5-D0)
-                data_bus_output <= cycle_type_reg & std_logic_vector(effective_address(13 downto 8));
-                data_bus_enable_internal <= '1';
+                -- BUT: During interrupt acknowledge cycle, CPU does NOT drive bus
+                if in_int_ack_cycle = '1' then
+                    -- Interrupt acknowledge: external controller drives interrupt vector
+                    data_bus_output <= (others => '0');
+                    data_bus_enable_internal <= '0';
+                else
+                    -- Normal T2: CPU drives address high and cycle type
+                    data_bus_output <= cycle_type_reg & std_logic_vector(effective_address(13 downto 8));
+                    data_bus_enable_internal <= '1';
+                end if;
 
             when T3 =>
                 -- Bidirectional data transfer
