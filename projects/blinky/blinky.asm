@@ -8,7 +8,7 @@
 ;   I/O Port 8 (OUT 8): LED bank (8 bits, active low)
 ;
 ; Expected behavior:
-;   LED0 blinks 2 times (on for 0.5s, off for 0.5s), then HALTS
+;   LED0 blinks continuously (on for 0.5s, off for 0.5s), forever
 ;
 ; ================================================================================
 
@@ -26,9 +26,6 @@ rst0_vector:
 ; MAIN PROGRAM
 ; ================================================================================
 main:
-    ; Initialize blink counter (D register) to 2
-    mvi d, 2
-
 blink_loop:
     ; Turn LED0 ON (active low, so output 0xFE = 11111110)
     mvi a, 0xFE
@@ -44,12 +41,8 @@ blink_loop:
     ; Delay ~0.5 seconds
     call delay
 
-    ; Decrement blink counter
-    dcr d
-    jnz blink_loop             ; Continue if not zero
-
-    ; After 2 blinks, HALT the CPU
-    hlt
+    ; Loop forever
+    jmp blink_loop
 
 ; ================================================================================
 ; DELAY SUBROUTINE

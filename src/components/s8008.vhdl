@@ -908,12 +908,18 @@ begin
                            " S=" & std_logic'image(result_byte(7)) &
                            " P=" & std_logic'image(flag_parity);
                 end if;
-            elsif (is_inc_op = '1' or is_dec_op = '1') and timing_state = T3 and clock_phase = '0' and reg_write_enable = '1' then
+            elsif (is_inc_op = '1' or is_dec_op = '1') and timing_state = T3 and clock_phase = '0' then
                 -- INR/DCR operation flag update
                 -- These execute in 3-state cycles, complete at T3 end
                 -- Flags affected: Z, S, P (NOT Carry!)
-                -- Use reg_write_data which is set by microcode handler in same clock cycle
-                result_byte := reg_write_data;
+                -- CRITICAL: Recalculate result here instead of using reg_write_data
+                --           because reg_write_data is set by microcode process concurrently
+                --           and we'd see the OLD value (race condition between processes)
+                if is_inc_op = '1' then
+                    result_byte := std_logic_vector(unsigned(registers(to_integer(unsigned(dst_reg)))) + 1);
+                else
+                    result_byte := std_logic_vector(unsigned(registers(to_integer(unsigned(dst_reg)))) - 1);
+                end if;
 
                 -- Zero flag
                 if result_byte = x"00" then
