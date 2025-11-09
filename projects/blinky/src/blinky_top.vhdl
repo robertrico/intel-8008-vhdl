@@ -112,35 +112,29 @@ architecture rtl of blinky_top is
         );
     end component;
 
-    component io_controller is
+    component io_controller_simple is
         port (
-            clk       : in  std_logic;
+            phi1      : in  std_logic;
             reset_n   : in  std_logic;
             S2        : in  std_logic;
             S1        : in  std_logic;
             S0        : in  std_logic;
-            SYNC      : in  std_logic;
-            data_bus  : inout std_logic_vector(7 downto 0);
-            leds      : out std_logic_vector(7 downto 0);
-            buttons   : in  std_logic_vector(7 downto 0)
+            data_bus  : in  std_logic_vector(7 downto 0);
+            leds      : out std_logic_vector(7 downto 0)
         );
     end component;
 
-    component interrupt_controller is
-        generic (
-            CLK_FREQ_HZ : integer := 100_000_000;
-            DEBOUNCE_MS : integer := 50
-        );
+    component interrupt_controller_simple is
         port (
-            clk        : in    std_logic;
-            reset_n    : in    std_logic;
-            S2         : in    std_logic;
-            S1         : in    std_logic;
-            S0         : in    std_logic;
-            SYNC       : in    std_logic;
-            button_raw : in    std_logic;
-            INT        : out   std_logic;
-            data_bus   : inout std_logic_vector(7 downto 0)
+            phi1            : in  std_logic;
+            reset_n         : in  std_logic;
+            S2              : in  std_logic;
+            S1              : in  std_logic;
+            S0              : in  std_logic;
+            SYNC            : in  std_logic;
+            int_data_out    : out std_logic_vector(7 downto 0);
+            int_data_enable : out std_logic;
+            INT             : out std_logic
         );
     end component;
 
@@ -170,6 +164,10 @@ architecture rtl of blinky_top is
     signal SYNC             : std_logic;
     signal READY            : std_logic;
     signal INT              : std_logic;
+
+    -- Interrupt controller bus arbiter interface
+    signal int_data_out     : std_logic_vector(7 downto 0);
+    signal int_data_enable  : std_logic;
 
     -- Memory address capture (captured from data bus during T1/T2)
     signal addr_low_capture  : std_logic_vector(7 downto 0);
@@ -276,20 +274,26 @@ begin
     --------------------------------------------------------------------------------
     -- Tri-State Bus Logic
     --------------------------------------------------------------------------------
-    -- Priority-based tri-state bus arbitration to prevent contention:
-    -- 1. CPU drives during T1, T2, and write cycles (cpu_data_enable = '1')
-    -- 2. I/O controllers drive during I/O read cycles (handled by their tri-state)
-    -- 3. Memory drives during memory read cycles (PCI/PCR only, not during writes)
-    -- 4. Default: Hi-Z (no driver active)
-    process(cpu_data_enable, cpu_data_out, rom_data, ram_data_out, S2, S1, S0, cycle_type_capture, mem_addr)
+    -- Centralized bus arbiter - single point of control for data_bus
+    -- Priority-based arbitration to prevent contention:
+    -- 1. Interrupt controller (highest priority during T1I/T2 interrupt acknowledge)
+    -- 2. CPU drives during T1, T2, and write cycles (cpu_data_enable = '1')
+    -- 3. I/O controllers drive during I/O read cycles (handled by their tri-state)
+    -- 4. Memory drives during memory read cycles (PCI/PCR only, not during writes)
+    -- 5. Default: Hi-Z (no driver active)
+    process(int_data_enable, int_data_out, cpu_data_enable, cpu_data_out, rom_data, ram_data_out, S2, S1, S0, cycle_type_capture, mem_addr)
     begin
         -- Default: tri-state (no driver active)
         data_bus <= (others => 'Z');
 
-        -- Priority 1: CPU drives bus when enabled (during T1, T2, and write cycles)
-        if cpu_data_enable = '1' then
+        -- Priority 1: Interrupt controller drives during interrupt acknowledge (T1I/T2)
+        -- This has highest priority to ensure RST opcode gets through
+        if int_data_enable = '1' then
+            data_bus <= int_data_out;
+        -- Priority 2: CPU drives bus when enabled (during T1, T2, and write cycles)
+        elsif cpu_data_enable = '1' then
             data_bus <= cpu_data_out;
-        -- Priority 2: Memory drives bus ONLY during memory READ cycles in T3 state
+        -- Priority 3: Memory drives bus ONLY during memory READ cycles in T3 state
         -- Check that we're in T3 (001), and cycle type is PCI="00" or PCR="01"
         -- CRITICAL: Do NOT drive during write cycles (PCW="10") - CPU drives during writes!
         -- CRITICAL: Do NOT drive during I/O cycles (PCC="11") - I/O controllers drive!
@@ -303,12 +307,11 @@ begin
                 -- RAM space (0x0800 - 0x0BFF)
                 data_bus <= ram_data_out;
             else
-                -- Unmapped memory
-                data_bus <= x"FF";
+                -- Unmapped memory (using 0xB2 for debugging to distinguish from other values)
+                data_bus <= x"B2";
             end if;
-        -- Priority 3: For I/O cycles (PCC="01") and interrupt acknowledge,
-        -- I/O and interrupt controllers manage the bus via their own tri-state logic
-        -- (Default Hi-Z allows them to drive)
+        -- Priority 4: For I/O cycles (PCC="11"), I/O controller manages via its tri-state logic
+        -- (Default Hi-Z allows it to drive)
         end if;
     end process;
 
@@ -354,23 +357,25 @@ begin
     --------------------------------------------------------------------------------
     -- Memory Controller (based on monitor_8008 testbench)
     --------------------------------------------------------------------------------
-    -- Address capture process (synchronous on phi1)
-    addr_capture: process(phi1)
+    -- Address capture process (synchronous on phi1 rising edge)
+    -- Per Intel 8008 datasheet: CPU drives data during phi1 high
+    -- Capture on rising edge of phi1 when state signals are stable
+    addr_capture: process(phi1, reset_n)
     begin
-        if rising_edge(phi1) then
+        if reset_n = '0' then
+            addr_low_capture <= (others => '0');
+            addr_high_capture <= (others => '0');
+            cycle_type_capture <= "00";  -- Default to PCI (instruction fetch)
+        elsif rising_edge(phi1) then
             -- T1 state: Capture low address byte (S0 S1 S2 = 0 1 0)
             if S0 = '0' and S1 = '1' and S2 = '0' then
-                if data_bus /= "ZZZZZZZZ" then
-                    addr_low_capture <= data_bus;
-                end if;
+                addr_low_capture <= data_bus;
             end if;
 
             -- T2 state: Capture high address and cycle type (S0 S1 S2 = 0 0 1)
             if S0 = '0' and S1 = '0' and S2 = '1' then
-                if data_bus /= "ZZZZZZZZ" then
-                    addr_high_capture <= data_bus(5 downto 0);
-                    cycle_type_capture <= data_bus(7 downto 6);
-                end if;
+                addr_high_capture <= data_bus(5 downto 0);
+                cycle_type_capture <= data_bus(7 downto 6);
             end if;
         end if;
     end process;
@@ -396,41 +401,33 @@ begin
     end process;
 
     --------------------------------------------------------------------------------
-    -- I/O Controller
+    -- I/O Controller (Simple version - LED output only)
     --------------------------------------------------------------------------------
-    button_in <= "0000000" & speed_btn;
-
-    u_io_controller : io_controller
+    u_io_controller : io_controller_simple
         port map (
-            clk      => phi1,  -- Changed from phi2 to phi1 to match CPU state timing
+            phi1     => phi1,
             reset_n  => reset_n,
             S2       => S2,
             S1       => S1,
             S0       => S0,
-            SYNC     => SYNC,
             data_bus => data_bus,
-            leds     => led_out,
-            buttons  => button_in
+            leds     => led_out
         );
 
     --------------------------------------------------------------------------------
-    -- Interrupt Controller
+    -- Interrupt Controller (Simple combinatorial version)
     --------------------------------------------------------------------------------
-    u_interrupt_controller : interrupt_controller
-        generic map (
-            CLK_FREQ_HZ => 100_000_000,
-            DEBOUNCE_MS => 50
-        )
+    u_interrupt_controller : interrupt_controller_simple
         port map (
-            clk        => phi1,  -- Changed from phi2 to phi1 to match CPU state timing
-            reset_n    => reset_n,
-            S2         => S2,
-            S1         => S1,
-            S0         => S0,
-            SYNC       => SYNC,
-            button_raw => speed_btn,
-            INT        => INT,
-            data_bus   => data_bus
+            phi1            => phi1,
+            reset_n         => reset_n,
+            S2              => S2,
+            S1              => S1,
+            S0              => S0,
+            SYNC            => SYNC,
+            INT             => INT,
+            int_data_out    => int_data_out,
+            int_data_enable => int_data_enable
         );
 
     --------------------------------------------------------------------------------

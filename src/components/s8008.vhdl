@@ -453,7 +453,10 @@ begin
     -- SYNC is LOW during second clock period of ANY state (when clock_phase='1')
     -- This makes SYNC a true "divide by two" signal that distinguishes between
     -- the two clock periods within EVERY state (T1, T2, T3, T4, T5)
-    -- During reset, clock_phase='1' so SYNC='0'
+    --
+    -- SYNC toggles on every phi1 edge, opposite of clock_phase
+    -- When clock_phase='0' (first half of state), SYNC='1'
+    -- When clock_phase='1' (second half of state), SYNC='0'
 
     SYNC <= '0' when reset_n = '0' else not clock_phase;
 
@@ -487,7 +490,7 @@ begin
         variable next_phase : std_logic;
     begin
         if reset_n = '0' then
-            timing_state <= T1;
+            timing_state <= STOPPED;  -- Per Intel 8008 datasheet: CPU starts in STOPPED state after reset
             in_int_ack_cycle <= '0';
 
         elsif rising_edge(phi1) then
@@ -538,14 +541,28 @@ begin
 
                     when T3 =>
                         -- Clear interrupt acknowledge flag when leaving T3
-                        in_int_ack_cycle <= '0';
+                        -- But keep it set during T3 so we can detect interrupt ack cycles
+                        if next_phase = '1' then  -- Only clear on state transition
+                            in_int_ack_cycle <= '0';
+                        end if;
 
                         -- Variable-length cycles per Intel 8008 datasheet
                         -- Most instructions don't need T4/T5 execution states
                         --
                         -- SILICON-ACCURATE: Use combinatorial decoder output during FETCH
                         -- In real 8008, PLA decoder directly drives timing state machine
-                        if microcode_state = FETCH then
+                        --
+                        -- SPECIAL CASE: During interrupt acknowledge (in_int_ack_cycle='1'),
+                        -- the instruction register hasn't been loaded yet when this decision is made
+                        -- (it loads on phi2, but state transition happens on phi1).
+                        -- RST instructions are always 3-state, so go directly to T1.
+                        if in_int_ack_cycle = '1' then
+                            -- Interrupt acknowledge cycle - RST is always 3-state
+                            timing_state <= T1;
+                            if DEBUG_VERBOSE then
+                                report "T3 -> T1 (interrupt acknowledge cycle - RST is 3-state)";
+                            end if;
+                        elsif microcode_state = FETCH then
                             -- Instruction just fetched - check what to do next
                             if is_halt_op = '1' then
                                 timing_state <= STOPPED;
@@ -644,7 +661,7 @@ begin
     -- Read cycles: PCI (instruction fetch), PCR (data read), PCC for INP
     is_read_cycle <= '1' when (cycle_type_reg = "00" or
                                cycle_type_reg = "01" or
-                               (cycle_type_reg = "10" and is_inp_op_latched = '1')) else '0';
+                               (cycle_type_reg = "11" and is_inp_op_latched = '1')) else '0';
 
     --===========================================
     -- Data Bus Multiplexing
@@ -660,15 +677,23 @@ begin
     -- For memory operations (M register), use memory_address instead of program_counter
 
     process(timing_state, program_counter, memory_address, microcode_state, cycle_type_reg,
-            data_out, is_read_cycle, io_port_addr, registers, is_out_op_latched)
+            data_out, is_read_cycle, io_port_addr, registers, is_out_op_latched, in_int_ack_cycle,
+            perform_jump, jump_addr_high, jump_addr_low)
         variable effective_address : unsigned(13 downto 0);
     begin
         -- Select address source
-        if microcode_state = MEM_READ or microcode_state = MEM_WRITE then
+        -- SPECIAL CASE: During interrupt acknowledge jump, use jump target address directly
+        -- This ensures we output 0x0000 immediately without waiting for PC to update
+        -- Apply for both T1 and T2 since PC update hasn't taken effect yet
+        if perform_jump = '1' and (timing_state = T1 or timing_state = T2) then
+            effective_address := unsigned(jump_addr_high) & unsigned(jump_addr_low);
+        elsif microcode_state = MEM_READ or microcode_state = MEM_WRITE then
             effective_address := memory_address;
         elsif microcode_state = IO_TRANSFER then
-            -- For I/O: Use port address as "address"
-            effective_address := "000000" & unsigned(io_port_addr);
+            -- For I/O: Port address (5 bits) goes in bits[4:0] of T2 data bus
+            -- T2 output = effective_address(13:8), so port must be in bits[12:8]
+            -- effective_address = bits[13]=0, bits[12:8]=port[4:0], bits[7:0]=don't care
+            effective_address := '0' & unsigned(io_port_addr(4 downto 0)) & "00000000";
         else
             effective_address := program_counter;
         end if;
@@ -700,7 +725,13 @@ begin
 
             when T3 =>
                 -- Bidirectional data transfer
-                if is_read_cycle = '1' then
+                -- CRITICAL: EXECUTE microcode state is NOT a bus cycle - it's internal processing
+                -- that uses T1-T5 timing. Do not drive or read bus during EXECUTE.
+                if microcode_state = EXECUTE then
+                    -- Internal execution only - no bus activity
+                    data_bus_output <= (others => '0');
+                    data_bus_enable_internal <= '0';
+                elsif is_read_cycle = '1' then
                     -- READ: Hi-Z (memory/IO device drives the bus)
                     data_bus_output <= (others => '0');
                     data_bus_enable_internal <= '0';
@@ -1234,10 +1265,34 @@ begin
                     report "Microcode handler entered: timing_state=" & timing_state_t'image(timing_state) &
                            " clock_phase=" & std_logic'image(clock_phase) &
                            " skip_exec=" & std_logic'image(skip_exec_states) &
-                           " microcode_state=" & microcode_state_t'image(microcode_state);
+                           " microcode_state=" & microcode_state_t'image(microcode_state) &
+                           " in_int_ack=" & std_logic'image(in_int_ack_cycle);
                 end if;
 
-                case microcode_state is
+                -- SPECIAL CASE: Interrupt acknowledge cycle
+                -- During interrupt acknowledge, instruction_reg hasn't been loaded yet when this runs
+                -- (it loads on phi2, but we're on phi1). The interrupt controller drove RST 0 (0x05),
+                -- so we need to execute RST 0 directly without waiting for instruction_reg.
+                if in_int_ack_cycle = '1' and microcode_state = FETCH then
+                    -- Force RST 0 execution
+                    -- Push current PC+1 to stack for potential RET
+                    stack_pointer <= stack_pointer + 1;
+                    address_stack(to_integer(stack_pointer + 1)) <= program_counter + 1;
+
+                    -- Set jump target to 0x0000 (RST 0 vector)
+                    jump_addr_low <= x"00";
+                    jump_addr_high <= "000000";
+                    perform_jump <= '1';  -- Use jump mechanism
+
+                    microcode_state <= FETCH;
+                    cycle_type_reg <= "00";
+                    skip_exec_states <= '1';
+                    if DEBUG_VERBOSE then
+                        report "Interrupt acknowledge: Forcing RST 0 execution, will jump to 0x0000";
+                    end if;
+
+                else
+                    case microcode_state is
                     when FETCH =>
                         -- Just fetched an instruction (3-state PCI cycle completed)
                         -- PLA control signals are now valid
@@ -1470,13 +1525,13 @@ begin
 
                         elsif is_inp_op = '1' then
                             -- INP instruction - transition to I/O transfer cycle
-                            -- Second cycle will be PCC (cycle type "10") with 5 states
+                            -- Second cycle will be PCC (cycle type "11") with 5 states
                             if DEBUG_VERBOSE then
                                 report "INP: Transitioning to IO_TRANSFER state for port " &
                                        integer'image(to_integer(unsigned(io_port_addr(2 downto 0))));
                             end if;
                             microcode_state <= IO_TRANSFER;
-                            cycle_type_reg <= "10";  -- PCC (I/O cycle)
+                            cycle_type_reg <= "11";  -- PCC (I/O cycle)
                             skip_exec_states <= '0';  -- 5-state cycle (T1, T2, T3, T4, T5)
                             pc_should_increment <= '0';  -- Don't increment PC during I/O cycle
                             -- Latch I/O operation type for use during IO_TRANSFER
@@ -1485,13 +1540,13 @@ begin
 
                         elsif is_out_op = '1' then
                             -- OUT instruction - transition to I/O transfer cycle
-                            -- Second cycle will be PCC (cycle type "10") with 3 states
+                            -- Second cycle will be PCC (cycle type "11") with 3 states
                             if DEBUG_VERBOSE then
                                 report "OUT: Transitioning to IO_TRANSFER state for port " &
                                        integer'image(to_integer(unsigned(io_port_addr(4 downto 0))));
                             end if;
                             microcode_state <= IO_TRANSFER;
-                            cycle_type_reg <= "10";  -- PCC (I/O cycle)
+                            cycle_type_reg <= "11";  -- PCC (I/O cycle)
                             skip_exec_states <= '1';  -- 3-state cycle (T1, T2, T3)
                             pc_should_increment <= '0';  -- Don't increment PC during I/O cycle
                             -- Latch I/O operation type for use during IO_TRANSFER
@@ -1796,8 +1851,9 @@ begin
                         microcode_state <= FETCH;
                         cycle_type_reg <= "00";  -- PCI
                         skip_exec_states <= '1';  -- 3-state cycle
-                end case;
-            end if;
+                    end case;
+                end if;  -- End of if in_int_ack_cycle else
+            end if;  -- End of microcode handler condition
         end if;
     end process;
 
@@ -1822,15 +1878,14 @@ begin
                 end if;
             end if;
 
-            -- Check if we should perform a jump (set in ADDR_HIGH or RET state)
-            -- Execute at T1 with clock_phase='1' (after ADDR_HIGH completes and sets perform_jump)
-            -- We're at T1 but clock_phase='1' means we're about to transition to the next phase
-            -- The address will not be latched yet, so updating PC here takes effect for T1 address output
-            if perform_jump = '1' and timing_state = T1 and clock_phase = '1' then
-                -- Load PC with jump target address (14-bit)
+            -- Check if we should perform a jump (set in ADDR_HIGH, RET, or interrupt ack state)
+            -- Execute at T1 start (clock_phase='0') to ensure correct PC is available for address output
+            -- This is especially critical for interrupt acknowledge where PC must jump to 0x0000
+            if perform_jump = '1' and timing_state = T1 and clock_phase = '0' then
+                -- Load PC with jump target address (14-bit) at start of T1
                 program_counter <= unsigned(jump_addr_high) & unsigned(jump_addr_low);
                 if DEBUG_VERBOSE then
-                    report "Jump executed: PC <= 0x" & to_hstring(unsigned(jump_addr_high) & unsigned(jump_addr_low));
+                    report "Jump executed at T1 start: PC <= 0x" & to_hstring(unsigned(jump_addr_high) & unsigned(jump_addr_low));
                 end if;
                 -- NOTE: perform_jump is cleared in the Microcode Sequencer process in the next FETCH state
 

@@ -22,8 +22,8 @@ SIM_STOP_TIME = 100ms
 # Source Files
 #==========================================
 RTL_SOURCES = src/blinky_top.vhdl \
-              src/io_controller.vhdl \
-              src/interrupt_controller.vhdl \
+              src/io_controller_simple.vhdl \
+              src/interrupt_controller_simple.vhdl \
               $(PROJECT_ROOT)/src/components/s8008.vhdl \
               $(PROJECT_ROOT)/src/components/i8008_alu.vhdl \
               $(PROJECT_ROOT)/src/components/phase_clocks.vhdl \

@@ -5,10 +5,10 @@
 ;
 ; Memory Map:
 ;   ROM: 0x0000-0x07FF (2KB)
-;   I/O Port 0x00 (OUT 8): LED bank (8 bits, active low)
+;   I/O Port 8 (OUT 8): LED bank (8 bits, active low)
 ;
 ; Expected behavior:
-;   LED0 blinks at approximately 1 Hz (on for 0.5s, off for 0.5s)
+;   LED0 blinks 2 times (on for 0.5s, off for 0.5s), then HALTS
 ;
 ; ================================================================================
 
@@ -26,6 +26,10 @@ rst0_vector:
 ; MAIN PROGRAM
 ; ================================================================================
 main:
+    ; Initialize blink counter (D register) to 2
+    mvi d, 2
+
+blink_loop:
     ; Turn LED0 ON (active low, so output 0xFE = 11111110)
     mvi a, 0xFE
     out 8
@@ -40,8 +44,12 @@ main:
     ; Delay ~0.5 seconds
     call delay
 
-    ; Repeat forever
-    jmp main
+    ; Decrement blink counter
+    dcr d
+    jnz blink_loop             ; Continue if not zero
+
+    ; After 2 blinks, HALT the CPU
+    hlt
 
 ; ================================================================================
 ; DELAY SUBROUTINE
