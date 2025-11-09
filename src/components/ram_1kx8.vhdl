@@ -52,11 +52,12 @@ begin
     -- Combinational read process
     read_proc: process(ADDR, CS_N, ram)
     begin
-        if CS_N = '0' and RW_N = '1' then
-            -- Read mode: output data combinationally
+        if CS_N = '0' and RW_N = '1' and ADDR /= "XXXXXXXXXX" and ADDR /= "ZZZZZZZZZZ" and
+           ADDR /= "UUUUUUUUUU" and ADDR /= "----------" then
+            -- Read mode with valid address: output data combinationally
             DATA_OUT <= ram(to_integer(unsigned(ADDR)));
         else
-            -- Not selected or writing, tri-state
+            -- Not selected, writing, or invalid address: tri-state
             DATA_OUT <= (others => 'Z');
         end if;
     end process;

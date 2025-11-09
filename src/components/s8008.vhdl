@@ -838,8 +838,10 @@ begin
             alu_data_1 <= immediate_data;  -- Use saved immediate byte
         elsif src_is_memory = '1' then
             alu_data_1 <= data_in;  -- Memory data from bus
-        else
+        elsif src_reg /= "XXX" and src_reg /= "UUU" and src_reg /= "---" and src_reg /= "ZZZ" then
             alu_data_1 <= registers(to_integer(unsigned(src_reg)));  -- Register operand
+        else
+            alu_data_1 <= (others => '0');  -- Default for invalid src_reg
         end if;
     end process;
 

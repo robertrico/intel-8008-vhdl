@@ -83,12 +83,13 @@ architecture rtl of rom_2kx8 is
 begin
     process(ADDR, CS_N)
     begin
-        if CS_N = '0' then
-            -- Chip selected, output data
+        if CS_N = '0' and ADDR /= "XXXXXXXXXXX" and ADDR /= "ZZZZZZZZZZZ" and
+           ADDR /= "UUUUUUUUUUU" and ADDR /= "-----------" then
+            -- Chip selected and address is valid, output data
             DATA_OUT <= rom(to_integer(unsigned(ADDR)));
             -- report "ROM read: addr=0x" & to_hstring(ADDR) & " data=0x" & to_hstring(rom(to_integer(unsigned(ADDR))));
         else
-            -- Chip not selected, tri-state (high-Z)
+            -- Chip not selected or invalid address, tri-state (high-Z)
             DATA_OUT <= (others => 'Z');
         end if;
     end process;
