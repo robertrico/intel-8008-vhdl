@@ -130,7 +130,10 @@ architecture rtl of cylon_single_top is
             data_bus_out    : out std_logic_vector(7 downto 0);
             data_bus_enable : out std_logic;
             port_out        : out std_logic_vector((NUM_OUTPUT_PORTS * 8) - 1 downto 0);
-            port_in         : in  std_logic_vector((NUM_INPUT_PORTS * 8) - 1 downto 0)
+            port_in         : in  std_logic_vector((NUM_INPUT_PORTS * 8) - 1 downto 0);
+            int_mask_out    : out std_logic_vector(7 downto 0);
+            int_status_in   : in  std_logic_vector(7 downto 0);
+            int_active_in   : in  std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -439,7 +442,10 @@ begin
             data_bus_out    => io_data_out,
             data_bus_enable => io_data_enable,
             port_out        => io_port_out,
-            port_in         => io_port_in
+            port_in         => io_port_in,
+            int_mask_out    => open,             -- Unused
+            int_status_in   => (others => '0'),  -- Unused
+            int_active_in   => (others => '0')   -- Unused
         );
 
     -- Map port 8 (first output port) to LEDs

@@ -553,8 +553,7 @@ begin
                         -- In real 8008, PLA decoder directly drives timing state machine
                         --
                         -- SPECIAL CASE: During interrupt acknowledge (in_int_ack_cycle='1'),
-                        -- the instruction register hasn't been loaded yet when this decision is made
-                        -- (it loads on phi2, but state transition happens on phi1).
+                        -- the instruction register has been loaded on phi2 of T3.
                         -- RST instructions are always 3-state, so go directly to T1.
                         if in_int_ack_cycle = '1' then
                             -- Interrupt acknowledge cycle - RST is always 3-state
@@ -778,6 +777,12 @@ begin
                     if DEBUG_VERBOSE then
                         report "Instruction fetched: 0x" & to_hstring(unsigned(data_bus_in));
                     end if;
+                end if;
+            -- INTERRUPT ACKNOWLEDGE: Latch RST opcode from interrupt controller
+            elsif timing_state = T3 and in_int_ack_cycle = '1' then
+                instruction_reg <= data_bus_in;
+                if DEBUG_VERBOSE then
+                    report "Interrupt RST opcode latched: 0x" & to_hstring(unsigned(data_bus_in));
                 end if;
             end if;
         end if;
@@ -1249,6 +1254,28 @@ begin
                 end if;
             end if;
 
+            -- Special handling for interrupt acknowledge RST execution
+            -- At T3 clock_phase='1', instruction_reg has been loaded with RST opcode on phi2
+            -- Execute the RST now by setting up jump parameters
+            if timing_state = T3 and clock_phase = '1' and in_int_ack_cycle = '1' then
+                -- Extract RST vector from instruction_reg bits [5:3]
+                -- instruction_reg format: 00 AAA 101 where AAA is the RST vector (0-7)
+                -- Calculate target: vector * 8
+                stack_pointer <= stack_pointer + 1;
+                address_stack(to_integer(stack_pointer + 1)) <= program_counter + 1;
+
+                -- Set up jump to RST target
+                jump_addr_low <= std_logic_vector(to_unsigned(to_integer(unsigned(instruction_reg(5 downto 3))) * 8, 8));
+                jump_addr_high <= "000000";  -- RST vectors are in first 64 bytes
+                perform_jump <= '1';
+
+                if DEBUG_VERBOSE then
+                    report "Interrupt RST " & integer'image(to_integer(unsigned(instruction_reg(5 downto 3)))) &
+                           " executing: will jump to 0x" &
+                           to_hstring(to_unsigned(to_integer(unsigned(instruction_reg(5 downto 3))) * 8, 14));
+                end if;
+            end if;
+
             -- Microcode state transitions happen at end of cycle
             -- For 3-state cycles: end of T3
             -- For 5-state cycles: end of T5
@@ -1266,9 +1293,10 @@ begin
             --
             -- FIX: Always enter at T3 end during FETCH, set skip_exec_states INSIDE based on decode
             --      Also enter at T5 end for 5-state cycles that need to complete
-            if (timing_state = T3 and clock_phase = '0' and microcode_state = FETCH) or
+            -- IMPORTANT: Skip during interrupt acknowledge cycle - RST will be handled separately
+            if ((timing_state = T3 and clock_phase = '0' and microcode_state = FETCH and in_int_ack_cycle = '0') or
                (timing_state = T3 and clock_phase = '0' and skip_exec_states = '1' and microcode_state /= FETCH) or
-               (timing_state = T5 and clock_phase = '0' and skip_exec_states = '0') then
+               (timing_state = T5 and clock_phase = '0' and skip_exec_states = '0')) then
 
                 if DEBUG_VERBOSE then
                     report "Microcode handler entered: timing_state=" & timing_state_t'image(timing_state) &
@@ -1278,30 +1306,7 @@ begin
                            " in_int_ack=" & std_logic'image(in_int_ack_cycle);
                 end if;
 
-                -- SPECIAL CASE: Interrupt acknowledge cycle
-                -- During interrupt acknowledge, instruction_reg hasn't been loaded yet when this runs
-                -- (it loads on phi2, but we're on phi1). The interrupt controller drove RST 0 (0x05),
-                -- so we need to execute RST 0 directly without waiting for instruction_reg.
-                if in_int_ack_cycle = '1' and microcode_state = FETCH then
-                    -- Force RST 0 execution
-                    -- Push current PC+1 to stack for potential RET
-                    stack_pointer <= stack_pointer + 1;
-                    address_stack(to_integer(stack_pointer + 1)) <= program_counter + 1;
-
-                    -- Set jump target to 0x0000 (RST 0 vector)
-                    jump_addr_low <= x"00";
-                    jump_addr_high <= "000000";
-                    perform_jump <= '1';  -- Use jump mechanism
-
-                    microcode_state <= FETCH;
-                    cycle_type_reg <= "00";
-                    skip_exec_states <= '1';
-                    if DEBUG_VERBOSE then
-                        report "Interrupt acknowledge: Forcing RST 0 execution, will jump to 0x0000";
-                    end if;
-
-                else
-                    case microcode_state is
+                case microcode_state is
                     when FETCH =>
                         -- Just fetched an instruction (3-state PCI cycle completed)
                         -- PLA control signals are now valid
@@ -1860,8 +1865,7 @@ begin
                         microcode_state <= FETCH;
                         cycle_type_reg <= "00";  -- PCI
                         skip_exec_states <= '1';  -- 3-state cycle
-                    end case;
-                end if;  -- End of if in_int_ack_cycle else
+                end case;
             end if;  -- End of microcode handler condition
         end if;
     end process;

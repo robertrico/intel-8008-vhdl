@@ -1,8 +1,21 @@
 --------------------------------------------------------------------------------
--- Cylon Top Level - Intel 8008 FPGA Implementation
+-- Cylon Interrupt Top Level - Intel 8008 FPGA Implementation
 --------------------------------------------------------------------------------
--- Cylon/Knight Rider LED effect using Intel 8008 CPU
--- Demonstrates use of reusable component library
+-- Interrupt-driven Cylon LED effect using Intel 8008 CPU
+-- Demonstrates generic interrupt_controller with button interrupts
+--
+-- Features:
+--   - Generic interrupt controller with 2 sources:
+--     * Source 0: Startup interrupt (RST 0 -> 0x000)
+--     * Source 1: Button interrupt (RST 1 -> 0x008)
+--   - Button input with hardware debouncing
+--   - Interrupt-driven Cylon pattern advancement
+--   - Software-controlled interrupt masking via OUT 16
+--   - Interrupt status reading via INP 1, INP 2
+--
+-- Interrupt Architecture:
+--   RST 0 (0x000): Startup interrupt - initializes system
+--   RST 1 (0x008): Button interrupt - advances Cylon pattern
 --
 -- Copyright (c) 2025 Robert Rico
 --------------------------------------------------------------------------------
@@ -10,12 +23,16 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+use work.interrupt_controller_pkg.all;
 
-entity cylon_top is
+entity cylon_interrupt_top is
     port (
         -- System clock and reset
         clk         : in  std_logic;
         rst         : in  std_logic;
+
+        -- Button input (active-low, pulled high)
+        btn_A18     : in  std_logic;
 
         -- Board LEDs (8 LEDs for Cylon effect, active low)
         led_E16     : out std_logic;  -- LED0
@@ -41,9 +58,9 @@ entity cylon_top is
         cpu_int     : out std_logic;
         cpu_data_en : out std_logic                       -- CPU data bus enable
     );
-end entity cylon_top;
+end entity cylon_interrupt_top;
 
-architecture rtl of cylon_top is
+architecture rtl of cylon_interrupt_top is
 
     --------------------------------------------------------------------------------
     -- Component Declarations
@@ -128,10 +145,12 @@ architecture rtl of cylon_top is
         );
     end component;
 
-    component reset_interrupt_controller is
+    component interrupt_controller is
         generic (
-            RST_VECTOR           : integer range 0 to 7 := 0;
-            STARTUP_INT_ENABLE   : boolean := true
+            NUM_SOURCES      : integer range 1 to 8 := 8;
+            DEFAULT_VECTORS  : int_vector_array(0 to 7) := (0,1,2,3,4,5,6,7);
+            STARTUP_INT_SRC  : integer range -1 to 7 := 0;
+            STARTUP_ENABLE   : boolean := true
         );
         port (
             phi1            : in  std_logic;
@@ -140,6 +159,10 @@ architecture rtl of cylon_top is
             S1              : in  std_logic;
             S0              : in  std_logic;
             SYNC            : in  std_logic;
+            int_requests    : in  std_logic_vector(NUM_SOURCES-1 downto 0);
+            int_mask        : in  std_logic_vector(7 downto 0);
+            int_status      : out std_logic_vector(7 downto 0);
+            int_active_src  : out std_logic_vector(7 downto 0);
             int_data_out    : out std_logic_vector(7 downto 0);
             int_data_enable : out std_logic;
             INT             : out std_logic
@@ -173,6 +196,21 @@ architecture rtl of cylon_top is
         );
     end component;
 
+    component debouncer is
+        generic (
+            CLK_FREQ_HZ   : integer := 100_000_000;
+            DEBOUNCE_MS   : integer := 20;
+            PULSE_STRETCH : integer := 100;
+            DEBOUNCE_TIME : integer := 0
+        );
+        port (
+            clk         : in  std_logic;
+            rst         : in  std_logic;
+            btn         : in  std_logic;
+            btn_pressed : out std_logic
+        );
+    end component;
+
     --------------------------------------------------------------------------------
     -- Internal Signals
     --------------------------------------------------------------------------------
@@ -200,7 +238,11 @@ architecture rtl of cylon_top is
     signal READY            : std_logic;
     signal INT              : std_logic;
 
-    -- Interrupt controller bus arbiter interface
+    -- Interrupt controller signals
+    signal int_requests     : std_logic_vector(1 downto 0);  -- 2 sources: startup, button
+    signal int_mask         : std_logic_vector(7 downto 0);
+    signal int_status       : std_logic_vector(7 downto 0);
+    signal int_active_src   : std_logic_vector(7 downto 0);
     signal int_data_out     : std_logic_vector(7 downto 0);
     signal int_data_enable  : std_logic;
 
@@ -212,7 +254,7 @@ architecture rtl of cylon_top is
     signal io_data_out      : std_logic_vector(7 downto 0);
     signal io_data_enable   : std_logic;
     signal io_port_out      : std_logic_vector(7 downto 0);    -- 1 port * 8 bits (port 8 for LEDs)
-    -- Note: io_port_in not needed since NUM_INPUT_PORTS = 0
+    signal io_port_in       : std_logic_vector(7 downto 0);    -- 1 port * 8 bits (port 0, unused)
 
     -- ROM signals
     signal rom_addr : std_logic_vector(10 downto 0);
@@ -228,6 +270,9 @@ architecture rtl of cylon_top is
 
     -- LED output register
     signal led_out : std_logic_vector(7 downto 0);
+
+    -- Button debouncer signals
+    signal btn_pressed : std_logic;
 
     -- Debug signals (unused)
     signal debug_reg_A, debug_reg_B, debug_reg_C, debug_reg_D : std_logic_vector(7 downto 0);
@@ -265,6 +310,27 @@ begin
             phi1    => phi1,
             phi2    => phi2
         );
+
+    --------------------------------------------------------------------------------
+    -- Button Debouncer (generates interrupt source 1)
+    --------------------------------------------------------------------------------
+    u_debouncer : debouncer
+        generic map (
+            CLK_FREQ_HZ   => 455_000,  -- phi1 frequency (~455 kHz)
+            DEBOUNCE_MS   => 20,       -- 20ms debounce time
+            PULSE_STRETCH => 100,      -- Hold pulse for 100 cycles (~220µs) so interrupt can be caught
+            DEBOUNCE_TIME => 0         -- Use calculated value
+        )
+        port map (
+            clk         => phi1,
+            rst         => reset_n,
+            btn         => btn_A18,
+            btn_pressed => btn_pressed
+        );
+
+    -- Map button to interrupt source 1
+    int_requests(0) <= '0';          -- Source 0 reserved for startup (handled internally)
+    int_requests(1) <= btn_pressed;  -- Source 1 = button
 
     --------------------------------------------------------------------------------
     -- Intel 8008 CPU Core
@@ -330,7 +396,7 @@ begin
     -- ROM: 2KB at 0x0000-0x07FF
     u_rom : rom_2kx8
         generic map (
-            ROM_FILE => "cylon.mem"
+            ROM_FILE => "test_programs/cylon_interrupt.mem"
         )
         port map (
             ADDR     => rom_addr,
@@ -350,7 +416,7 @@ begin
             DEBUG_BYTE_0 => debug_byte_0
         );
 
-    -- Memory Controller (new reusable component)
+    -- Memory Controller
     u_memory_controller : memory_controller
         generic map (
             ROM_SIZE_BITS => 11,  -- 2KB
@@ -376,14 +442,12 @@ begin
         );
 
     --------------------------------------------------------------------------------
-    -- I/O Controller (Full generic I/O controller with input/output ports)
+    -- I/O Controller (with interrupt controller integration)
     --------------------------------------------------------------------------------
-    -- Configure for 1 output port (port 8 for LEDs) and 1 dummy input port
-    -- (VHDL doesn't allow zero-width vectors, so we need at least 1 input port)
     u_io_controller : io_controller
         generic map (
-            NUM_OUTPUT_PORTS => 1,   -- Only port 8 (LEDs)
-            NUM_INPUT_PORTS  => 1    -- Minimum 1 port (dummy, unused)
+            NUM_OUTPUT_PORTS => 1,   -- Port 8 (LEDs)
+            NUM_INPUT_PORTS  => 1    -- Port 0 (unused, but VHDL requires >= 1)
         )
         port map (
             phi1            => phi1,
@@ -395,22 +459,27 @@ begin
             data_bus_out    => io_data_out,
             data_bus_enable => io_data_enable,
             port_out        => io_port_out,
-            port_in         => (others => '0'),  -- Dummy input, always 0
-            int_mask_out    => open,             -- Unused
-            int_status_in   => (others => '0'),  -- Unused
-            int_active_in   => (others => '0')   -- Unused
+            port_in         => io_port_in,
+            int_mask_out    => int_mask,
+            int_status_in   => int_status,
+            int_active_in   => int_active_src
         );
 
     -- Map port 8 (first output port) to LEDs
     led_out <= io_port_out;
 
+    -- Unused input port
+    io_port_in <= (others => '0');
+
     --------------------------------------------------------------------------------
-    -- Reset/Interrupt Controller (new reusable component)
+    -- Generic Interrupt Controller (2 sources: startup, button)
     --------------------------------------------------------------------------------
-    u_interrupt_controller : reset_interrupt_controller
+    u_interrupt_controller : interrupt_controller
         generic map (
-            RST_VECTOR         => 0,     -- RST 0
-            STARTUP_INT_ENABLE => true
+            NUM_SOURCES     => 2,           -- Startup (0), Button (1)
+            DEFAULT_VECTORS => (0,1,2,3,4,5,6,7),  -- Source 0->RST 0, Source 1->RST 1
+            STARTUP_INT_SRC => 0,           -- Use source 0 for startup
+            STARTUP_ENABLE  => true
         )
         port map (
             phi1            => phi1,
@@ -419,6 +488,10 @@ begin
             S1              => S1,
             S0              => S0,
             SYNC            => SYNC,
+            int_requests    => int_requests,
+            int_mask        => int_mask,
+            int_status      => int_status,
+            int_active_src  => int_active_src,
             INT             => INT,
             int_data_out    => int_data_out,
             int_data_enable => int_data_enable
