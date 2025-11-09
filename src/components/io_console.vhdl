@@ -98,14 +98,14 @@ begin
                     report "I/O Console: T2 detected, data_bus=0x" & to_hstring(unsigned(data_bus_in)) &
                            ", cycle_type=" & std_logic'image(data_bus_in(7)) & std_logic'image(data_bus_in(6));
                     -- Check if this is a PCC cycle (I/O operation)
-                    if data_bus_in(7 downto 6) = "10" then
+                    if data_bus_in(7 downto 6) = "11" then
                         is_io_cycle <= true;
-                        -- Determine if INP or OUT based on port address bit 3
-                        -- INP: port_addr bit 3 = 0 (00000MMM) - ports 0-7
-                        -- OUT: port_addr bit 3 = 1 (000RRMMM) - ports 8-31
-                        is_read <= (port_addr(3) = '0');
+                        -- Determine if INP or OUT based on port address
+                        -- INP: port_addr bits 7-3 are all 0 (00000MMM) - ports 0-7
+                        -- OUT: port_addr bits 7-5 are 0, bits 4-3 can be non-zero (000RRMMM) - ports 8-31
+                        is_read <= (port_addr(7 downto 3) = "00000");
                         report "I/O Console: PCC cycle detected, port_addr=0x" & to_hstring(unsigned(port_addr)) &
-                               ", is_read=" & boolean'image(port_addr(3) = '0');
+                               ", is_read=" & boolean'image(port_addr(7 downto 3) = "00000");
                     else
                         is_io_cycle <= false;
                     end if;

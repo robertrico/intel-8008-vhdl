@@ -47,7 +47,7 @@ PYTHON = python3
 
 # Default target: assemble and run simulation
 .PHONY: all
-all: asm sim view-output
+all: asm hex2mem sim view-output
 
 # Assemble the hello_io program
 .PHONY: asm

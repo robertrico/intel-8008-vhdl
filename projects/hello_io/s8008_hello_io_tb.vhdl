@@ -151,6 +151,9 @@ architecture sim of s8008_hello_io_tb is
     signal addr_high_capture : std_logic_vector(5 downto 0) := (others => '0');
     signal cycle_type_capture : std_logic_vector(1 downto 0) := "00";
 
+    -- Interrupt acknowledge tracking
+    signal is_int_ack : std_logic := '0';
+
     -- ROM signals (0x0000 - 0x07FF)
     signal rom_addr : std_logic_vector(10 downto 0);
     signal rom_data : std_logic_vector(7 downto 0);
@@ -202,10 +205,11 @@ begin
         );
 
     -- Reconstruct tri-state behavior for simulation compatibility
-    -- Priority mux: CPU > I/O Console > Memory (via ROM/RAM)
+    -- Priority mux: CPU > I/O Console > Memory (ROM/RAM handled in bus_mux process)
+    -- CPU and I/O console explicitly drive the bus; memory is driven by bus_mux process
     data_bus_tb <= cpu_data_out_tb when cpu_data_enable_tb = '1' else
                    io_data_out_tb  when io_data_enable_tb  = '1' else
-                   (others => 'Z');
+                   (others => 'Z');  -- bus_mux process will drive memory data
 
     -- CPU
     cpu: s8008
@@ -293,6 +297,11 @@ begin
     addr_capture: process(phi1_tb)
     begin
         if rising_edge(phi1_tb) then
+            -- T1I state: Detect interrupt acknowledge cycle (S2 S1 S0 = 1 1 0)
+            if S2_tb = '1' and S1_tb = '1' and S0_tb = '0' then
+                is_int_ack <= '1';
+            end if;
+
             -- T1 state: Capture low address byte (S2 S1 S0 = 0 1 0)
             if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_bus_tb /= "ZZZZZZZZ" then
@@ -303,9 +312,17 @@ begin
             -- T2 state: Capture high address and cycle type (S2 S1 S0 = 1 0 0)
             if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
                 if data_bus_tb /= "ZZZZZZZZ" then
-                    addr_high_capture <= data_bus_tb(5 downto 0);
-                    cycle_type_capture <= data_bus_tb(7 downto 6);
+                    -- Don't capture address during interrupt acknowledge
+                    if is_int_ack = '0' then
+                        addr_high_capture <= data_bus_tb(5 downto 0);
+                        cycle_type_capture <= data_bus_tb(7 downto 6);
+                    end if;
                 end if;
+            end if;
+
+            -- T3 state: Clear interrupt acknowledge flag
+            if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
+                is_int_ack <= '0';
             end if;
         end if;
     end process;
@@ -331,28 +348,42 @@ begin
     end process;
 
     -- Bus multiplexer (combinational)
-    bus_mux: process(S2_tb, S1_tb, S0_tb, cycle_type_capture, mem_addr, rom_data, ram_data_out)
+    -- Drives memory data during read cycles, provides RST 0 during interrupt acknowledge
+    bus_mux: process(S2_tb, S1_tb, S0_tb, cycle_type_capture, mem_addr, rom_data, ram_data_out, is_int_ack)
     begin
-        -- Default: tri-state
-        data_bus_tb <= (others => 'Z');
+        -- Default: don't drive (allow CPU and I/O console to drive via signal assignments)
+        -- We only drive for memory reads and interrupt acknowledge
 
-        -- T3/T4/T5 states with read cycle (PCI or PCR)
-        if ((S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
-            (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
-            (S2_tb = '1' and S1_tb = '0' and S0_tb = '1')) and -- T5
-           (cycle_type_capture = "00" or cycle_type_capture = "01") then
+        -- T2 during interrupt acknowledge: provide RST 0 instruction
+        if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' and is_int_ack = '1' then
+            data_bus_tb <= x"05";  -- RST 0 = 00 000 101
 
-            -- Select memory source based on address
-            if mem_addr(11) = '0' then
-                -- ROM space (address < 0x800)
-                data_bus_tb <= rom_data;
-            elsif mem_addr(11) = '1' and mem_addr(10) = '0' then
-                -- RAM space (0x800 - 0xBFF)
-                data_bus_tb <= ram_data_out;
+        -- T3/T4/T5 states: handle normal cycles
+        elsif (S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
+              (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
+              (S2_tb = '1' and S1_tb = '0' and S0_tb = '1') then -- T5
+
+            -- Only drive for memory read cycles (PCI="00" or PCR="01")
+            -- Don't drive for write cycles (PCW="10") or I/O cycles (PCC="11")
+            if cycle_type_capture = "00" or cycle_type_capture = "01" then
+                -- Select memory source based on address
+                if mem_addr(11) = '0' then
+                    -- ROM space (address < 0x800)
+                    data_bus_tb <= rom_data;
+                elsif mem_addr(11) = '1' and mem_addr(10) = '0' then
+                    -- RAM space (0x800 - 0xBFF)
+                    data_bus_tb <= ram_data_out;
+                else
+                    -- Unmapped
+                    data_bus_tb <= x"FF";
+                end if;
             else
-                -- Unmapped
-                data_bus_tb <= x"FF";
+                -- Write or I/O cycle - don't drive bus
+                data_bus_tb <= (others => 'Z');
             end if;
+        else
+            -- Not in a data transfer state - don't drive
+            data_bus_tb <= (others => 'Z');
         end if;
     end process;
 
@@ -403,12 +434,13 @@ begin
         reset_n_tb <= '1';
         report "Reset released, CPU initializing..." severity note;
 
-        -- Wait for CPU internal clearing
-        wait for 500 ns;
+        -- Per Intel 8008 User's Manual: CPU enters STOPPED state on power-up
+        -- Requires 16 clock periods to clear memories, then INT pulse to start
+        wait for 2 us;  -- Wait for internal clearing (16 clocks @ ~2.2us/clock)
 
-        -- Pulse interrupt to start execution
+        -- Pulse interrupt to escape STOPPED state and begin execution
         INT_tb <= '1';
-        wait for 50 ns;
+        wait for 10 us;  -- Hold longer to ensure it's sampled
         INT_tb <= '0';
         report "Interrupt pulsed, CPU starting from 0x0000..." severity note;
         report "" severity note;
