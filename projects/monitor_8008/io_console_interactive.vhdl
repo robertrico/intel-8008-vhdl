@@ -123,11 +123,11 @@ begin
                     drive_bus <= '0';       -- Don't drive during T1
                     need_new_char <= false;
 
-                -- T2 (S2S1S0 = 001): Capture cycle type from data bus
+                -- T2 (S2S1S0 = 100): Capture cycle type from data bus
                 elsif S2 = '1' and S1 = '0' and S0 = '0' then
                     cycle_type <= data_bus(7 downto 6);
                     -- Check if this is a PCC cycle (I/O operation)
-                    if data_bus(7 downto 6) = "10" then
+                    if data_bus(7 downto 6) = "11" then
                         is_io_cycle <= true;
                         -- Determine if INP or OUT based on port address
                         -- INP: port_addr bits 7-3 are all 0 (00000MMM)
@@ -203,33 +203,40 @@ begin
     input_data_gen: process(port_addr, last_rx_char)
         variable key_status : integer;
     begin
-        case port_addr(2 downto 0) is
-            when "000" =>
-                -- Port 0: TX Data (write-only, return 0)
-                bus_data <= x"00";
+        -- Default to avoid calling C functions with metavalues
+        bus_data <= x"00";
 
-            when "001" =>
-                -- Port 1: TX Status (always ready)
-                bus_data <= x"01";
+        -- Only process if port_addr is stable (no metavalues)
+        if port_addr(2 downto 0) /= "XXX" and port_addr(2 downto 0) /= "ZZZ" and
+           port_addr(2 downto 0) /= "UUU" and port_addr(2 downto 0) /= "---" then
+            case port_addr(2 downto 0) is
+                when "000" =>
+                    -- Port 0: TX Data (write-only, return 0)
+                    bus_data <= x"00";
 
-            when "010" =>
-                -- Port 2: RX Data
-                -- Return the last character fetched by rx_fetch process
-                bus_data <= last_rx_char;
+                when "001" =>
+                    -- Port 1: TX Status (always ready)
+                    bus_data <= x"01";
 
-            when "011" =>
-                -- Port 3: RX Status (check if key available)
-                key_status := console_kbhit;
-                if key_status = 1 then
-                    bus_data <= x"01";  -- Key available
-                else
-                    bus_data <= x"00";  -- No key available
-                end if;
+                when "010" =>
+                    -- Port 2: RX Data
+                    -- Return the last character fetched by rx_fetch process
+                    bus_data <= last_rx_char;
 
-            when others =>
-                -- Ports 4-7: Unused
-                bus_data <= x"00";
-        end case;
+                when "011" =>
+                    -- Port 3: RX Status (check if key available)
+                    key_status := console_kbhit;
+                    if key_status = 1 then
+                        bus_data <= x"01";  -- Key available
+                    else
+                        bus_data <= x"00";  -- No key available
+                    end if;
+
+                when others =>
+                    -- Ports 4-7: Unused
+                    bus_data <= x"00";
+            end case;
+        end if;
     end process;
 
     -- Tri-state bus driver: only drive when drive_bus='1'
@@ -255,14 +262,18 @@ begin
             -- ALSO check that is_io_cycle just became true to avoid double-trigger
             if current_state = "001" and last_state /= "001" then
                 if is_io_cycle and not is_read and port_addr(2 downto 0) = "000" then
-                    -- Convert byte to character
-                    char := character'val(to_integer(unsigned(data_bus)));
+                    -- Only process if data_bus has valid data (not metavalues)
+                    if data_bus /= "ZZZZZZZZ" and data_bus /= "XXXXXXXX" and
+                       data_bus /= "UUUUUUUU" and data_bus /= "--------" then
+                        -- Convert byte to character
+                        char := character'val(to_integer(unsigned(data_bus)));
 
-                    -- Call C function to output to terminal
-                    console_putc(char);
+                        -- Call C function to output to terminal
+                        console_putc(char);
 
-                    -- Increment character counter
-                    char_count <= char_count + 1;
+                        -- Increment character counter
+                        char_count <= char_count + 1;
+                    end if;
                 end if;
             end if;
 

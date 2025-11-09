@@ -11,6 +11,7 @@ TB_ENTITY ?= s8008_hello_io_tb
 # Project root directory (two levels up)
 PROJECT_ROOT = ../..
 WORK_DIR = work
+BUILD_DIR = build
 
 #==========================================
 # Simulation Configuration
@@ -51,18 +52,18 @@ all: asm hex2mem sim view-output
 
 # Assemble the hello_io program
 .PHONY: asm
-asm:
+asm: | $(BUILD_DIR)
 	@echo "=== Assembling $(PROJECT_NAME).asm ==="
-	$(NAKEN_ASM) -I . -l -type hex -o $(PROJECT_NAME).hex $(PROJECT_NAME).asm
-	@echo "✓ Assembly complete: $(PROJECT_NAME).hex"
-	@echo "✓ Listing file: $(PROJECT_NAME).lst"
+	$(NAKEN_ASM) -I . -l -type hex -o $(BUILD_DIR)/$(PROJECT_NAME).hex $(PROJECT_NAME).asm
+	@echo "✓ Assembly complete: $(BUILD_DIR)/$(PROJECT_NAME).hex"
+	@echo "✓ Listing file: $(BUILD_DIR)/$(PROJECT_NAME).lst"
 
 # Convert HEX to MEM format
 .PHONY: hex2mem
 hex2mem: asm
 	@echo "=== Converting HEX to MEM format ==="
-	$(PYTHON) $(PROJECT_ROOT)/hex_to_mem.py $(PROJECT_NAME).hex $(PROJECT_NAME).mem
-	@echo "✓ Generated $(PROJECT_NAME).mem"
+	$(PYTHON) $(PROJECT_ROOT)/hex_to_mem.py $(BUILD_DIR)/$(PROJECT_NAME).hex $(BUILD_DIR)/$(PROJECT_NAME).mem
+	@echo "✓ Generated $(BUILD_DIR)/$(PROJECT_NAME).mem"
 
 # Run simulation (depends on hex2mem)
 .PHONY: run
@@ -81,7 +82,7 @@ view-output:
 # Clean project-specific files
 .PHONY: clean-proj
 clean-proj: clean
-	rm -f $(PROJECT_NAME).hex $(PROJECT_NAME).lst $(PROJECT_NAME).mem
+	rm -rf $(BUILD_DIR)
 	rm -f console_output.txt
 
 .PHONY: help-proj

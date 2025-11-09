@@ -144,6 +144,9 @@ architecture sim of s8008_monitor_tb is
     signal addr_high_capture : std_logic_vector(5 downto 0) := (others => '0');
     signal cycle_type_capture : std_logic_vector(1 downto 0) := "00";
 
+    -- Interrupt acknowledge tracking
+    signal is_int_ack : std_logic := '0';
+
     -- ROM signals (0x0000 - 0x07FF)
     signal rom_addr : std_logic_vector(10 downto 0);
     signal rom_data : std_logic_vector(7 downto 0);
@@ -266,32 +269,45 @@ begin
 
     -- ROM: addresses 0x0000 - 0x07FF (bit 11 = 0)
     rom_addr <= mem_addr(10 downto 0);
-    rom_cs_n <= '0' when reset_tb = '0' and mem_addr(11) = '0' else '1';
+    rom_cs_n <= '0' when mem_addr(11) = '0' else '1';
 
     -- RAM: addresses 0x0800 - 0x0BFF (bit 11 = 1, bit 10 = 0)
     ram_addr <= mem_addr(9 downto 0);
-    ram_cs_n <= '0' when reset_tb = '0' and mem_addr(11) = '1' and mem_addr(10) = '0' else '1';
+    ram_cs_n <= '0' when mem_addr(11) = '1' and mem_addr(10) = '0' else '1';
 
     --===========================================
     -- Memory Controller
     --===========================================
     -- Address capture process (synchronous on phi1)
-    addr_capture: process(phi1_tb, reset_tb)
+    addr_capture: process(phi1_tb)
     begin
-        if reset_tb = '1' then
-            addr_low_capture <= (others => '0');
-            addr_high_capture <= (others => '0');
-            cycle_type_capture <= (others => '0');
-        elsif rising_edge(phi1_tb) then
+        if rising_edge(phi1_tb) then
+            -- T1I state: Detect interrupt acknowledge cycle (S2 S1 S0 = 1 1 0)
+            if S2_tb = '1' and S1_tb = '1' and S0_tb = '0' then
+                is_int_ack <= '1';
+            end if;
+
             -- T1 state: Capture low address byte (S2 S1 S0 = 0 1 0)
             if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
-                addr_low_capture <= data_bus_tb;
+                if data_bus_tb /= "ZZZZZZZZ" then
+                    addr_low_capture <= data_bus_tb;
+                end if;
             end if;
 
             -- T2 state: Capture high address and cycle type (S2 S1 S0 = 1 0 0)
             if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
-                addr_high_capture <= data_bus_tb(5 downto 0);
-                cycle_type_capture <= data_bus_tb(7 downto 6);
+                if data_bus_tb /= "ZZZZZZZZ" then
+                    -- Don't capture address during interrupt acknowledge
+                    if is_int_ack = '0' then
+                        addr_high_capture <= data_bus_tb(5 downto 0);
+                        cycle_type_capture <= data_bus_tb(7 downto 6);
+                    end if;
+                end if;
+            end if;
+
+            -- T3 state: Clear interrupt acknowledge flag
+            if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
+                is_int_ack <= '0';
             end if;
         end if;
     end process;
@@ -300,14 +316,16 @@ begin
     ram_control: process(phi1_tb)
     begin
         if rising_edge(phi1_tb) then
-            -- T3/T4/T5 states with write cycle (PCW = "11")
+            -- T3/T4/T5 states with write cycle
             if ((S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
                 (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
                 (S2_tb = '1' and S1_tb = '0' and S0_tb = '1')) and -- T5
-               cycle_type_capture = "11" then
-                -- PCW = memory write cycle
+               cycle_type_capture = "10" then
+                -- PCW = write cycle
                 ram_rw_n <= '0';
-                ram_data_in <= data_bus_tb;
+                if data_bus_tb /= "ZZZZZZZZ" then
+                    ram_data_in <= data_bus_tb;
+                end if;
             else
                 ram_rw_n <= '1';
             end if;
@@ -315,29 +333,42 @@ begin
     end process;
 
     -- Bus multiplexer (combinational)
-    bus_mux: process(S2_tb, S1_tb, S0_tb, cycle_type_capture, mem_addr, rom_data, ram_data_out)
+    -- Drives memory data during read cycles, provides RST 0 during interrupt acknowledge
+    bus_mux: process(S2_tb, S1_tb, S0_tb, cycle_type_capture, mem_addr, rom_data, ram_data_out, is_int_ack)
     begin
-        -- Default: tri-state
-        data_bus_tb <= (others => 'Z');
+        -- Default: don't drive (allow CPU and I/O console to drive via signal assignments)
+        -- We only drive for memory reads and interrupt acknowledge
 
-        -- T3/T4/T5 states with memory read cycle (PCI="00" or PCR="01")
-        -- Do NOT drive during I/O cycles (PCC="10") - let io_console drive
-        if ((S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
-            (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
-            (S2_tb = '1' and S1_tb = '0' and S0_tb = '1')) and -- T5
-           (cycle_type_capture = "00" or cycle_type_capture = "01") then
+        -- T2 during interrupt acknowledge: provide RST 0 instruction
+        if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' and is_int_ack = '1' then
+            data_bus_tb <= x"05";  -- RST 0 = 00 000 101
 
-            -- Select memory source based on address
-            if mem_addr(11) = '0' then
-                -- ROM space (address < 0x800)
-                data_bus_tb <= rom_data;
-            elsif mem_addr(11) = '1' and mem_addr(10) = '0' then
-                -- RAM space (0x800 - 0xBFF)
-                data_bus_tb <= ram_data_out;
+        -- T3/T4/T5 states: handle normal cycles
+        elsif (S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
+              (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
+              (S2_tb = '1' and S1_tb = '0' and S0_tb = '1') then -- T5
+
+            -- Only drive for memory read cycles (PCI="00" or PCR="01")
+            -- Don't drive for write cycles (PCW="10") or I/O cycles (PCC="11")
+            if cycle_type_capture = "00" or cycle_type_capture = "01" then
+                -- Select memory source based on address
+                if mem_addr(11) = '0' then
+                    -- ROM space (address < 0x800)
+                    data_bus_tb <= rom_data;
+                elsif mem_addr(11) = '1' and mem_addr(10) = '0' then
+                    -- RAM space (0x800 - 0xBFF)
+                    data_bus_tb <= ram_data_out;
+                else
+                    -- Unmapped
+                    data_bus_tb <= x"FF";
+                end if;
             else
-                -- Unmapped
-                data_bus_tb <= x"FF";
+                -- Write or I/O cycle - don't drive bus
+                data_bus_tb <= (others => 'Z');
             end if;
+        else
+            -- Not in a data transfer state - don't drive
+            data_bus_tb <= (others => 'Z');
         end if;
     end process;
 
@@ -347,7 +378,7 @@ begin
     instr_counter: process(phi1_tb)
     begin
         if rising_edge(phi1_tb) then
-            if SYNC_tb = '1' and S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
+            if SYNC_tb = '1' and S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
                 if last_SYNC = '0' then
                     instruction_count <= instruction_count + 1;
                 end if;
@@ -370,12 +401,13 @@ begin
         reset_tb <= '0';
         reset_n_tb <= '1';
 
-        -- Wait for CPU internal clearing
-        wait for 500 ns;
+        -- Per Intel 8008 User's Manual: CPU enters STOPPED state on power-up
+        -- Requires 16 clock periods to clear memories, then INT pulse to start
+        wait for 2 us;  -- Wait for internal clearing (16 clocks @ ~2.2us/clock)
 
-        -- Pulse interrupt to start execution
+        -- Pulse interrupt to escape STOPPED state and begin execution
         INT_tb <= '1';
-        wait for 50 ns;
+        wait for 10 us;  -- Hold longer to ensure it's sampled
         INT_tb <= '0';
 
         -- Monitor runs indefinitely - let it run until:

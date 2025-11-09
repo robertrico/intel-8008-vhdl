@@ -240,7 +240,7 @@ begin
     -- ROM (2KB: 0x0000 - 0x07FF)
     rom: rom_2kx8
         generic map (
-            ROM_FILE => "hello_io.mem"
+            ROM_FILE => "build/hello_io.mem"
         )
         port map (
             ADDR => rom_addr,
