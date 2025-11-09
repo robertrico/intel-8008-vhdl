@@ -260,8 +260,15 @@ begin
         variable captured_address : std_logic_vector(13 downto 0) := (others => '0');
         variable cycle_type : std_logic_vector(1 downto 0) := "00";
         variable is_write : boolean := false;
+        variable is_int_ack : boolean := false;
     begin
         if rising_edge(phi1_tb) then
+            -- T1I: Detect interrupt acknowledge cycle
+            if S2_tb = '1' and S1_tb = '1' and S0_tb = '0' then
+                is_int_ack := true;
+                report "Detected T1I (interrupt acknowledge) state";
+            end if;
+
             -- T1: Capture low address byte
             if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_tb /= "ZZZZZZZZ" then
@@ -269,12 +276,18 @@ begin
                 end if;
             end if;
 
-            -- T2: Capture high address bits and cycle type
+            -- T2: Capture high address bits and cycle type (or provide interrupt vector)
             if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
-                if data_tb /= "ZZZZZZZZ" then
+                if is_int_ack then
+                    -- During interrupt acknowledge, provide RST 0 instruction (0x05)
+                    rom_data <= x"05";  -- RST 0 = 00 000 101
+                    rom_enable <= '1';
+                elsif data_tb /= "ZZZZZZZZ" then
                     cycle_type := data_tb(7 downto 6);
                     captured_address(13 downto 8) := data_tb(5 downto 0);
                     is_write := (cycle_type = "10");
+                    rom_enable <= '0';
+                    rom_data <= (others => 'Z');
                 end if;
             end if;
 
@@ -287,9 +300,13 @@ begin
                     rom_enable <= '1';
                     rom_data <= rom(to_integer(unsigned(captured_address(7 downto 0))));
                 end if;
+                -- Clear interrupt acknowledge flag after T3
+                is_int_ack := false;
             else
-                rom_enable <= '0';
-                rom_data <= (others => 'Z');
+                if not (S2_tb = '1' and S1_tb = '0' and S0_tb = '0' and is_int_ack) then
+                    rom_enable <= '0';
+                    rom_data <= (others => 'Z');
+                end if;
             end if;
         end if;
     end process;
@@ -310,9 +327,21 @@ begin
         reset_n_tb <= '1';
         report "Reset released - starting tests";
 
+        -- Pulse INT to exit STOPPED state (8008 requires interrupt after reset)
+        wait for 2 us;
+        int_tb <= '1';
+        wait for 10 us;  -- Hold longer to ensure it's sampled
+        int_tb <= '0';
+        report "Interrupt pulse sent to start execution";
+
         -- Run until program halts
         -- 3 CALL/RET sequences with deep nesting = ~700us
-        wait for 750 us;
+        -- (Adjusted for 12us interrupt delay above)
+        wait for 738 us;
+
+        -- Check current state
+        report "Current state: S2=" & std_logic'image(S2_tb) & " S1=" & std_logic'image(S1_tb) & " S0=" & std_logic'image(S0_tb);
+        report "PC=" & to_hstring(debug_pc_tb);
 
         -- Verify STOPPED state
         assert S2_tb = '0' and S1_tb = '1' and S0_tb = '1'
@@ -321,6 +350,10 @@ begin
 
         -- Verify register markers to ensure all subroutines executed
         -- Final values after all CALL/RET sequences:
+        report "Register values: A=" & to_hstring(debug_reg_A_tb) & " B=" & to_hstring(debug_reg_B_tb) &
+               " C=" & to_hstring(debug_reg_C_tb) & " D=" & to_hstring(debug_reg_D_tb) &
+               " E=" & to_hstring(debug_reg_E_tb) & " H=" & to_hstring(debug_reg_H_tb) &
+               " L=" & to_hstring(debug_reg_L_tb);
         assert debug_reg_A_tb = x"F2"
             report "FAIL: A should be 0xF2 (subroutine 3 marker)"
             severity error;

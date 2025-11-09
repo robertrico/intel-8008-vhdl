@@ -249,8 +249,14 @@ begin
         variable captured_address : std_logic_vector(13 downto 0) := (others => '0');
         variable cycle_type : std_logic_vector(1 downto 0) := "00";
         variable is_write : boolean := false;
+        variable is_int_ack : boolean := false;
     begin
         if rising_edge(phi1_tb) then
+            -- T1I: Detect interrupt acknowledge cycle
+            if S2_tb = '1' and S1_tb = '1' and S0_tb = '0' then
+                is_int_ack := true;
+            end if;
+
             -- T1: Capture low address byte
             if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_tb /= "ZZZZZZZZ" then
@@ -258,12 +264,17 @@ begin
                 end if;
             end if;
 
-            -- T2: Capture high address bits and cycle type
+            -- T2: Capture high address bits and cycle type (or provide interrupt vector)
             if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
-                if data_tb /= "ZZZZZZZZ" then
+                if is_int_ack then
+                    -- During interrupt acknowledge, provide RST 0 instruction (0x05)
+                    rom_data <= x"05";  -- RST 0 = 00 000 101
+                    rom_enable <= '1';
+                elsif data_tb /= "ZZZZZZZZ" then
                     cycle_type := data_tb(7 downto 6);
                     captured_address(13 downto 8) := data_tb(5 downto 0);
                     is_write := (cycle_type = "10");
+                    rom_enable <= '0';
                 end if;
             end if;
 
@@ -275,8 +286,12 @@ begin
                 else
                     rom_enable <= '0';
                 end if;
+                -- Clear interrupt acknowledge flag after T3
+                is_int_ack := false;
             else
-                rom_enable <= '0';
+                if not (S2_tb = '1' and S1_tb = '0' and S0_tb = '0' and is_int_ack) then
+                    rom_enable <= '0';
+                end if;
             end if;
         end if;
     end process;
@@ -301,9 +316,17 @@ begin
         reset_n_tb <= '1';
         report "Reset released - starting inc/dec tests";
 
+        -- Pulse INT to exit STOPPED state (8008 requires interrupt after reset)
+        wait for 2 us;
+        int_tb <= '1';
+        wait for 10 us;  -- Hold longer to ensure it's sampled
+        int_tb <= '0';
+        report "Interrupt pulse sent to start execution";
+
         -- Wait for test program to complete
         -- Program has ~34 bytes, estimate ~550us
-        wait for 550 us;
+        -- (Adjusted for 12us interrupt delay above)
+        wait for 538 us;
 
         -- Verify STOPPED state
         assert S2_tb = '0' and S1_tb = '1' and S0_tb = '1'
