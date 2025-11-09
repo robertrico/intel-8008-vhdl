@@ -14,7 +14,7 @@ use IEEE.STD_LOGIC_TEXTIO.ALL;
 entity rom_2kx8 is
     generic(
         -- ROM initialization file
-        ROM_FILE : string := "test_programs/ram_intensive.mem"
+        ROM_FILE : string := "test_programs/simple_add.mem"
     );
     port(
         -- 11-bit address (2^11 = 2048)

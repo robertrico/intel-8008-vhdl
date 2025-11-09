@@ -148,6 +148,9 @@ architecture sim of s8008_ram_intensive_tb is
     signal instruction_count : integer := 0;
     signal last_SYNC : std_logic := '0';
 
+    -- Interrupt acknowledge tracking
+    signal is_int_ack : std_logic := '0';
+
 begin
 
     --===========================================
@@ -266,6 +269,11 @@ begin
     addr_capture: process(phi1_tb)
     begin
         if rising_edge(phi1_tb) then
+            -- T1I state: Detect interrupt acknowledge cycle (S2 S1 S0 = 1 1 0)
+            if S2_tb = '1' and S1_tb = '1' and S0_tb = '0' then
+                is_int_ack <= '1';
+            end if;
+
             -- T1 state: Capture low address byte (S2 S1 S0 = 0 1 0)
             if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_bus_tb /= "ZZZZZZZZ" then
@@ -273,12 +281,18 @@ begin
                 end if;
             end if;
 
-            -- T2 state: Capture high address and cycle type (S2 S1 S0 = 0 0 1)
+            -- T2 state: Capture high address and cycle type (S2 S1 S0 = 1 0 0)
+            -- During interrupt acknowledge, don't capture - we provide RST 0 instead
             if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
-                if data_bus_tb /= "ZZZZZZZZ" then
+                if is_int_ack = '0' and data_bus_tb /= "ZZZZZZZZ" then
                     addr_high_capture <= data_bus_tb(5 downto 0);
                     cycle_type_capture <= data_bus_tb(7 downto 6);
                 end if;
+            end if;
+
+            -- T3 state: Clear interrupt acknowledge flag
+            if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
+                is_int_ack <= '0';
             end if;
         end if;
     end process;
@@ -305,7 +319,7 @@ begin
 
     -- Bus multiplexer (combinational - mimics asynchronous memory response)
     -- ROM chips have no CLK input - they respond purely to address/CS changes
-    bus_mux: process(S2_tb, S1_tb, S0_tb, cycle_type_capture, mem_addr, rom_data, ram_data_out)
+    bus_mux: process(S2_tb, S1_tb, S0_tb, cycle_type_capture, mem_addr, rom_data, ram_data_out, is_int_ack)
     begin
         -- Default: tri-state
         data_bus_tb <= (others => 'Z');
@@ -313,19 +327,24 @@ begin
         -- T3/T4/T5 states with read cycle (PCI or PCR)
         if ((S2_tb = '0' and S1_tb = '0' and S0_tb = '1') or  -- T3
             (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4
-            (S2_tb = '1' and S1_tb = '0' and S0_tb = '1')) and -- T5
-           (cycle_type_capture = "00" or cycle_type_capture = "01") then
+            (S2_tb = '1' and S1_tb = '0' and S0_tb = '1')) then -- T5
 
-            -- Select memory source based on address
-            if mem_addr(11) = '0' then
-                -- ROM space (address < 0x800)
-                data_bus_tb <= rom_data;
-            elsif mem_addr(11) = '1' and mem_addr(10) = '0' then
-                -- RAM space (0x800 - 0xBFF)
-                data_bus_tb <= ram_data_out;
-            else
-                -- Unmapped
-                data_bus_tb <= x"FF";
+            -- During interrupt acknowledge, provide RST 0 instruction
+            if is_int_ack = '1' then
+                data_bus_tb <= x"05";  -- RST 0 = 00 000 101
+            -- Normal memory read cycle
+            elsif cycle_type_capture = "00" or cycle_type_capture = "01" then
+                -- Select memory source based on address
+                if mem_addr(11) = '0' then
+                    -- ROM space (address < 0x800)
+                    data_bus_tb <= rom_data;
+                elsif mem_addr(11) = '1' and mem_addr(10) = '0' then
+                    -- RAM space (0x800 - 0xBFF)
+                    data_bus_tb <= ram_data_out;
+                else
+                    -- Unmapped
+                    data_bus_tb <= x"FF";
+                end if;
             end if;
         end if;
     end process;
@@ -378,11 +397,11 @@ begin
 
         -- Per Intel 8008 User's Manual: CPU enters STOPPED state on power-up
         -- Requires 16 clock periods to clear memories, then INT pulse to start
-        wait for 500 ns;  -- Wait for internal clearing (16 clocks @ ~2.2us/clock)
+        wait for 2 us;  -- Wait for internal clearing (16 clocks @ ~2.2us/clock)
 
         -- Pulse interrupt to escape STOPPED state and begin execution
         INT_tb <= '1';
-        wait for 50 ns;
+        wait for 10 us;  -- Hold longer to ensure it's sampled
         INT_tb <= '0';
         report "Interrupt pulsed, CPU starting execution from 0x0000..." severity note;
 
