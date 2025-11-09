@@ -72,6 +72,14 @@ hex2mem: asm
 .PHONY: all
 all: asm hex2mem bitstream
 
+# Full build and program workflow - does everything you need!
+.PHONY: deploy
+deploy: clean-proj hex2mem all program
+	@echo ""
+	@echo "========================================="
+	@echo "✓ FPGA programmed and ready!"
+	@echo "========================================="
+
 # Clean project files
 .PHONY: clean-proj
 clean-proj: clean
@@ -91,6 +99,7 @@ help-proj:
 	@echo "  5. make flash       - Program FPGA flash"
 	@echo ""
 	@echo "Quick Commands:"
+	@echo "  make deploy         - Complete workflow: clean, build, and program FPGA"
 	@echo "  make all            - Build everything (asm + synthesis)"
 	@echo "  make reports        - View timing/utilization"
 	@echo "  make clean-proj     - Clean generated files"
