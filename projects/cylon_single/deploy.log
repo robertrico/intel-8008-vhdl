@@ -1,0 +1,46 @@
+Cleaning simulation files...
+rm -f cylon_single.hex cylon_single.lst cylon_single.mem
+rm -f build/*
+=== Assembling cylon_single.asm ===
+/Users/hambook/Development/naken_asm/naken_asm -I . -l -type hex -o cylon_single.hex cylon_single.asm
+
+naken_asm
+
+Authors: Michael Kohn
+         Joe Davisson
+    Web: https://www.mikekohn.net/
+  Email: mike@mikekohn.net
+Version: May 25, 2025
+
+ Input file: cylon_single.asm
+Output file: cylon_single.hex
+  List file: cylon_single.lst
+
+Pass 1...
+Pass 2...
+
+Program Info:
+Include Paths: .
+               .
+               /usr/local/share/naken_asm/include
+               include
+ Instructions: 79
+   Code Bytes: 180
+   Data Bytes: 14
+  Low Address: 0x0000 (0)
+ High Address: 0x00e0 (224)
+
+✓ Assembly complete
+=== Converting to MEM format ===
+python3 ../../hex_to_mem.py cylon_single.hex cylon_single.mem
+Converted cylon_single.hex -> cylon_single.mem
+  Loaded 194 bytes
+  Address range: 0x0000 - 0x00E0
+✓ Generated cylon_single.mem
+Analyzing VHDL for synthesis...
+/Users/hambook/oss-cad-suite/bin/ghdl -a --std=08 src/cylon_single_top.vhdl ../../src/components/io_controller.vhdl ../../src/components/reset_interrupt_controller.vhdl ../../src/components/memory_controller.vhdl ../../src/components/debouncer.vhdl ../../src/components/s8008.vhdl ../../src/components/i8008_alu.vhdl ../../src/components/phase_clocks.vhdl ../../src/components/rom_2kx8.vhdl ../../src/components/ram_1kx8.vhdl
+../../src/components/debouncer.vhdl:47:43:error: missing ";" at end of object declaration
+        (CLK_FREQ_HZ / 1000) * DEBOUNCE_MS when DEBOUNCE_TIME = 0 else DEBOUNCE_TIME;
+                                          ^
+/Users/hambook/oss-cad-suite/libexec/ghdl:error: compilation error
+make: *** [build/cylon_single_top.json] Error 1
