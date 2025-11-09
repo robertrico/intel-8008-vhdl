@@ -106,15 +106,22 @@ architecture rtl of cylon_top is
         );
     end component;
 
-    component io_controller_simple is
+    component io_controller is
+        generic (
+            NUM_OUTPUT_PORTS : integer := 24;
+            NUM_INPUT_PORTS  : integer := 8
+        );
         port (
-            phi1      : in  std_logic;
-            reset_n   : in  std_logic;
-            S2        : in  std_logic;
-            S1        : in  std_logic;
-            S0        : in  std_logic;
-            data_bus  : in  std_logic_vector(7 downto 0);
-            leds      : out std_logic_vector(7 downto 0)
+            phi1            : in  std_logic;
+            reset_n         : in  std_logic;
+            S2              : in  std_logic;
+            S1              : in  std_logic;
+            S0              : in  std_logic;
+            data_bus_in     : in  std_logic_vector(7 downto 0);
+            data_bus_out    : out std_logic_vector(7 downto 0);
+            data_bus_enable : out std_logic;
+            port_out        : out std_logic_vector((NUM_OUTPUT_PORTS * 8) - 1 downto 0);
+            port_in         : in  std_logic_vector((NUM_INPUT_PORTS * 8) - 1 downto 0)
         );
     end component;
 
@@ -197,6 +204,12 @@ architecture rtl of cylon_top is
     -- Memory controller interface
     signal mem_data_out     : std_logic_vector(7 downto 0);
     signal mem_data_enable  : std_logic;
+
+    -- I/O controller interface
+    signal io_data_out      : std_logic_vector(7 downto 0);
+    signal io_data_enable   : std_logic;
+    signal io_port_out      : std_logic_vector(7 downto 0);    -- 1 port * 8 bits (port 8 for LEDs)
+    -- Note: io_port_in not needed since NUM_INPUT_PORTS = 0
 
     -- ROM signals
     signal rom_addr : std_logic_vector(10 downto 0);
@@ -286,9 +299,9 @@ begin
     -- 1. Interrupt controller (highest priority during T1I/T2)
     -- 2. CPU drives during T1, T2, and write cycles
     -- 3. Memory controller drives during memory read cycles
-    -- 4. I/O controller drives during I/O read cycles (via its tri-state)
+    -- 4. I/O controller drives during I/O read cycles
     -- 5. Default: Hi-Z
-    process(int_data_enable, int_data_out, cpu_data_enable, cpu_data_out, mem_data_enable, mem_data_out)
+    process(int_data_enable, int_data_out, cpu_data_enable, cpu_data_out, mem_data_enable, mem_data_out, io_data_enable, io_data_out)
     begin
         -- Default: tri-state
         data_bus <= (others => 'Z');
@@ -302,7 +315,9 @@ begin
         -- Priority 3: Memory controller
         elsif mem_data_enable = '1' then
             data_bus <= mem_data_out;
-        -- Priority 4: I/O controller handles via its own tri-state (in component)
+        -- Priority 4: I/O controller
+        elsif io_data_enable = '1' then
+            data_bus <= io_data_out;
         end if;
     end process;
 
@@ -358,18 +373,30 @@ begin
         );
 
     --------------------------------------------------------------------------------
-    -- I/O Controller (Simple version from blinky - LED output only)
+    -- I/O Controller (Full generic I/O controller with input/output ports)
     --------------------------------------------------------------------------------
-    u_io_controller : io_controller_simple
+    -- Configure for 1 output port (port 8 for LEDs) and 1 dummy input port
+    -- (VHDL doesn't allow zero-width vectors, so we need at least 1 input port)
+    u_io_controller : io_controller
+        generic map (
+            NUM_OUTPUT_PORTS => 1,   -- Only port 8 (LEDs)
+            NUM_INPUT_PORTS  => 1    -- Minimum 1 port (dummy, unused)
+        )
         port map (
-            phi1     => phi1,
-            reset_n  => reset_n,
-            S2       => S2,
-            S1       => S1,
-            S0       => S0,
-            data_bus => data_bus,
-            leds     => led_out
+            phi1            => phi1,
+            reset_n         => reset_n,
+            S2              => S2,
+            S1              => S1,
+            S0              => S0,
+            data_bus_in     => data_bus,
+            data_bus_out    => io_data_out,
+            data_bus_enable => io_data_enable,
+            port_out        => io_port_out,
+            port_in         => (others => '0')  -- Dummy input, always 0
         );
+
+    -- Map port 8 (first output port) to LEDs
+    led_out <= io_port_out;
 
     --------------------------------------------------------------------------------
     -- Reset/Interrupt Controller (new reusable component)

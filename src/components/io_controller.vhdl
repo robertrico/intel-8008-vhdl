@@ -77,9 +77,9 @@ architecture rtl of io_controller is
     type output_port_array is array (0 to NUM_OUTPUT_PORTS - 1) of std_logic_vector(7 downto 0);
     signal output_ports : output_port_array;
 
-    -- Data bus control for input operations
-    signal data_bus_drive : std_logic;
-    signal data_bus_out   : std_logic_vector(7 downto 0);
+    -- Internal signals for data bus output
+    signal data_bus_out_int : std_logic_vector(7 downto 0);
+    signal data_bus_enable_int : std_logic;
 
 begin
     -- Detect CPU states
@@ -95,8 +95,9 @@ begin
         port_out((i * 8) + 7 downto (i * 8)) <= output_ports(i);
     end generate;
 
-    -- Tri-state data bus control for input operations
-    data_bus <= data_bus_out when data_bus_drive = '1' else (others => 'Z');
+    -- Connect internal signals to output ports (top-level handles tri-state)
+    data_bus_out <= data_bus_out_int;
+    data_bus_enable <= data_bus_enable_int;
 
     -- Main I/O control process
     process(phi1, reset_n)
@@ -111,17 +112,17 @@ begin
 
             cycle_type <= "00";
             port_addr <= (others => '0');
-            data_bus_drive <= '0';
-            data_bus_out <= (others => '0');
+            data_bus_enable_int <= '0';
+            data_bus_out_int <= (others => '0');
 
         elsif rising_edge(phi1) then
             -- Default: don't drive bus
-            data_bus_drive <= '0';
+            data_bus_enable_int <= '0';
 
             -- T2 state: Capture cycle type and port address from data bus
             if is_t2 = '1' then
-                cycle_type <= data_bus(7 downto 6);  -- Bits [7:6] = cycle type
-                port_addr  <= data_bus(4 downto 0);  -- Bits [4:0] = port address
+                cycle_type <= data_bus_in(7 downto 6);  -- Bits [7:6] = cycle type
+                port_addr  <= data_bus_in(4 downto 0);  -- Bits [4:0] = port address
             end if;
 
             -- T3 state: Handle I/O operation
@@ -133,23 +134,23 @@ begin
                     output_port_index := to_integer(unsigned(port_addr)) - 8;
 
                     if output_port_index >= 0 and output_port_index < NUM_OUTPUT_PORTS then
-                        output_ports(output_port_index) <= data_bus;
+                        output_ports(output_port_index) <= data_bus_in;
                     end if;
                 end if;
 
                 -- INPUT operation (INP instruction)
-                if is_input_cycle = '1' then
+                if cycle_type = "01" then
                     -- Port address is in range 0-7 (only bits [2:0] used)
                     input_port_index := to_integer(unsigned(port_addr(2 downto 0)));
 
                     if input_port_index < NUM_INPUT_PORTS then
                         -- Drive data bus with input port data
-                        data_bus_out <= port_in((input_port_index * 8) + 7 downto (input_port_index * 8));
-                        data_bus_drive <= '1';
+                        data_bus_out_int <= port_in((input_port_index * 8) + 7 downto (input_port_index * 8));
+                        data_bus_enable_int <= '1';
                     else
                         -- Invalid port: return 0xFF
-                        data_bus_out <= (others => '1');
-                        data_bus_drive <= '1';
+                        data_bus_out_int <= (others => '1');
+                        data_bus_enable_int <= '1';
                     end if;
                 end if;
             end if;

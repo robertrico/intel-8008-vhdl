@@ -22,7 +22,7 @@ SIM_STOP_TIME = 50ms
 # Source Files
 #==========================================
 RTL_SOURCES = src/cylon_top.vhdl \
-              $(PROJECT_ROOT)/projects/blinky/src/io_controller_simple.vhdl \
+              $(PROJECT_ROOT)/src/components/io_controller.vhdl \
               $(PROJECT_ROOT)/src/components/reset_interrupt_controller.vhdl \
               $(PROJECT_ROOT)/src/components/memory_controller.vhdl \
               $(PROJECT_ROOT)/src/components/s8008.vhdl \
