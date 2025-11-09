@@ -91,6 +91,9 @@ architecture behavior of s8008_rst_tb is
     signal debug_pc_tb : std_logic_vector(13 downto 0);
     signal debug_flags_tb : std_logic_vector(3 downto 0);
 
+    -- Test tracking
+    signal test_complete : boolean := false;
+
     -- Master clock period
     constant MASTER_CLK_PERIOD : time := 10 ns;  -- 100 MHz master clock
 
@@ -221,10 +224,13 @@ begin
     -- Master clock generation
     master_clk_process: process
     begin
-        master_clk_tb <= '0';
-        wait for MASTER_CLK_PERIOD / 2;
-        master_clk_tb <= '1';
-        wait for MASTER_CLK_PERIOD / 2;
+        while not test_complete loop
+            master_clk_tb <= '0';
+            wait for MASTER_CLK_PERIOD / 2;
+            master_clk_tb <= '1';
+            wait for MASTER_CLK_PERIOD / 2;
+        end loop;
+        wait;
     end process;
 
     -- Memory controller (ROM interface)
@@ -232,8 +238,14 @@ begin
         variable captured_address : std_logic_vector(13 downto 0) := (others => '0');
         variable cycle_type : std_logic_vector(1 downto 0) := "00";
         variable is_write : boolean := false;
+        variable is_int_ack : boolean := false;
     begin
         if rising_edge(phi1_tb) then
+            -- T1I: Detect interrupt acknowledge cycle
+            if S2_tb = '1' and S1_tb = '1' and S0_tb = '0' then
+                is_int_ack := true;
+            end if;
+
             -- T1: Capture low address byte
             if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_tb /= "ZZZZZZZZ" then
@@ -241,25 +253,37 @@ begin
                 end if;
             end if;
 
-            -- T2: Capture high address bits and cycle type
+            -- T2: Capture high address bits and cycle type (or provide interrupt vector)
             if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
-                if data_tb /= "ZZZZZZZZ" then
+                if is_int_ack then
+                    -- During interrupt acknowledge, provide RST 0 instruction (0x05)
+                    rom_data <= x"05";  -- RST 0 = 00 000 101
+                    rom_enable <= '1';
+                elsif data_tb /= "ZZZZZZZZ" then
                     cycle_type := data_tb(7 downto 6);
                     captured_address(13 downto 8) := data_tb(5 downto 0);
                     is_write := (cycle_type = "10");
                 end if;
             end if;
 
-            -- T3: Provide data for reads
+            -- T3: Enable ROM for read cycles only (not I/O or writes)
             if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
-                if not is_write and cycle_type /= "11" then
-                    rom_data <= ROM(to_integer(unsigned(captured_address)));
-                    rom_enable <= '1';
-                else
+                -- Only drive ROM if this is a memory read (cycle_type = "00" or "01")
+                -- Don't drive for writes ("10") or I/O ("11")
+                if is_write or cycle_type = "11" then
                     rom_enable <= '0';
+                    rom_data <= (others => 'Z');
+                else
+                    rom_enable <= '1';
+                    rom_data <= ROM(to_integer(unsigned(captured_address(7 downto 0))));
                 end if;
+                -- Clear interrupt acknowledge flag after T3
+                is_int_ack := false;
             else
-                rom_enable <= '0';
+                if not (S2_tb = '1' and S1_tb = '0' and S0_tb = '0' and is_int_ack) then
+                    rom_enable <= '0';
+                    rom_data <= (others => 'Z');
+                end if;
             end if;
         end if;
     end process;
@@ -278,22 +302,24 @@ begin
         -- Apply reset
         reset_tb <= '1';
         reset_n_tb <= '0';
-        wait for 25 us;
-
+        wait for 20 us;
         reset_tb <= '0';
+        wait for 5 us;
         reset_n_tb <= '1';
+
+        -- Pulse INT to exit STOPPED state (8008 requires interrupt after reset)
+        wait for 2 us;
+        int_tb <= '1';
+        wait for 10 us;  -- Hold longer to ensure it's sampled
+        int_tb <= '0';
+        report "Interrupt pulse sent to start execution";
+
         report "Reset released - CPU will start at 0x0000";
-
-        -- Wait a bit then jump to test program at 0x0040
-        -- Need to modify: start test program at 0x0000 instead
-
-        wait for 10 us;
-        -- Actually, we need a different approach - let's put a JMP at 0x0000
-        -- to jump to the test program area
 
         -- Wait for test program to complete
         -- Estimate: 7 RST calls + handlers + returns + JMP at start = ~500us
-        wait for 550 us;
+        -- Adjusted by 12us to account for interrupt delay
+        wait for 538 us;
 
         -- Verify STOPPED state
         assert S2_tb = '0' and S1_tb = '1' and S0_tb = '1'
@@ -321,6 +347,7 @@ begin
         report "  - Return address: PASS";
         report "========================================";
 
+        test_complete <= true;
         wait;
     end process;
 

@@ -152,11 +152,9 @@ architecture behavior of s8008_io_tb is
 
 begin
     -- Reconstruct tri-state behavior for simulation compatibility
-    -- CPU drives bus when enabled, otherwise testbench memory/IO drives it
-    data_tb <= cpu_data_out_tb when cpu_data_enable_tb = '1' else (others => 'Z');
-
-    -- Bus driver (combines ROM and I/O bus control)
-    data_tb <= rom_data when rom_enable = '1' else
+    -- Priority: CPU > ROM > I/O > Hi-Z
+    data_tb <= cpu_data_out_tb when cpu_data_enable_tb = '1' else
+               rom_data when rom_enable = '1' else
                io_bus_data when io_drive_bus = '1' else
                (others => 'Z');
 
@@ -213,8 +211,14 @@ begin
         variable captured_address : std_logic_vector(13 downto 0) := (others => '0');
         variable cycle_type : std_logic_vector(1 downto 0) := "00";
         variable is_write : boolean := false;
+        variable is_int_ack : boolean := false;
     begin
         if rising_edge(phi1_tb) then
+            -- T1I: Detect interrupt acknowledge cycle
+            if S2_tb = '1' and S1_tb = '1' and S0_tb = '0' then
+                is_int_ack := true;
+            end if;
+
             -- T1: Capture low address byte
             if S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then
                 if data_tb /= "ZZZZZZZZ" then
@@ -222,27 +226,37 @@ begin
                 end if;
             end if;
 
-            -- T2: Capture high address bits and cycle type
+            -- T2: Capture high address bits and cycle type (or provide interrupt vector)
             if S2_tb = '1' and S1_tb = '0' and S0_tb = '0' then
-                if data_tb /= "ZZZZZZZZ" then
+                if is_int_ack then
+                    -- During interrupt acknowledge, provide RST 0 instruction (0x05)
+                    rom_data <= x"05";  -- RST 0 = 00 000 101
+                    rom_enable <= '1';
+                elsif data_tb /= "ZZZZZZZZ" then
                     cycle_type := data_tb(7 downto 6);
                     captured_address(13 downto 8) := data_tb(5 downto 0);
                     is_write := (cycle_type = "10");
                 end if;
             end if;
 
-            -- T3: Enable ROM for read cycles
+            -- T3: Enable ROM for read cycles only (not I/O or writes)
             if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
-                if is_write then
+                -- Only drive ROM if this is a memory read (cycle_type = "00" or "01")
+                -- Don't drive for writes ("10") or I/O ("11")
+                if is_write or cycle_type = "11" then
                     rom_enable <= '0';
                     rom_data <= (others => 'Z');
                 else
                     rom_enable <= '1';
                     rom_data <= rom(to_integer(unsigned(captured_address(7 downto 0))));
                 end if;
+                -- Clear interrupt acknowledge flag after T3
+                is_int_ack := false;
             else
-                rom_enable <= '0';
-                rom_data <= (others => 'Z');
+                if not (S2_tb = '1' and S1_tb = '0' and S0_tb = '0' and is_int_ack) then
+                    rom_enable <= '0';
+                    rom_data <= (others => 'Z');
+                end if;
             end if;
         end if;
     end process;
@@ -272,7 +286,7 @@ begin
                     if data_tb /= "ZZZZZZZZ" then
                         io_cycle_type <= data_tb(7 downto 6);
                         -- Check if this is a PCC cycle (I/O operation)
-                        if data_tb(7 downto 6) = "10" then
+                        if data_tb(7 downto 6) = "11" then
                             is_io_cycle <= true;
                             -- Determine if INP or OUT based on port address
                             -- INP: port_addr bits 7-3 are all 0 (00000MMM)
@@ -291,16 +305,26 @@ begin
                     if is_io_cycle and is_io_read then
                         -- INP: Drive input data on bus
                         io_drive_bus <= '1';
-                    else
-                        -- OUT or non-I/O: Don't drive bus
+                    elsif not (is_io_cycle and is_io_read) then
+                        -- Only clear if this is definitely NOT an INP cycle
                         io_drive_bus <= '0';
                     end if;
-                    -- Clear is_io_cycle immediately to prevent double-triggering
-                    is_io_cycle <= false;
 
-                -- Other states: Don't drive bus
-                else
+                -- T4/T5: Keep driving bus if this was an INP cycle
+                elsif (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4 (111)
+                      (S2_tb = '1' and S1_tb = '0' and S0_tb = '1') then -- T5 (101)
+                    if is_io_cycle and is_io_read then
+                        -- Keep driving bus through T4/T5 for INP
+                        io_drive_bus <= '1';
+                    elsif not (is_io_cycle and is_io_read) then
+                        io_drive_bus <= '0';
+                    end if;
+
+                -- T1 - start of new cycle, clear flags
+                elsif S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then  -- T1 (010)
                     io_drive_bus <= '0';
+                    is_io_cycle <= false;
+                    is_io_read <= false;
                 end if;
             end if;
         end if;
@@ -325,15 +349,21 @@ begin
     io_output_capture: process(phi1_tb)
         variable last_state : std_logic_vector(2 downto 0) := "000";
         variable current_state : std_logic_vector(2 downto 0);
+        variable cycle_type : std_logic_vector(1 downto 0) := "00";
     begin
         if rising_edge(phi1_tb) then
             current_state := S2_tb & S1_tb & S0_tb;
 
-            -- Detect rising edge of T3 (transition to S2S1S0=001)
-            -- During T3 of an OUT operation
-            if current_state = "001" and last_state /= "001" then
-                if is_io_cycle and not is_io_read then
-                    -- Capture output data from bus
+            -- Capture cycle type during T2
+            if current_state = "100" and data_tb /= "ZZZZZZZZ" then
+                cycle_type := data_tb(7 downto 6);
+            end if;
+
+            -- Detect rising edge of T3 during PCC (I/O) write cycle
+            -- PCC cycle is "11", and for OUT the port address has non-zero bits in [4:3]
+            if current_state = "001" and last_state /= "001" and cycle_type = "11" then
+                -- Capture output data during OUT instruction
+                if data_tb /= "ZZZZZZZZ" then
                     output_ports(to_integer(unsigned(io_port_addr(4 downto 0)))) <= data_tb;
                     report "OUT captured: PORT[" & integer'image(to_integer(unsigned(io_port_addr(4 downto 0)))) &
                            "] = 0x" & to_hstring(unsigned(data_tb));
@@ -356,7 +386,13 @@ begin
         reset_tb <= '0';
         wait for 50 ns;
         reset_n_tb <= '1';
-        wait for 50 ns;
+
+        -- Pulse INT to exit STOPPED state (8008 requires interrupt after reset)
+        wait for 2 us;
+        int_tb <= '1';
+        wait for 10 us;  -- Hold longer to ensure it's sampled
+        int_tb <= '0';
+        report "Interrupt pulse sent to start execution";
 
         report "=== Starting I/O Tests ===";
 

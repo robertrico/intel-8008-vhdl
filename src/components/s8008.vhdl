@@ -690,10 +690,11 @@ begin
         elsif microcode_state = MEM_READ or microcode_state = MEM_WRITE then
             effective_address := memory_address;
         elsif microcode_state = IO_TRANSFER then
-            -- For I/O: Port address (5 bits) goes in bits[4:0] of T2 data bus
-            -- T2 output = effective_address(13:8), so port must be in bits[12:8]
-            -- effective_address = bits[13]=0, bits[12:8]=port[4:0], bits[7:0]=don't care
-            effective_address := '0' & unsigned(io_port_addr(4 downto 0)) & "00000000";
+            -- For I/O: Port address goes in T1 (bits 7:0) and T2 (bits 12:8)
+            -- T1: Output full 8-bit port address
+            -- T2: Output cycle type + upper 5 bits of port address
+            -- effective_address = bits[13]=0, bits[12:8]=port[4:0], bits[7:0]=port[7:0]
+            effective_address := '0' & unsigned(io_port_addr(4 downto 0)) & unsigned(io_port_addr);
         else
             effective_address := program_counter;
         end if;

@@ -118,11 +118,9 @@ architecture sim of s8008_inp_cpi_tb is
 begin
 
     -- Reconstruct tri-state behavior for simulation compatibility
-    -- CPU drives bus when enabled, otherwise testbench memory/IO drives it
-    data_tb <= cpu_data_out_tb when cpu_data_enable_tb = '1' else (others => 'Z');
-
-    -- Bus driver (combines ROM and I/O bus control)
-    data_tb <= rom_data when rom_enable = '1' else
+    -- Priority: CPU > ROM > I/O > Hi-Z
+    data_tb <= cpu_data_out_tb when cpu_data_enable_tb = '1' else
+               rom_data when rom_enable = '1' else
                io_bus_data when io_drive_bus = '1' else
                (others => 'Z');
 
@@ -206,9 +204,11 @@ begin
                 end if;
             end if;
 
-            -- T3: Enable ROM for read cycles only (not I/O)
+            -- T3: Enable ROM for read cycles only (not I/O or writes)
             if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
-                if is_write then
+                -- Only drive ROM if this is a memory read (cycle_type = "00" or "01")
+                -- Don't drive for writes ("10") or I/O ("11")
+                if is_write or cycle_type = "11" then
                     rom_enable <= '0';
                     rom_data <= (others => 'Z');
                 else
@@ -251,7 +251,7 @@ begin
                         io_cycle_type <= data_tb(7 downto 6);
                         report "IO T2: cycle_type=" & std_logic'image(data_tb(7)) & std_logic'image(data_tb(6));
                         -- Check if this is a PCC cycle (I/O operation)
-                        if data_tb(7 downto 6) = "10" then
+                        if data_tb(7 downto 6) = "11" then
                             is_io_cycle <= true;
                             -- Determine if INP or OUT based on port address
                             -- INP: port_addr bits 7-3 are all 0 (00000MMM)
@@ -265,7 +265,7 @@ begin
                     end if;
                     io_drive_bus <= '0';  -- Don't drive during T2
 
-                -- T3 (S2S1S0 = 100): Data transfer
+                -- T3 (S2S1S0 = 001): Data transfer
                 -- For INP (read), drive the bus
                 -- For OUT (write), tri-state the bus (CPU drives it)
                 elsif S2_tb = '0' and S1_tb = '0' and S0_tb = '1' then
@@ -273,14 +273,26 @@ begin
                         -- INP: Drive input data on bus
                         io_drive_bus <= '1';
                         report "IO T3: INP driving bus with 0x" & to_hstring(unsigned(io_bus_data));
-                    else
-                        -- OUT or non-I/O: Don't drive bus
+                    elsif not (is_io_cycle and is_io_read) then
+                        -- Only clear if this is definitely NOT an INP cycle
                         io_drive_bus <= '0';
                     end if;
 
-                -- Other states: Don't drive bus
-                else
+                -- T4/T5: Keep driving bus if this was an INP cycle
+                elsif (S2_tb = '1' and S1_tb = '1' and S0_tb = '1') or  -- T4 (111)
+                      (S2_tb = '1' and S1_tb = '0' and S0_tb = '1') then -- T5 (101)
+                    if is_io_cycle and is_io_read then
+                        -- Keep driving bus through T4/T5 for INP
+                        io_drive_bus <= '1';
+                    elsif not (is_io_cycle and is_io_read) then
+                        io_drive_bus <= '0';
+                    end if;
+
+                -- T1 - start of new cycle, clear flags
+                elsif S2_tb = '0' and S1_tb = '1' and S0_tb = '0' then  -- T1 (010)
                     io_drive_bus <= '0';
+                    is_io_cycle <= false;
+                    is_io_read <= false;
                 end if;
             end if;
         end if;
@@ -313,8 +325,9 @@ begin
             end if;
 
             -- Detect rising edge of T3 during PCC (I/O) write cycle
-            if current_state = "001" and last_state /= "001" and cycle_type = "10" then
-                -- Capture output data
+            -- PCC cycle is "11", and for OUT the port address has non-zero bits in [4:3]
+            if current_state = "001" and last_state /= "001" and cycle_type = "11" then
+                -- Capture output data during OUT instruction
                 if data_tb /= "ZZZZZZZZ" then
                     last_output <= data_tb;
                     report "OUT: 0x" & to_hstring(unsigned(data_tb));

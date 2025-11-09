@@ -446,51 +446,56 @@ begin
 
         -- Reset
         reset_n <= '0';
+        INT <= '0';  -- Deassert interrupt during reset
         wait for phi1_period * 2;
         reset_n <= '1';
         wait for phi1_period * 2;
 
-        -- Wait for MVI instruction to complete
-        wait for phi1_period * 6;
-
-        -- Assert interrupt early
+        -- Assert INT to exit STOPPED state after reset
         INT <= '1';
+
+        -- Wait for first interrupt to be serviced and RET to execute
+        wait for phi1_period * 20;
+
+        -- Now de-assert INT so we can trigger a fresh interrupt
+        INT <= '0';
+        wait for phi1_period * 2;
 
         test_phase <= TEST3_INTERRUPT;
 
-        -- Wait for the T1 cycle before interrupt occurs
-        -- This will be the FETCH of the RET instruction at 0x0002
+        -- Wait for a T1 cycle (instruction fetch)
         -- T1: S2=0, S1=1, S0=0 with SYNC='1'
         wait until S2 = '0' and S1 = '1' and S0 = '0' and SYNC = '1' and rising_edge(phi1);
-        -- Wait for T2 to capture full address
-        -- T2: S2=1, S1=0, S0=0
-        wait until S2 = '1' and S1 = '0' and S0 = '0' and rising_edge(phi1);
-        wait for phi1_period * 0.5;  -- Let pc_full update
+        wait for phi1_period * 0.5;  -- Let debug signals stabilize
 
-        -- Capture PC of the cycle that's about to be interrupted
-        pc_before_int := pc_full;
+        -- Capture PC using debug signal (the actual internal PC register)
+        pc_before_int := unsigned(debug_pc);
         report "PC of cycle about to be interrupted: 0x" & to_hstring(pc_before_int);
+
+        -- Now assert interrupt to trigger T1I
+        INT <= '1';
 
         -- Wait for T1I: S2=1, S1=1, S0=0
         wait until S2 = '1' and S1 = '1' and S0 = '0' and rising_edge(phi1);
         report "T1I detected at time " & time'image(now);
-        report "  Data bus during T1I (PC low): 0x" & to_hstring(unsigned(data_bus));
+        report "  debug_pc during T1I: 0x" & to_hstring(unsigned(debug_pc));
 
-        -- Wait for the T2 after T1I to complete address output
+        -- Wait for the T2 after T1I
         -- T2: S2=1, S1=0, S0=0
         wait until S2 = '1' and S1 = '0' and S0 = '0' and rising_edge(phi1);
         report "T2 after T1I detected, checking PC value...";
-        report "  Data bus during T2 (PC high): 0x" & to_hstring(unsigned(data_bus(5 downto 0)));
+        report "  debug_pc during T2: 0x" & to_hstring(unsigned(debug_pc));
 
-        -- Wait one more cycle for pc_full to be updated
-        wait for phi1_period * 1;
+        -- Wait for T3 of interrupt acknowledge
+        wait until S2 = '0' and S1 = '0' and S0 = '1' and rising_edge(phi1);
+        wait for phi1_period * 0.5;  -- Let debug signals stabilize
 
-        -- PC should still be the same
-        if pc_full /= pc_before_int then
-            report "TEST 3 FAILED: PC changed during T1I (was 0x" &
-                   to_hstring(pc_before_int) & ", now 0x" & to_hstring(pc_full) & ")" severity error;
+        -- PC should still be the same (the interrupted PC is preserved)
+        if unsigned(debug_pc) /= pc_before_int then
+            report "TEST 3 FAILED: PC changed during interrupt (was 0x" &
+                   to_hstring(pc_before_int) & ", now 0x" & to_hstring(unsigned(debug_pc)) & ")" severity error;
         else
-            report "TEST 3 PASSED: PC preserved during T1I (PC = 0x" & to_hstring(pc_full) & ")";
+            report "TEST 3 PASSED: PC preserved during interrupt (PC = 0x" & to_hstring(unsigned(debug_pc)) & ")";
         end if;
 
         test_phase <= TEST3_VERIFY;
