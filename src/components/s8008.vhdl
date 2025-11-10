@@ -136,6 +136,7 @@ architecture rtl of s8008 is
     signal int_latched : std_logic := '0';    -- Latched interrupt request
     signal int_previous : std_logic := '0';   -- Previous INT value for edge detection
     signal in_int_ack_cycle : std_logic := '0';  -- Registered: '1' during entire T1I→T2→T3 sequence
+    signal int_rst_pending : std_logic := '0';  -- '1' after interrupt RST jump setup, cleared after first fetch
 
     -- Internal registers for address and data
     -- In a real 8008, these would come from the instruction decoder and register file
@@ -1268,6 +1269,7 @@ begin
                 jump_addr_low <= std_logic_vector(to_unsigned(to_integer(unsigned(instruction_reg(5 downto 3))) * 8, 8));
                 jump_addr_high <= "000000";  -- RST vectors are in first 64 bytes
                 perform_jump <= '1';
+                int_rst_pending <= '1';  -- Mark that interrupt RST jump is pending
 
                 if DEBUG_VERBOSE then
                     report "Interrupt RST " & integer'image(to_integer(unsigned(instruction_reg(5 downto 3)))) &
@@ -1293,8 +1295,7 @@ begin
             --
             -- FIX: Always enter at T3 end during FETCH, set skip_exec_states INSIDE based on decode
             --      Also enter at T5 end for 5-state cycles that need to complete
-            -- IMPORTANT: Skip during interrupt acknowledge cycle - RST will be handled separately
-            if ((timing_state = T3 and clock_phase = '0' and microcode_state = FETCH and in_int_ack_cycle = '0') or
+            if ((timing_state = T3 and clock_phase = '0' and microcode_state = FETCH) or
                (timing_state = T3 and clock_phase = '0' and skip_exec_states = '1' and microcode_state /= FETCH) or
                (timing_state = T5 and clock_phase = '0' and skip_exec_states = '0')) then
 
@@ -1310,8 +1311,18 @@ begin
                     when FETCH =>
                         -- Just fetched an instruction (3-state PCI cycle completed)
                         -- PLA control signals are now valid
-                        pc_should_increment <= '1';  -- Default: PC should increment (override for M register ops)
-                        perform_jump <= '0';  -- Reset jump flag (will be set if jump/call/ret occurs)
+
+                        -- Special case: If interrupt RST is pending, this is the first fetch after the jump
+                        -- The jump already executed at T1, so now clear perform_jump
+                        if int_rst_pending = '1' then
+                            pc_should_increment <= '1';  -- Normal PC increment
+                            int_rst_pending <= '0';  -- Clear the flag
+                            perform_jump <= '0';  -- Clear jump flag - jump already happened
+                        else
+                            pc_should_increment <= '1';  -- Default: PC should increment
+                            perform_jump <= '0';  -- Reset jump flag (will be set if jump/call/ret occurs)
+                        end if;
+
                         pc_increment_extra <= '0';  -- Clear extra increment flag after use
                         if is_halt_op = '1' then
                             -- HLT instruction - stop execution

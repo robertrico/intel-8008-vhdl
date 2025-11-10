@@ -1,0 +1,175 @@
+# ECP5-5G Versa Development Kit Constraints
+# Board: LFE5UM5G-45F-VERSA-EVN
+# Device: LFE5UM5G-45F-8BG381C
+# Project: Intel 8008 Interrupt-Driven Cylon LED Effect
+
+# ====================================================================================
+# Clock Inputs
+# ====================================================================================
+
+# 100 MHz LVDS Oscillator (X1) - General Purpose Clock
+# Bank 6 - Connects to PCLKT6_0/PCLKC6_0
+# Note: P3 is the positive pin of the LVDS pair
+LOCATE COMP "clk" SITE "P3";
+IOBUF PORT "clk" IO_TYPE=LVDS DIFFRESISTOR=100;
+FREQUENCY PORT "clk" 100 MHz;
+
+# Internal generated clocks (phi1 and phi2 from phase_clocks module)
+# These are generated clocks derived from the 100 MHz system clock
+# phi1/phi2 run at approximately 455 kHz (100MHz / 220)
+# CRITICAL: Mark these as clocks so synthesis routes them properly
+FREQUENCY NET "phi1" 455 kHz;
+FREQUENCY NET "phi2" 455 kHz;
+
+# ====================================================================================
+# Reset (using a button or switch)
+# ====================================================================================
+
+# Using SW3-1 as reset
+# SW3 switches are active-low: logic 0 when ON (arrow up), logic 1 when OFF (down)
+# rst='0' (ON/up) = normal operation, rst='1' (OFF/down) = reset active
+# Bank 7 - 1.5V
+LOCATE COMP "rst" SITE "H2";
+IOBUF PORT "rst" IO_TYPE=LVCMOS15;
+
+# ====================================================================================
+# Button Input
+# ====================================================================================
+
+# Button on A18 - active-low with pull-up
+# When pressed: logic 0, when released: logic 1 (pulled high)
+# This button triggers interrupt source 1 (RST 1 vector)
+# Bank 2 - 3.3V
+LOCATE COMP "btn_A18" SITE "A18";
+IOBUF PORT "btn_A18" IO_TYPE=LVCMOS33 PULLMODE=UP;
+
+# ====================================================================================
+# Intel 8008 CPU Debug Outputs - 16 signals from internal CPU
+# ====================================================================================
+# These expose the 15 non-power pins of the Intel 8008 CPU plus one extra
+
+# 8008 Data Bus (D0-D7) - 8 pins
+# Using 12mA drive strength for better signal integrity on logic analyzer
+LOCATE COMP "cpu_d[0]" SITE "A12";
+IOBUF PORT "cpu_d[0]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[1]" SITE "A13";
+IOBUF PORT "cpu_d[1]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[2]" SITE "B13";
+IOBUF PORT "cpu_d[2]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[3]" SITE "C13";
+IOBUF PORT "cpu_d[3]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[4]" SITE "D13";
+IOBUF PORT "cpu_d[4]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[5]" SITE "E13";
+IOBUF PORT "cpu_d[5]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[6]" SITE "A14";
+IOBUF PORT "cpu_d[6]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[7]" SITE "C14";
+IOBUF PORT "cpu_d[7]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# 8008 State Outputs (S0, S1, S2) - 3 pins
+LOCATE COMP "cpu_s0" SITE "D14";
+IOBUF PORT "cpu_s0" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_s1" SITE "E14";
+IOBUF PORT "cpu_s1" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_s2" SITE "D11";
+IOBUF PORT "cpu_s2" IO_TYPE=LVCMOS33;
+
+# 8008 SYNC Output
+LOCATE COMP "cpu_sync" SITE "C10";
+IOBUF PORT "cpu_sync" IO_TYPE=LVCMOS33;
+
+# Phase Clocks (φ1 and φ2) - 2 pins
+LOCATE COMP "cpu_phi1" SITE "A9";
+IOBUF PORT "cpu_phi1" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_phi2" SITE "B10";
+IOBUF PORT "cpu_phi2" IO_TYPE=LVCMOS33;
+
+# READY signal
+LOCATE COMP "cpu_ready" SITE "D12";
+IOBUF PORT "cpu_ready" IO_TYPE=LVCMOS33;
+
+# INTERRUPT signal - IMPORTANT: Monitor this for interrupt activity!
+LOCATE COMP "cpu_int" SITE "E12";
+IOBUF PORT "cpu_int" IO_TYPE=LVCMOS33;
+
+# Extra debug output - CPU data bus enable
+LOCATE COMP "cpu_data_en" SITE "B12";
+IOBUF PORT "cpu_data_en" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# ====================================================================================
+# LED Outputs (8 LEDs for Cylon effect + 2 status LEDs)
+# ====================================================================================
+
+# All LEDs are active low: '0' = LED ON/lit, '1' = LED OFF/dark
+
+# 8 LEDs for Cylon bouncing effect
+LOCATE COMP "led_E16" SITE "E16";
+IOBUF PORT "led_E16" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_D17" SITE "D17";
+IOBUF PORT "led_D17" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_D18" SITE "D18";
+IOBUF PORT "led_D18" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_E18" SITE "E18";
+IOBUF PORT "led_E18" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_F17" SITE "F17";
+IOBUF PORT "led_F17" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_F18" SITE "F18";
+IOBUF PORT "led_F18" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_E17" SITE "E17";
+IOBUF PORT "led_E17" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_F16" SITE "F16";
+IOBUF PORT "led_F16" IO_TYPE=LVCMOS25;
+
+# Status LEDs
+LOCATE COMP "led_M20" SITE "M20";
+IOBUF PORT "led_M20" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_L18" SITE "L18";
+IOBUF PORT "led_L18" IO_TYPE=LVCMOS25;
+
+# ====================================================================================
+# Configuration
+# ====================================================================================
+
+# These apply to the entire design
+SYSCONFIG CONFIG_IOVOLTAGE=3.3 COMPRESS_CONFIG=ON MCCLK_FREQ=62;
+
+# ====================================================================================
+# Notes
+# ====================================================================================
+#
+# This constraints file is for the interrupt-driven Cylon LED effect project.
+# 8 LEDs (E16, D17, D18, E18, F17, F18, E17, F16) create the bouncing pattern.
+# 2 status LEDs (M20 = phi1 clock, L18 = power indicator) show system status.
+# 1 button input (A18) triggers interrupt via generic interrupt_controller.
+#
+# Interrupt Architecture:
+#   - Source 0: Startup interrupt (RST 0 -> 0x000)
+#   - Source 1: Button interrupt (RST 1 -> 0x008)
+#
+# Key Debug Signals:
+#   - cpu_int: Monitor this to see interrupt assertion/acknowledge
+#   - cpu_d[7:0]: Watch for RST opcodes (0x05, 0x0D) during T1I state
+#   - cpu_s0/s1/s2: Look for T1I state (S2=1, S1=1, S0=0)
+#
+# Refer to the ECP5-5G Versa Development Kit User Guide for complete pin listings:
+# https://www.latticesemi.com/products/developmentboardsandkits/ecp55gversadevkit
+#
