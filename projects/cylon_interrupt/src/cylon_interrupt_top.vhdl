@@ -370,6 +370,9 @@ begin
     -- 3. Memory controller drives during memory read cycles
     -- 4. I/O controller drives during I/O read cycles
     -- 5. Default: Hi-Z
+    --
+    -- NOTE: This MUST be combinatorial to avoid delaying bus data.
+    -- Glitch prevention is handled by registering enable signals at their sources.
     process(int_data_enable, int_data_out, cpu_data_enable, cpu_data_out, mem_data_enable, mem_data_out, io_data_enable, io_data_out)
     begin
         -- Default: tri-state

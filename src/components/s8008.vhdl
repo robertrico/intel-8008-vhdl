@@ -136,6 +136,7 @@ architecture rtl of s8008 is
     signal int_latched : std_logic := '0';    -- Latched interrupt request
     signal int_previous : std_logic := '0';   -- Previous INT value for edge detection
     signal in_int_ack_cycle : std_logic := '0';  -- Registered: '1' during entire T1I→T2→T3 sequence
+    signal prev_int_ack_cycle : std_logic := '0';  -- Previous value of in_int_ack_cycle
 
     -- Internal registers for address and data
     -- In a real 8008, these would come from the instruction decoder and register file
@@ -504,6 +505,8 @@ begin
                         -- T1 always transitions to T2
                         -- Interrupt check happens at T3 during FETCH only
                         timing_state <= T2;
+                        -- Clear interrupt acknowledge flag at T1->T2 transition
+                        -- This ensures it stays '1' through phi2 of T3 where instruction is latched
                         in_int_ack_cycle <= '0';  -- Normal cycle, not interrupt acknowledge
                         if DEBUG_VERBOSE then
                             report "T1 -> T2";
@@ -540,12 +543,6 @@ begin
                         end if;
 
                     when T3 =>
-                        -- Clear interrupt acknowledge flag when leaving T3
-                        -- But keep it set during T3 so we can detect interrupt ack cycles
-                        if next_phase = '1' then  -- Only clear on state transition
-                            in_int_ack_cycle <= '0';
-                        end if;
-
                         -- Variable-length cycles per Intel 8008 datasheet
                         -- Most instructions don't need T4/T5 execution states
                         --
@@ -558,6 +555,8 @@ begin
                         if in_int_ack_cycle = '1' then
                             -- Interrupt acknowledge cycle - RST is always 3-state
                             timing_state <= T1;
+                            -- Don't clear in_int_ack_cycle here - it will be cleared at T1->T2 transition
+                            -- This ensures it stays '1' during phi2 of T3 when instruction is latched
                             if DEBUG_VERBOSE then
                                 report "T3 -> T1 (interrupt acknowledge cycle - RST is 3-state)";
                             end if;
@@ -590,18 +589,14 @@ begin
                             end if;
                         else
                             -- Other microcode states - use runtime tracking
+                            -- IMPORTANT: Do NOT check for interrupts here!
+                            -- Interrupts are ONLY recognized between complete instructions (FETCH state).
+                            -- This prevents interrupting multi-byte instructions in the middle.
                             if skip_exec_states = '1' then
-                                -- 3-state cycle complete - check for interrupt
-                                if int_latched = '1' then
-                                    timing_state <= T1I;
-                                    if DEBUG_VERBOSE then
-                                        report "T3 -> T1I (interrupt pending at end of 3-state cycle)";
-                                    end if;
-                                else
-                                    timing_state <= T1;
-                                    if DEBUG_VERBOSE then
-                                        report "T3 -> T1 (3-state cycle - no interrupt)";
-                                    end if;
+                                -- 3-state cycle complete - continue to next cycle (no interrupt check)
+                                timing_state <= T1;
+                                if DEBUG_VERBOSE then
+                                    report "T3 -> T1 (3-state cycle, mid-instruction)";
                                 end if;
                             else
                                 timing_state <= T4;
@@ -619,17 +614,23 @@ begin
                         end if;
 
                     when T5 =>
-                        -- 5-state cycle complete - check for interrupt
-                        -- Per Intel 8008 datasheet state diagram: interrupt check at cycle end
-                        if int_latched = '1' then
+                        -- 5-state cycle complete - check for interrupt ONLY if instruction complete
+                        -- Per Intel 8008 datasheet: interrupts recognized between instructions only
+                        -- T5 is used for: EXECUTE (instruction complete), MEM_READ/WRITE (mid-instruction)
+                        -- Only check for interrupts after EXECUTE state (complete instruction)
+                        if int_latched = '1' and (microcode_state = EXECUTE or microcode_state = IO_TRANSFER) then
                             timing_state <= T1I;
                             if DEBUG_VERBOSE then
-                                report "T5 -> T1I (interrupt pending at end of 5-state cycle)";
+                                report "T5 -> T1I (interrupt pending at end of instruction)";
                             end if;
                         else
                             timing_state <= T1;
                             if DEBUG_VERBOSE then
-                                report "T5 -> T1 (5-state cycle complete - no interrupt)";
+                                if int_latched = '1' then
+                                    report "T5 -> T1 (interrupt pending but mid-instruction)";
+                                else
+                                    report "T5 -> T1 (5-state cycle complete - no interrupt)";
+                                end if;
                             end if;
                         end if;
 
@@ -681,10 +682,11 @@ begin
         variable effective_address : unsigned(13 downto 0);
     begin
         -- Select address source
-        -- SPECIAL CASE: During interrupt acknowledge jump, use jump target address directly
-        -- This ensures we output 0x0000 immediately without waiting for PC to update
+        -- SPECIAL CASE: During jumps (normal or interrupt RST), use jump target address directly
+        -- This ensures we output the target address immediately without waiting for PC to update
         -- Apply for both T1 and T2 since PC update hasn't taken effect yet
-        if perform_jump = '1' and (timing_state = T1 or timing_state = T2) then
+        -- Check BOTH perform_jump (normal jumps) AND in_int_ack_cycle (interrupt RST jumps)
+        if (perform_jump = '1' or in_int_ack_cycle = '1') and (timing_state = T1 or timing_state = T2) then
             effective_address := unsigned(jump_addr_high) & unsigned(jump_addr_low);
         elsif microcode_state = MEM_READ or microcode_state = MEM_WRITE then
             effective_address := memory_address;
@@ -767,8 +769,16 @@ begin
             data_in <= (others => '0');
             instruction_reg <= (others => '0');
         elsif rising_edge(phi2) then
+            -- INTERRUPT ACKNOWLEDGE: Check this FIRST, before normal read cycles
+            -- During interrupt ack, is_read_cycle is also '1', so we need to check int ack first
+            if timing_state = T3 and in_int_ack_cycle = '1' then
+                instruction_reg <= data_bus_in;
+                if DEBUG_VERBOSE then
+                    report "Interrupt RST opcode latched at T3/phi2: 0x" & to_hstring(unsigned(data_bus_in)) &
+                           " at " & time'image(now);
+                end if;
             -- Capture data during T3 of read cycles
-            if timing_state = T3 and is_read_cycle = '1' then
+            elsif timing_state = T3 and is_read_cycle = '1' then
                 data_in <= data_bus_in;
 
                 -- If this is an instruction fetch (PCI), also update instruction register
@@ -777,12 +787,6 @@ begin
                     if DEBUG_VERBOSE then
                         report "Instruction fetched: 0x" & to_hstring(unsigned(data_bus_in));
                     end if;
-                end if;
-            -- INTERRUPT ACKNOWLEDGE: Latch RST opcode from interrupt controller
-            elsif timing_state = T3 and in_int_ack_cycle = '1' then
-                instruction_reg <= data_bus_in;
-                if DEBUG_VERBOSE then
-                    report "Interrupt RST opcode latched: 0x" & to_hstring(unsigned(data_bus_in));
                 end if;
             end if;
         end if;
@@ -1262,17 +1266,36 @@ begin
                 -- instruction_reg format: 00 AAA 101 where AAA is the RST vector (0-7)
                 -- Calculate target: vector * 8
                 stack_pointer <= stack_pointer + 1;
-                address_stack(to_integer(stack_pointer + 1)) <= program_counter + 1;
+                -- INTERRUPT FIX: Push current PC, not PC+1
+                -- During interrupt, PC has not been incremented yet (line 1937-1943 prevents it)
+                -- We want to return to the interrupted instruction, so push PC as-is
+                address_stack(to_integer(stack_pointer + 1)) <= program_counter;
 
                 -- Set up jump to RST target
                 jump_addr_low <= std_logic_vector(to_unsigned(to_integer(unsigned(instruction_reg(5 downto 3))) * 8, 8));
                 jump_addr_high <= "000000";  -- RST vectors are in first 64 bytes
-                perform_jump <= '1';
+
+                -- HARDWARE BEHAVIOR: Force microcode to FETCH state for the next instruction
+                -- This mimics the hardware pipeline flush that occurs after interrupt.
+                -- After the RST jump executes, we'll be ready to fetch the instruction at the vector.
+                microcode_state <= FETCH;
+                cycle_type_reg <= "00";  -- PCI (instruction fetch)
+                skip_exec_states <= '1';  -- 3-state cycle
+
+                -- NOTE: We do NOT set perform_jump='1' for interrupt RST!
+                -- Instead, the interrupt jump is STATE-DRIVEN: it executes when
+                -- in_int_ack_cycle='1' AND timing_state=T1 (next cycle after this T3).
+                -- This ensures the jump happens exactly once, without needing a sticky flag.
+                -- Normal JMP/CALL/RET still use perform_jump flag as before.
 
                 if DEBUG_VERBOSE then
                     report "Interrupt RST " & integer'image(to_integer(unsigned(instruction_reg(5 downto 3)))) &
-                           " executing: will jump to 0x" &
+                           " executing: Pushing PC=0x" & to_hstring(program_counter) &
+                           ", jumping to 0x" &
                            to_hstring(to_unsigned(to_integer(unsigned(instruction_reg(5 downto 3))) * 8, 14));
+                    report "  Setting jump_addr_high=0x00, jump_addr_low=0x" &
+                           to_hstring(to_unsigned(to_integer(unsigned(instruction_reg(5 downto 3))) * 8, 8)) &
+                           " at " & time'image(now);
                 end if;
             end if;
 
@@ -1295,8 +1318,8 @@ begin
             --      Also enter at T5 end for 5-state cycles that need to complete
             -- IMPORTANT: Skip during interrupt acknowledge cycle - RST will be handled separately
             if ((timing_state = T3 and clock_phase = '0' and microcode_state = FETCH and in_int_ack_cycle = '0') or
-               (timing_state = T3 and clock_phase = '0' and skip_exec_states = '1' and microcode_state /= FETCH) or
-               (timing_state = T5 and clock_phase = '0' and skip_exec_states = '0')) then
+               (timing_state = T3 and clock_phase = '0' and skip_exec_states = '1' and microcode_state /= FETCH and in_int_ack_cycle = '0') or
+               (timing_state = T5 and clock_phase = '0' and skip_exec_states = '0' and in_int_ack_cycle = '0')) then
 
                 if DEBUG_VERBOSE then
                     report "Microcode handler entered: timing_state=" & timing_state_t'image(timing_state) &
@@ -1306,6 +1329,7 @@ begin
                            " in_int_ack=" & std_logic'image(in_int_ack_cycle);
                 end if;
 
+                -- Execute microcode case statement
                 case microcode_state is
                     when FETCH =>
                         -- Just fetched an instruction (3-state PCI cycle completed)
@@ -1717,7 +1741,7 @@ begin
                         -- Only use lower 6 bits for 14-bit address (8008 has 14-bit PC)
                         jump_addr_high <= data_in(5 downto 0);
                         if DEBUG_VERBOSE then
-                            report "Address high byte: 0x" & to_hstring(unsigned(data_in(5 downto 0)));
+                            report "ADDR_HIGH: Setting jump_addr_high=0x" & to_hstring(unsigned(data_in(5 downto 0)));
                         end if;
 
                         -- Check if this is a CALL or a JMP
@@ -1865,7 +1889,7 @@ begin
                         microcode_state <= FETCH;
                         cycle_type_reg <= "00";  -- PCI
                         skip_exec_states <= '1';  -- 3-state cycle
-                end case;
+                end case;  -- End of microcode_state case
             end if;  -- End of microcode handler condition
         end if;
     end process;
@@ -1882,25 +1906,22 @@ begin
         if reset_n = '0' then
             program_counter <= (others => '0');
         elsif rising_edge(phi1) then
-            -- Debug: Log all conditions at T1 to diagnose jump issue
-            if timing_state = T1 then
-                if DEBUG_VERBOSE then
-                    report "PC jump check at T1: perform_jump=" & std_logic'image(perform_jump) &
-                           " clock_phase=" & std_logic'image(clock_phase) &
-                           " timing_state=" & timing_state_t'image(timing_state);
-                end if;
-            end if;
-
-            -- Check if we should perform a jump (set in ADDR_HIGH, RET, or interrupt ack state)
-            -- Execute at T1 start (clock_phase='0') to ensure correct PC is available for address output
-            -- This is especially critical for interrupt acknowledge where PC must jump to 0x0000
-            if perform_jump = '1' and timing_state = T1 and clock_phase = '0' then
+            -- Jump execution logic - TWO mechanisms:
+            -- 1. STATE-DRIVEN (interrupt RST): Execute when in_int_ack_cycle='1' + timing_state=T1
+            -- 2. FLAG-DRIVEN (normal JMP/CALL/RET): Execute when perform_jump='1' + timing_state=T1
+            -- Both execute at T1 start (clock_phase='0') to ensure correct PC for address output
+            if timing_state = T1 and clock_phase = '0' and
+               (in_int_ack_cycle = '1' or perform_jump = '1') then
                 -- Load PC with jump target address (14-bit) at start of T1
                 program_counter <= unsigned(jump_addr_high) & unsigned(jump_addr_low);
+
                 if DEBUG_VERBOSE then
-                    report "Jump executed at T1 start: PC <= 0x" & to_hstring(unsigned(jump_addr_high) & unsigned(jump_addr_low));
+                    report "Jump executing: jump_addr_high=0x" & to_hstring(unsigned(jump_addr_high)) &
+                           ", jump_addr_low=0x" & to_hstring(unsigned(jump_addr_low)) &
+                           ", target PC=0x" & to_hstring(unsigned(jump_addr_high) & unsigned(jump_addr_low));
                 end if;
-                -- NOTE: perform_jump is cleared in the Microcode Sequencer process in the next FETCH state
+                -- NOTE: perform_jump is cleared by the Microcode Sequencer in the next FETCH state
+                -- For interrupt RST jumps, in_int_ack_cycle clears at T1->T2, preventing re-execution
 
             -- Handle extra PC increment for conditional jumps that are NOT taken
             -- When a conditional jump is not taken, we need to skip the high address byte that was fetched
@@ -1934,13 +1955,22 @@ begin
                     if timing_state = T3 and skip_exec_states = '1' then
                         -- Always increment for FETCH (instruction fetch) and IMMEDIATE (data fetch)
                         -- UNLESS we're about to take an interrupt (transitioning to T1I)
-                        if (microcode_state = FETCH or microcode_state = IMMEDIATE or pc_should_increment = '1') and not (microcode_state = FETCH and int_latched = '1') then
+                        -- OR during interrupt acknowledge cycle (in_int_ack_cycle = '1')
+                        if (microcode_state = FETCH or microcode_state = IMMEDIATE or pc_should_increment = '1')
+                           and not (microcode_state = FETCH and int_latched = '1')
+                           and in_int_ack_cycle = '0' then
                             program_counter <= program_counter + 1;
                             if DEBUG_VERBOSE then
                                 report "PC incremented to " & integer'image(to_integer(program_counter + 1)) & " (3-state cycle)";
                             end if;
-                        elsif microcode_state = FETCH and int_latched = '1' and DEBUG_VERBOSE then
-                            report "PC increment skipped due to interrupt (PC=" & integer'image(to_integer(program_counter)) & ")";
+                        elsif (microcode_state = FETCH and int_latched = '1') or in_int_ack_cycle = '1' then
+                            if DEBUG_VERBOSE then
+                                if in_int_ack_cycle = '1' then
+                                    report "PC increment skipped during interrupt acknowledge (PC=" & integer'image(to_integer(program_counter)) & ")";
+                                else
+                                    report "PC increment skipped due to interrupt (PC=" & integer'image(to_integer(program_counter)) & ")";
+                                end if;
+                            end if;
                         end if;
                     -- 5-state cycles (T1-T2-T3-T4-T5): increment at end of T5 if pc_should_increment='1'
                     elsif timing_state = T5 and skip_exec_states = '0' and pc_should_increment = '1' then

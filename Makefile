@@ -52,6 +52,7 @@ STOP_TIME_s8008_ram_test_tb = 60000us
 STOP_TIME_s8008_simple_add_tb = 1000us
 STOP_TIME_s8008_inp_cpi_tb = 1000us
 STOP_TIME_s8008_interrupt_tb = 5000us
+STOP_TIME_test_rst1_interrupt = 500us
 
 # Get stop time for active test, or use default
 SIM_STOP_TIME ?= $(or $(STOP_TIME_$(ACTIVE_TB_ENTITY)),1ms)
@@ -168,6 +169,9 @@ test-inp-cpi:
 
 test-interrupt:
 	@$(MAKE) sim TEST=s8008_interrupt_tb
+
+test-rst-jmp-loop:
+	@$(MAKE) sim TEST=test_rst1_interrupt
 
 # Run all assembly program tests
 test-all-programs:
