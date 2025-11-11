@@ -1,14 +1,12 @@
-# Intel 8008 VHDL Implementation - v1.2
+# Intel 8008 VHDL Implementation - v1.3
 
-A complete, cycle-accurate VHDL implementation of the Intel 8008 microprocessor with interrupt support, interactive monitor, comprehensive test suite, and **working FPGA deployment** with real hardware validation.
+A complete, cycle-accurate VHDL implementation of the Intel 8008 microprocessor with **fully functional interrupt support**, interactive monitor, comprehensive test suite, and **working FPGA deployment** with real hardware validation.
 
-[![Status](https://img.shields.io/badge/status-v1.2%20hardware%20validated-brightgreen)]()
+[![Status](https://img.shields.io/badge/status-v1.3%20interrupts%20working-brightgreen)]()
 [![FPGA](https://img.shields.io/badge/FPGA-Deployed%20%26%20Working-success)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE.txt)
 
-> **New in v1.2:** Working FPGA deployment! The [blinky project](projects/blinky/) synthesizes to hardware and actually blinks LEDs on the ECP5-5G board - written entirely in 8008 assembly. Major core improvements: fixed INR/DCR race condition, corrected I/O cycle detection, improved interrupt acknowledge handling, enhanced ROM/RAM address validation, and refined testbench accuracy.
-
-> **New in v1.1:** Corrected interrupt implementation with proper T3 sampling, interrupt synchronizer, and PC preservation per Intel 8008 Rev 2 datasheet specifications.
+> **New in v1.3:** Interrupts are fully operational! After extensive debugging and testing, the interrupt system now correctly handles interrupt acknowledge cycles, vector addressing, and return address preservation. The implementation includes new core system components (generic I/O controller, memory controller, interrupt controller with debouncing) and multiple interrupt-driven demonstration projects including a button-triggered Cylon LED effect. See [VERSIONS.md](VERSIONS.md) for complete version history.
 
 > **Platform Note:** This project has been developed and tested exclusively on **macOS Sequoia 15.6.1**. Compatibility with other operating systems has not been verified.
 
@@ -17,48 +15,13 @@ A complete, cycle-accurate VHDL implementation of the Intel 8008 microprocessor 
 This project implements the Intel 8008 microprocessor (introduced April 1972) in VHDL, providing:
 
 - **Complete 8008 CPU core** - All 48 instructions with cycle-accurate behavior
-- **Interrupt support** - Hardware-accurate interrupt handling with T1I acknowledge cycle and synchronizer
+- **Fully functional interrupts** - Hardware-accurate interrupt handling with T1I acknowledge cycle, vector addressing, and return address preservation (v1.3)
 - **Interactive monitor** - Real-time assembly program execution via VHPIDIRECT
-- **Memory subsystem** - 2KB ROM + 1KB RAM
+- **Memory subsystem** - 2KB ROM + 1KB RAM with unified memory controller
 - **Comprehensive test suite** - 13+ validated programs with assertion-based verification
-- **FPGA deployment** - Running on real hardware! Blinky project deploys to Lattice ECP5-5G and blinks LEDs
+- **FPGA deployment** - Running on real hardware! Multiple projects deploy to Lattice ECP5-5G including interrupt-driven I/O
 
-The blinky project demonstrates real hardware execution, while the interactive monitor provides a command-line interface for experimenting with 8008 assembly programs in simulation.
-
-### What's New in v1.2
-
-**Hardware Deployment - The Big Milestone:**
-- First working FPGA deployment - Real 8008 code running on real hardware!
-- Blinky project - Assembly program that synthesizes and blinks LEDs on ECP5-5G board
-- Complete build-to-bitstream workflow with `make deploy` in [projects/blinky/](projects/blinky/)
-- Hardware-validated I/O operations (OUT instruction driving physical LEDs)
-- Demonstrates clock generation, ROM loading, and peripheral interfacing on FPGA
-
-**Critical Bug Fixes:**
-- Fixed INR/DCR race condition - Corrected result byte calculation timing issue
-- Fixed I/O cycle detection - Proper identification and handling of INP/OUT operations
-- Improved interrupt acknowledge - Correct RST 0 injection during T1I cycle with PC preservation
-- Enhanced ROM read cycles - Prevent bus conflicts during write/I/O operations
-- Added address validation - ROM/RAM now validate address ranges for better debugging
-
-**Testing & Refinement:**
-- Improved testbench accuracy across all 13+ test programs
-- Enhanced I/O console for better cycle detection
-- Refined interrupt controller timing and synchronization
-- Better build organization (assembly outputs in dedicated build directories)
-
-### What's New in v1.1
-
-**Interrupt System Corrections:**
-- Moved INT sampling from T1 to end of T3 during FETCH (per datasheet specification)
-- Implemented interrupt synchronizer per Rev 2 datasheet requirements (±200ns stability)
-- Fixed T1/T1I mutual exclusivity - proper state transition without spurious T1
-- Added PC preservation during interrupt acknowledge sequence
-- Created comprehensive interrupt testbench framework
-
-For detailed analysis of the v1.0 bugs and fixes, see [docs/interrupt_analysis_and_testing.txt](docs/interrupt_analysis_and_testing.txt).
-
----
+Multiple demonstration projects showcase the system capabilities: from simple LED blink to interrupt-driven button input with debouncing. The interactive monitor provides a command-line interface for experimenting with 8008 assembly programs in simulation.
 
 ## Quick Start
 
@@ -87,7 +50,7 @@ cp .env.example .env
 # Edit .env and set USERNAME to your macOS username
 ```
 
-### Hardware Blinky Project (NEW in v1.2!)
+### Hardware Blinky Project
 
 **Deploy real 8008 assembly to FPGA hardware:**
 
@@ -106,6 +69,21 @@ This will:
 Watch LED0 blink! The program uses a delay loop written in pure 8008 assembly to create ~0.5 second on/off intervals. This is a complete 8008 system running real assembly code on real hardware.
 
 See [projects/blinky/Makefile](projects/blinky/Makefile) for individual build steps and [projects/blinky/blinky.asm](projects/blinky/blinky.asm) for the assembly source with detailed comments.
+
+### Interrupt-Driven Cylon Effect (NEW in v1.3!)
+
+**See interrupts in action on real hardware:**
+
+```bash
+cd projects/cylon_interrupt
+make deploy
+```
+
+This demonstrates the fully operational interrupt system with a Knight Rider-style LED effect advanced by button presses. Press the button and watch the hardware interrupt trigger the interrupt service routine that shifts the LED pattern. Includes comprehensive debug tooling for analyzing interrupt timing and behavior.
+
+Also available:
+- [Polling-based Cylon](projects/cylon/) - Basic LED animation without interrupts
+- [Button-driven Cylon](projects/cylon_single/) - Button input via polling
 
 ### Interactive Monitor
 
@@ -157,16 +135,7 @@ make sim WAVE=1        # Auto-open GTKWave after simulation
 
 ## What's Included
 
-### v1.2 Features (Hardware Validated!)
-
-#### FPGA Deployment - WORKING!
-- **Blinky project** synthesizes and runs on Lattice ECP5-5G hardware
-- **Real 8008 assembly** driving physical LEDs via OUT instruction
-- **Complete system-on-chip** with CPU, ROM, RAM, I/O controller, and clock generation
-- **One-command deployment** - `make deploy` builds and programs FPGA
-- **Hardware-validated** interrupt handling, I/O operations, and timing
-
-### v1.0 Features (All Working)
+### Core Features
 
 #### CPU Core
 - **All 48 instructions** implemented and tested
@@ -176,9 +145,17 @@ make sim WAVE=1        # Auto-open GTKWave after simulation
 - **14-bit addressing** (16KB address space)
 - **Two-phase clock** (φ1/φ2) generation
 
+#### Interrupt System (v1.3 - Fully Operational)
+- **Hardware-accurate interrupt handling** - T1I acknowledge cycle, vector addressing, return address preservation
+- **Interrupt controller** with hardware debouncing for reliable external signals
+- **Synchronization** per Intel 8008 Rev 2 datasheet requirements
+- **Multiple interrupt demonstration projects** - Button-triggered, polling, and interrupt-driven examples
+
 #### Memory & I/O
 - **2KB ROM** with program loading from assembled code
 - **1KB RAM** with full read/write support
+- **Generic I/O controller** - Configurable input/output ports with interrupt support
+- **Memory controller** - Unified ROM/RAM access with proper address decoding
 - **I/O console** for simulation testing
 - **Interactive terminal** via VHPIDIRECT (monitor project)
 
@@ -203,9 +180,11 @@ All tests **pass** with full assertion checking.
 
 #### FPGA Synthesis & Deployment
 - **Successfully deployed** to Lattice ECP5-5G (45k LUTs)
-- **Working on real hardware** - Blinky project validated
+- **Working on real hardware** - Multiple projects validated (blinky, Cylon effects, interrupt-driven I/O)
+- **Hardware-validated interrupts** - Real button inputs trigger interrupt service routines on FPGA
 - **Complete synthesis flow** - GHDL → Yosys → nextpnr → bitstream
 - **Place & Route** with timing and resource reports
+- **Logic capture analysis** - DSLogic traces validate timing and behavior
 - Portable to other FPGA families with constraint modifications
 
 ---
@@ -214,17 +193,23 @@ All tests **pass** with full assertion checking.
 
 ```
 intel-8008-vhdl/
-├── src/components/          # Active v1.0 implementation
-│   ├── s8008.vhdl          # Complete 8008 CPU (1795 lines!)
-│   ├── i8008_alu.vhdl      # Arithmetic Logic Unit
-│   ├── phase_clocks.vhdl   # Two-phase clock generator
-│   ├── rom_2kx8.vhdl       # 2KB ROM with program loading
-│   ├── ram_1kx8.vhdl       # 1KB RAM
-│   └── io_console.vhdl     # I/O console for testing
+├── src/components/          # Core VHDL components
+│   ├── s8008.vhdl                      # Complete 8008 CPU core
+│   ├── i8008_alu.vhdl                  # Arithmetic Logic Unit
+│   ├── phase_clocks.vhdl               # Two-phase clock generator
+│   ├── rom_2kx8.vhdl                   # 2KB ROM with program loading
+│   ├── ram_1kx8.vhdl                   # 1KB RAM
+│   ├── io_console.vhdl                 # I/O console for testing
+│   ├── io_controller.vhdl              # Generic I/O controller (NEW v1.3)
+│   ├── memory_controller.vhdl          # Unified memory controller (NEW v1.3)
+│   ├── interrupt_controller.vhdl       # Interrupt controller (NEW v1.3)
+│   ├── reset_interrupt_controller.vhdl # Reset/interrupt sync (NEW v1.3)
+│   └── debouncer.vhdl                  # Hardware debouncer (NEW v1.3)
 │
 ├── sim/                     # Test programs and testbenches
 │   ├── s8008_tb.vhdl       # Main comprehensive test
 │   ├── s8008_*_tb.vhdl     # Individual test program runners
+│   ├── test_rst1_interrupt.vhdl  # Interrupt validation (NEW v1.3)
 │   └── units/              # Unit tests for each instruction type
 │
 ├── test_programs/           # 8008 assembly programs
@@ -233,11 +218,21 @@ intel-8008-vhdl/
 │   └── *.mem               # Memory initialization files
 │
 ├── projects/
-│   ├── blinky/             # Hardware validation project (NEW in v1.2)
+│   ├── blinky/             # Hardware validation project (v1.2)
 │   │   ├── blinky.asm      # LED blink program in 8008 assembly
 │   │   ├── src/            # FPGA top-level and peripherals
 │   │   ├── constraints/    # ECP5-5G pin constraints
 │   │   └── Makefile        # Complete FPGA deployment workflow
+│   ├── cylon/              # Cylon LED effect - polling (NEW v1.3)
+│   │   ├── cylon.asm       # Knight Rider style LED animation
+│   │   └── src/            # FPGA implementation
+│   ├── cylon_single/       # Button-driven Cylon - polling (NEW v1.3)
+│   │   ├── cylon_single.asm # Button advances LED pattern
+│   │   └── src/            # FPGA implementation
+│   ├── cylon_interrupt/    # Interrupt-driven Cylon (NEW v1.3)
+│   │   ├── test_programs/  # Interrupt-driven LED animation
+│   │   ├── test/           # Analysis tools (timing, glitches, traces)
+│   │   └── src/            # FPGA implementation
 │   ├── monitor_8008/       # Interactive monitor project
 │   │   ├── monitor.asm     # Monitor program source
 │   │   ├── console_vhpi.c  # C code for real terminal I/O
@@ -247,10 +242,13 @@ intel-8008-vhdl/
 ├── docs/                    # Documentation and datasheets
 │   ├── 8008_1972.pdf       # Original Intel datasheet
 │   ├── 8008UM.pdf          # User manual
-│   └── SIM8_01_Schematic.pdf  # Reference design
+│   ├── SIM8_01_Schematic.pdf  # Reference design
+│   ├── logic-cap.dsl       # Logic capture data (NEW v1.3)
+│   └── interrupt_analysis_and_testing.txt  # Interrupt analysis
 │
 ├── Makefile                 # Main build system
 ├── common.mk                # Shared build rules
+├── VERSIONS.md              # Version history (NEW v1.3)
 └── hex_to_mem.py           # Utility to convert HEX to MEM format
 ```
 
@@ -414,6 +412,8 @@ See [projects/monitor_8008/README.txt](projects/monitor_8008/README.txt) for ful
 ---
 
 ## Interrupt System: Implementation and Historical Context
+
+> **Status (v1.3):** The interrupt system is fully operational and hardware-validated! This implementation correctly handles interrupt acknowledge cycles, RST vector addressing, and return address preservation. The system has been tested extensively in both simulation and on real FPGA hardware with button-triggered interrupts.
 
 The Intel 8008 interrupt mechanism represents an early and minimalist approach to interrupt handling that differs significantly from later microprocessors. Understanding its operation requires careful analysis of the datasheet evolution and timing requirements.
 
@@ -737,7 +737,7 @@ Our implementation generates these from a 100 MHz FPGA clock.
 
 ## FPGA Deployment - COMPLETE!
 
-**v1.2 Achievement:** The 8008 implementation is now running on real hardware! The blinky project successfully deploys to the ECP5-5G board and blinks LEDs using an 8008 assembly program.
+**Hardware Achievement:** The 8008 implementation is now running on real hardware! Multiple projects successfully deploy to the ECP5-5G board, including the blinky LED demo and interrupt-driven button input (v1.3).
 
 ### What's Working on Hardware
 
@@ -747,13 +747,26 @@ Our implementation generates these from a 100 MHz FPGA clock.
 - Delay subroutine with nested loops (~227,000 cycles per blink)
 - Runs indefinitely, demonstrating stable FPGA operation
 
+**Interrupt-Driven Cylon Effect** - [projects/cylon_interrupt/](projects/cylon_interrupt/) (NEW v1.3)
+- Hardware-validated interrupt system with button-triggered interrupts
+- RST 1 interrupt vector properly routes to interrupt service routine
+- Return address correctly preserved and restored
+- Hardware debouncer ensures clean button inputs
+- Comprehensive debug tools included (state tracing, glitch analysis, timing verification)
+
+**Cylon LED Projects** - Demonstration of polling vs. interrupts
+- [Basic Cylon](projects/cylon/) - Polling-based LED animation
+- [Button Cylon](projects/cylon_single/) - Button input via polling
+- Shows evolution from polling to interrupt-driven design
+
 **Complete System-on-Chip**
 - Intel 8008 CPU core running at ~455 kHz
 - 2KB ROM initialized with assembled program
 - 1KB RAM for stack and data
-- Simple I/O controller for LED output
+- Generic I/O controller with interrupt support
+- Memory controller for unified ROM/RAM access
+- Interrupt controller with debouncing (synchronized per Rev 2 datasheet)
 - Two-phase clock generator (φ1/φ2) from FPGA oscillator
-- Interrupt controller (synchronized per Rev 2 datasheet)
 
 **One-Command Deployment**
 ```bash
@@ -831,16 +844,17 @@ Modify this file to add:
 
 ### Next Steps for Hardware Development
 
-**Current focus (v1.3):** Validate implementation accuracy by running vintage 8008 programs from [jim11662418's 8008 SBC collection](https://github.com/jim11662418/Intel_8008_Single_Board_Computer) with minimal assembly modifications.
+**Current Status:** Core 8008 functionality fully validated on FPGA hardware, including interrupts!
 
 Future enhancements:
 
 1. **UART Interface** - Implement serial communication peripheral for terminal I/O
 2. **Monitor on Hardware** - Adapt interactive monitor program to run on FPGA with UART
-3. **Performance Optimization** - Increase clock frequency beyond current ~455 kHz
-4. **Resource Optimization** - Reduce LUT usage for smaller FPGA targets
-5. **Additional Peripherals** - Add timers, GPIO, or other 8008-compatible peripherals
-6. **Multi-Project Support** - Additional hardware validation programs beyond blinky
+3. **Vintage Program Validation** - Run vintage 8008 programs from [jim11662418's 8008 SBC collection](https://github.com/jim11662418/Intel_8008_Single_Board_Computer)
+4. **Performance Optimization** - Increase clock frequency beyond current ~455 kHz
+5. **Resource Optimization** - Reduce LUT usage for smaller FPGA targets
+6. **Additional Peripherals** - Add timers, GPIO, or other 8008-compatible peripherals
+7. **Real Silicon Interface** - Design level shifter PCB for interfacing with real 8008 chip (PMOS -9V/0V logic)
 
 ---
 
@@ -974,16 +988,17 @@ When contributing:
 
 | Component | Status |
 |-----------|--------|
-| CPU Core (all 48 instructions) | Complete (simulation & hardware) |
-| ALU Operations | Complete (simulation & hardware) |
-| Memory (ROM + RAM) | Complete (simulation & hardware) |
-| I/O System | Complete (simulation & hardware) |
-| Interactive Monitor | Complete (VHPIDIRECT simulation) |
-| Test Suite | Complete (13+ tests pass) |
-| Simulation Verification | Validated |
-| FPGA Synthesis | Verified (ECP5) |
-| Hardware Deployment | Complete (Blinky project working!) |
-| Real Silicon Interface | Future Work |
+| CPU Core (all 48 instructions) | ✅ Complete (simulation & hardware) |
+| ALU Operations | ✅ Complete (simulation & hardware) |
+| Memory (ROM + RAM) | ✅ Complete (simulation & hardware) |
+| I/O System | ✅ Complete (simulation & hardware) |
+| **Interrupt System** | ✅ **Complete (v1.3 - hardware validated!)** |
+| Interactive Monitor | ✅ Complete (VHPIDIRECT simulation) |
+| Test Suite | ✅ Complete (13+ tests pass) |
+| Simulation Verification | ✅ Validated |
+| FPGA Synthesis | ✅ Verified (ECP5) |
+| Hardware Deployment | ✅ Complete (Multiple projects working!) |
+| Real Silicon Interface | 🔜 Future Work |
 
 ---
 
@@ -1007,3 +1022,9 @@ make all              # Launch interactive monitor
   - Repository: https://github.com/mikeakohn/naken_asm
   - Required for: Assembling custom 8008 programs
   - Supports 8080 syntax (more familiar than original 8008 mnemonics)
+
+---
+
+## Version History
+
+For detailed information about changes in each release, see [VERSIONS.md](VERSIONS.md).
