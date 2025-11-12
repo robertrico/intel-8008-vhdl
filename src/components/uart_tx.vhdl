@@ -42,7 +42,7 @@ entity uart_tx is
         tx_busy  : out std_logic;
 
         -- UART output
-        uart_tx  : out std_logic
+        uart_tx_o : out std_logic
     );
 end entity uart_tx;
 
@@ -78,14 +78,14 @@ begin
             bit_timer  <= 0;
             bit_index  <= 0;
             tx_data_sr <= (others => '0');
-            uart_tx    <= '1';  -- UART idle is high
+            uart_tx_o  <= '1';  -- UART idle is high
             tx_busy_i  <= '0';
 
         elsif rising_edge(clk) then
             case state is
 
                 when IDLE =>
-                    uart_tx   <= '1';  -- UART idle is high
+                    uart_tx_o <= '1';  -- UART idle is high
                     tx_busy_i <= '0';
                     bit_timer <= 0;
                     bit_index <= 0;
@@ -97,7 +97,7 @@ begin
                     end if;
 
                 when START_BIT =>
-                    uart_tx <= '0';  -- Start bit is low
+                    uart_tx_o <= '0';  -- Start bit is low
 
                     if bit_timer < CLKS_PER_BIT - 1 then
                         bit_timer <= bit_timer + 1;
@@ -107,7 +107,7 @@ begin
                     end if;
 
                 when DATA_BITS =>
-                    uart_tx <= tx_data_sr(bit_index);  -- Transmit LSB first
+                    uart_tx_o <= tx_data_sr(bit_index);  -- Transmit LSB first
 
                     if bit_timer < CLKS_PER_BIT - 1 then
                         bit_timer <= bit_timer + 1;
@@ -123,7 +123,7 @@ begin
                     end if;
 
                 when STOP_BIT =>
-                    uart_tx <= '1';  -- Stop bit is high
+                    uart_tx_o <= '1';  -- Stop bit is high
 
                     if bit_timer < CLKS_PER_BIT - 1 then
                         bit_timer <= bit_timer + 1;

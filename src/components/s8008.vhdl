@@ -1147,13 +1147,11 @@ begin
                         report "Decoded as conditional CALL (CCC=" &
                                std_logic'image(opcode(5)) & std_logic'image(opcode(4)) & std_logic'image(opcode(3)) & ")";
                     end if;
-                elsif opcode(2 downto 0) = "111" then
-                    -- 01 XXX 111 = RET
-                    is_ret_op <= '1';
                 elsif opcode(0) = '1' then
                     -- 01 XXX XX1 = I/O instructions (INP or OUT)
                     -- INP: 01 00M MM1 (bits 5:4 = 00)
                     -- OUT: 01 RRM MM1 (bits 5:4 ≠ 00)
+                    -- NOTE: RET is class 00 (bits[7:6]="00"), not class 01, so no conflict here
                     if opcode(5 downto 4) = "00" then
                         -- INP: Read from input port into accumulator
                         is_inp_op <= '1';
@@ -1170,6 +1168,12 @@ begin
                             report "Decoded as OUT (port=" & integer'image(to_integer(unsigned(opcode(5 downto 1)))) & ")";
                         end if;
                     end if;
+                elsif opcode(2 downto 0) = "111" then
+                    -- 01 XXX 111 = RET
+                    -- NOTE: This should never be reached because RET is actually class 00 (bits[7:6]="00")
+                    -- This check exists in the old code but is WRONG - RET=0x07, not 0x47!
+                    -- Keeping it for now but it should be removed
+                    is_ret_op <= '1';
                 end if;
 
             when "10" =>

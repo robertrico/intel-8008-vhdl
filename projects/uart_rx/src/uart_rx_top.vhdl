@@ -1,18 +1,21 @@
 --------------------------------------------------------------------------------
--- UART TX Top Level - Intel 8008 FPGA Implementation
+-- UART RX Top Level - Intel 8008 FPGA Implementation
 --------------------------------------------------------------------------------
--- UART transmitter demonstration using Intel 8008 CPU
--- Demonstrates generic uart_tx component for serial communication
+-- UART transceiver (TX + RX) demonstration using Intel 8008 CPU
+-- Demonstrates bidirectional serial communication with echo and line editing
 --
 -- Features:
---   - Generic UART transmitter at 9600 baud, 8N1
---   - Simple I/O interface for transmitting characters
---   - Status register to check transmission busy state
+--   - Generic UART transceiver at 9600 baud, 8N1
+--   - Simple I/O interface for transmitting and receiving characters
+--   - Status registers for TX busy and RX ready states
+--   - Read-clear mechanism for RX data
 --   - Memory-mapped I/O for UART control
 --
 -- I/O Ports:
 --   OUT 10: UART TX data register (write byte to transmit)
---   INP 10: UART TX status register (bit 0 = tx_busy)
+--   INP 0: UART TX status register (bit 0 = tx_busy)
+--   INP 1: UART RX data register (read byte, clears rx_ready)
+--   INP 2: UART RX status register (bit 0 = rx_ready)
 --
 -- Memory Map:
 --   ROM: 0x0000-0x07FF (2KB)
@@ -25,18 +28,19 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity uart_tx_top is
+entity uart_rx_top is
     port (
         -- System clock and reset
         clk         : in  std_logic;
         rst         : in  std_logic;
 
-        -- UART TX output
+        -- UART TX/RX
         uart_tx     : out std_logic;
+        uart_rx     : in  std_logic;
 
         -- Board LEDs (status indicators)
         led_E16     : out std_logic;  -- LED0 - TX busy indicator
-        led_D17     : out std_logic;  -- LED1 - unused
+        led_D17     : out std_logic;  -- LED1 - RX ready indicator
         led_D18     : out std_logic;  -- LED2 - unused
         led_E18     : out std_logic;  -- LED3 - unused
         led_F17     : out std_logic;  -- LED4 - unused
@@ -58,9 +62,9 @@ entity uart_tx_top is
         cpu_int     : out std_logic;
         cpu_data_en : out std_logic                       -- CPU data bus enable
     );
-end entity uart_tx_top;
+end entity uart_rx_top;
 
-architecture rtl of uart_tx_top is
+architecture rtl of uart_rx_top is
 
     --------------------------------------------------------------------------------
     -- Component Declarations
@@ -102,7 +106,7 @@ architecture rtl of uart_tx_top is
 
     component rom_2kx8 is
         generic (
-            ROM_FILE : string := "test_programs/simple_add.mem"
+            ROM_FILE : string := "test_programs/uart_rx.mem"
         );
         port (
             ADDR     : in  std_logic_vector(10 downto 0);
@@ -207,7 +211,7 @@ architecture rtl of uart_tx_top is
     signal io_data_out      : std_logic_vector(7 downto 0);
     signal io_data_enable   : std_logic;
     signal io_port_out      : std_logic_vector(23 downto 0);  -- 3 ports * 8 bits (port 8 LEDs, port 9 unused, port 10 UART data)
-    signal io_port_in       : std_logic_vector(7 downto 0);   -- 1 port * 8 bits (port 0 UART status)
+    signal io_port_in       : std_logic_vector(39 downto 0);  -- 5 ports * 8 bits (0: TX status, 1-2: interrupts, 3: RX data, 4: RX status)
 
     -- ROM signals
     signal rom_addr : std_logic_vector(10 downto 0);
@@ -221,9 +225,10 @@ architecture rtl of uart_tx_top is
     signal ram_rw_n     : std_logic;
     signal ram_cs_n     : std_logic;
 
-    -- UART signals (simplified - i8008_uart handles cycle detection internally)
-    signal uart_tx_data_from_port : std_logic_vector(7 downto 0);
-    signal uart_status_to_port    : std_logic_vector(7 downto 0);
+    -- UART signals
+    signal uart_tx_status   : std_logic_vector(7 downto 0);
+    signal uart_rx_status   : std_logic_vector(7 downto 0);
+    signal uart_rx_data     : std_logic_vector(7 downto 0);
 
     -- LED output register
     signal led_out : std_logic_vector(7 downto 0);
@@ -357,7 +362,7 @@ begin
     -- ROM: 2KB at 0x0000-0x07FF
     u_rom : rom_2kx8
         generic map (
-            ROM_FILE => "test_programs/uart_tx.mem"
+            ROM_FILE => "test_programs/uart_rx.mem"
         )
         port map (
             ADDR     => rom_addr,
@@ -407,8 +412,8 @@ begin
     --------------------------------------------------------------------------------
     u_io_controller : io_controller
         generic map (
-            NUM_OUTPUT_PORTS => 3,   -- Port 8 (LEDs), Port 9 (unused), Port 10 (UART data)
-            NUM_INPUT_PORTS  => 1    -- Port 0 (UART status)
+            NUM_OUTPUT_PORTS => 3,   -- Port 8 (LEDs), Port 9 (unused), Port 10 (UART TX data)
+            NUM_INPUT_PORTS  => 5    -- Ports 0-4 (0: TX status, 1-2: interrupts, 3: RX data, 4: RX status)
         )
         port map (
             phi1            => phi1,
@@ -429,25 +434,28 @@ begin
     -- Map port 8 (first output port, index 0) to LEDs
     led_out <= io_port_out(7 downto 0);
 
-    -- Map port 10 (third output port, index 2) to UART TX data input
-    uart_tx_data_from_port <= io_port_out(23 downto 16);
-
-    -- Map port 0 (first input port) to UART status output
-    io_port_in <= uart_status_to_port;
+    -- Map UART status/data to I/O ports
+    -- Port 0 (TX status), Port 3 (RX data), Port 4 (RX status)
+    -- Note: Ports 1 and 2 are HARDWIRED inside io_controller to int_status_in/int_active_in
+    --       We must NOT drive those bits here!
+    io_port_in(7 downto 0)   <= uart_tx_status;      -- Port 0
+    io_port_in(15 downto 8)  <= (others => '0');     -- Port 1 (RESERVED - handled by io_controller)
+    io_port_in(23 downto 16) <= (others => '0');     -- Port 2 (RESERVED - handled by io_controller)
+    io_port_in(31 downto 24) <= uart_rx_data;        -- Port 3
+    io_port_in(39 downto 32) <= uart_rx_status;      -- Port 4
 
     --------------------------------------------------------------------------------
-    -- UART Component with 8008 Interface
-    --------------------------------------------------------------------------------
-    -- This component encapsulates both the UART TX engine and the 8008-specific
-    -- I/O cycle detection logic, making it reusable across projects
+    -- UART Component with 8008 Interface (TX + RX enabled)
     --------------------------------------------------------------------------------
     u_uart : entity work.s8008_uart(rtl)
         generic map (
             CLK_FREQ_HZ    => 100_000_000,  -- 100 MHz system clock
             BAUD_RATE      => 9600,          -- 9600 baud
             TX_DATA_PORT   => 10,            -- OUT 10 for TX data
-            TX_STATUS_PORT => 0,             -- IN 0 for status
-            ENABLE_RX      => false           -- Enable RX functionality
+            TX_STATUS_PORT => 0,             -- IN 0 for TX status
+            RX_DATA_PORT   => 3,             -- IN 3 for RX data (ports 1,2 reserved for interrupts)
+            RX_STATUS_PORT => 4,             -- IN 4 for RX status
+            ENABLE_RX      => true           -- Enable RX functionality
         )
         port map (
             clk            => clk,
@@ -458,8 +466,11 @@ begin
             S1             => S1,
             S0             => S0,
             data_bus       => data_bus,
-            tx_status_out  => uart_status_to_port,
-            uart_tx        => UART_TX
+            tx_status_out  => uart_tx_status,
+            rx_status_out  => uart_rx_status,
+            rx_data_out    => uart_rx_data,
+            uart_tx        => uart_tx,
+            uart_rx        => uart_rx
         );
 
     --------------------------------------------------------------------------------
@@ -480,10 +491,12 @@ begin
     -- LED Outputs (all active low)
     --------------------------------------------------------------------------------
     -- LED0: UART TX busy indicator
-    led_E16 <= not uart_status_to_port(0);  -- Invert tx_busy bit
+    led_E16 <= not uart_tx_status(0);  -- Invert tx_busy bit
 
-    -- Remaining LEDs: unused (all off)
-    led_D17 <= led_out(1);
+    -- LED1: UART RX ready indicator
+    led_D17 <= not uart_rx_status(0);  -- Invert rx_ready bit
+
+    -- Remaining LEDs: from LED register
     led_D18 <= led_out(2);
     led_E18 <= led_out(3);
     led_F17 <= led_out(4);

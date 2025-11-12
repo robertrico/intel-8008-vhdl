@@ -43,21 +43,17 @@ begin
     begin
         if rising_edge(CLK) then
             if CS_N = '0' and RW_N = '0' then
-                -- Write mode: store data on clock edge
                 ram(to_integer(unsigned(ADDR))) <= DATA_IN;
             end if;
         end if;
     end process;
 
     -- Combinational read process
-    read_proc: process(ADDR, CS_N, ram)
+    read_proc: process(ADDR, CS_N, RW_N, ram)
     begin
-        if CS_N = '0' and RW_N = '1' and ADDR /= "XXXXXXXXXX" and ADDR /= "ZZZZZZZZZZ" and
-           ADDR /= "UUUUUUUUUU" and ADDR /= "----------" then
-            -- Read mode with valid address: output data combinationally
+        if CS_N = '0' and RW_N = '1' then
             DATA_OUT <= ram(to_integer(unsigned(ADDR)));
         else
-            -- Not selected, writing, or invalid address: tri-state
             DATA_OUT <= (others => 'Z');
         end if;
     end process;

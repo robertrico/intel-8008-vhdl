@@ -67,10 +67,10 @@ entity memory_controller is
 end entity memory_controller;
 
 architecture rtl of memory_controller is
-    -- Address capture signals
-    signal addr_low_capture    : std_logic_vector(7 downto 0);
-    signal addr_high_capture   : std_logic_vector(5 downto 0);
-    signal cycle_type_capture  : std_logic_vector(1 downto 0);
+    -- Address capture signals (initialized to prevent metavalues)
+    signal addr_low_capture    : std_logic_vector(7 downto 0) := (others => '0');
+    signal addr_high_capture   : std_logic_vector(5 downto 0) := (others => '0');
+    signal cycle_type_capture  : std_logic_vector(1 downto 0) := "00";
     signal mem_addr            : std_logic_vector(13 downto 0);
 
     -- State detection
@@ -153,20 +153,26 @@ begin
 
     -- RAM write control process
     ram_control: process(phi1, reset_n)
+        variable prev_rw_n : std_logic := '1';
     begin
         if reset_n = '0' then
             ram_rw_n_int <= '1';  -- Default to read
             ram_data_in <= (others => '0');
+            prev_rw_n := '1';
 
         elsif rising_edge(phi1) then
             -- T3/T4/T5 states with write cycle (PCW = "10")
             if ((is_t3 = '1' or is_t4 = '1' or is_t5 = '1') and is_write_cycle = '1') then
                 ram_rw_n_int <= '0';  -- Write enable
-                -- Capture data from bus
-                ram_data_in <= data_bus_in;
+                -- Only capture data when transitioning FROM read TO write
+                -- This prevents capturing Z values on subsequent cycles
+                if prev_rw_n = '1' then
+                    ram_data_in <= data_bus_in;
+                end if;
             else
                 ram_rw_n_int <= '1';  -- Read mode
             end if;
+            prev_rw_n := ram_rw_n_int;
         end if;
     end process;
 
