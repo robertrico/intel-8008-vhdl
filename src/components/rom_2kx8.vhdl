@@ -56,10 +56,10 @@ architecture rtl of rom_2kx8 is
             end loop;
             file_close(file_handle);
 
-            -- report "Loaded ROM from " & filename & " (" & integer'image(load_addr) & " bytes)" severity note;
+            report "Loaded ROM from " & filename & " (" & integer'image(load_addr) & " bytes)" severity note;
         else
             -- File not found, use default program
-            -- report "ROM file " & filename & " not found, using default program" severity warning;
+            report "ROM file " & filename & " not found, using default program" severity warning;
             -- Simple ADD test: A = 5 + 3 = 8
             rom_data(0) := x"06";  -- MVI A, 5
             rom_data(1) := x"05";

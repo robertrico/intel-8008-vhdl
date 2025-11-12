@@ -119,9 +119,9 @@ begin
         variable input_port_index  : integer;
     begin
         if reset_n = '0' then
-            -- Reset all output ports to 0xFF (safe default, active-low LEDs off)
+            -- Reset all output ports to 0x00 (safe default)
             for i in 0 to NUM_OUTPUT_PORTS - 1 loop
-                output_ports(i) <= (others => '1');
+                output_ports(i) <= (others => '0');
             end loop;
 
             -- Reset interrupt mask to all enabled
@@ -144,42 +144,45 @@ begin
 
             -- T3 state: Handle I/O operation
             if is_t3 = '1' then
-                -- OUTPUT operation (OUT instruction)
-                -- Check cycle type directly (like blinky's simple controller)
+                -- I/O cycle (PCC cycle type "11")
+                -- Intel 8008 uses same cycle type for both IN and OUT
+                -- Port address determines operation type:
+                --   0-7: Input ports (INP instruction)
+                --   8-31: Output ports (OUT instruction)
                 if cycle_type = "11" then
-                    -- Port address is in range 8-31
-                    output_port_index := to_integer(unsigned(port_addr)) - 8;
+                    -- Check port address to determine operation type
+                    if unsigned(port_addr) <= 7 then
+                        -- INPUT operation (INP 0-7)
+                        input_port_index := to_integer(unsigned(port_addr(2 downto 0)));
 
-                    -- Special port: OUT 9 = interrupt mask register
-                    if to_integer(unsigned(port_addr)) = 9 then
-                        int_mask_reg <= data_bus_in;
-                    elsif output_port_index >= 0 and output_port_index < NUM_OUTPUT_PORTS then
-                        output_ports(output_port_index) <= data_bus_in;
-                    end if;
-                end if;
-
-                -- INPUT operation (INP instruction)
-                if cycle_type = "01" then
-                    -- Port address is in range 0-7 (only bits [2:0] used)
-                    input_port_index := to_integer(unsigned(port_addr(2 downto 0)));
-
-                    -- Special ports for interrupt controller
-                    if input_port_index = 1 then
-                        -- INP 1: Interrupt status register
-                        data_bus_out_int <= int_status_in;
-                        data_bus_enable_int <= '1';
-                    elsif input_port_index = 2 then
-                        -- INP 2: Active interrupt source
-                        data_bus_out_int <= int_active_in;
-                        data_bus_enable_int <= '1';
-                    elsif input_port_index < NUM_INPUT_PORTS then
-                        -- Normal input port (port 0, 3-7)
-                        data_bus_out_int <= port_in((input_port_index * 8) + 7 downto (input_port_index * 8));
-                        data_bus_enable_int <= '1';
+                        -- Special ports for interrupt controller
+                        if input_port_index = 1 then
+                            -- INP 1: Interrupt status register
+                            data_bus_out_int <= int_status_in;
+                            data_bus_enable_int <= '1';
+                        elsif input_port_index = 2 then
+                            -- INP 2: Active interrupt source
+                            data_bus_out_int <= int_active_in;
+                            data_bus_enable_int <= '1';
+                        elsif input_port_index < NUM_INPUT_PORTS then
+                            -- Normal input port (port 0, 3-7)
+                            data_bus_out_int <= port_in((input_port_index * 8) + 7 downto (input_port_index * 8));
+                            data_bus_enable_int <= '1';
+                        else
+                            -- Invalid port: return 0xFF
+                            data_bus_out_int <= (others => '1');
+                            data_bus_enable_int <= '1';
+                        end if;
                     else
-                        -- Invalid port: return 0xFF
-                        data_bus_out_int <= (others => '1');
-                        data_bus_enable_int <= '1';
+                        -- OUTPUT operation (OUT 8-31)
+                        output_port_index := to_integer(unsigned(port_addr)) - 8;
+
+                        -- Special port: OUT 9 = interrupt mask register
+                        if to_integer(unsigned(port_addr)) = 9 then
+                            int_mask_reg <= data_bus_in;
+                        elsif output_port_index >= 0 and output_port_index < NUM_OUTPUT_PORTS then
+                            output_ports(output_port_index) <= data_bus_in;
+                        end if;
                     end if;
                 end if;
             end if;
