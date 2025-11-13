@@ -106,7 +106,7 @@ architecture rtl of s8008 is
     -- Debug Configuration
     --===========================================
     -- Set to false to reduce simulation noise (hides clock toggle messages)
-    constant DEBUG_VERBOSE : boolean := false;
+    constant DEBUG_VERBOSE : boolean := true;
 
     --===========================================
     -- Internal Signals
@@ -441,7 +441,7 @@ begin
         elsif rising_edge(phi1) then
             clock_phase <= not clock_phase;
             if DEBUG_VERBOSE then
-                report "Clock phase toggled to " & std_logic'image(not clock_phase) & " at " & time'image(now);
+                -- report "Clock phase toggled to " & std_logic'image(not clock_phase) & " at " & time'image(now);
             end if;
         end if;
     end process;
@@ -876,7 +876,9 @@ begin
 
             -- Update carry flag for rotate operations (on next phi1 after rotate executes on phi2)
             -- Rotate executes at end of T3 on phi2, so flag update happens on next phi1 (early T1 or T4)
-            if is_rotate_op = '1' and timing_state = T3 and clock_phase = '1' then
+            -- NOTE: Don't check clock_phase here - it toggles every phi1 edge, so checking it would
+            --       cause flag updates to only happen 50% of the time
+            if is_rotate_op = '1' and timing_state = T3 then
                 flag_carry <= rotate_carry;
             elsif is_alu_op = '1' and timing_state = T5 and clock_phase = '0' then
                 -- ALU operation flag update

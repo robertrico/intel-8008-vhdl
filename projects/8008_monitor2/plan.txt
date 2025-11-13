@@ -1,0 +1,812 @@
+================================================================================
+Intel 8008 Monitor - Development Plan
+================================================================================
+
+OBJECTIVE:
+Create a comprehensive monitor program for the Intel 8008 that exercises and
+tests every feature of the CPU and peripheral system. This will serve as both
+a debugging tool and a validation suite.
+
+================================================================================
+PHASE 1: FOUNDATION - Basic Monitor Shell
+================================================================================
+
+[✓] Project Structure
+    - Copy uart_rx project as foundation
+    - Rename all files to monitor naming convention
+    - Update Makefile for monitor.asm
+    - Create this plan.txt file
+
+[✓] Minimal Monitor Core
+    - Simple command loop with prompt "8008>"
+    - Single-character commands (no parsing yet)
+    - Echo received characters
+    - Respond to '?' with help text
+
+    Commands implemented:
+    - '?'  : Help - list all commands
+    - 'h'  : Hello - print "Intel 8008 Monitor v1.0"
+    - 'r'  : Reset - software reset (jumps back to main)
+
+    Implementation: test_programs/monitor.asm (601 bytes, 248 instructions)
+
+    Test criteria:
+    - ✓ Code assembled successfully
+    - ✓ Simulation shows correct command responses (testbench uses simple test)
+    - ✓ Hardware responds to serial input (tested on FPGA - all commands working)
+
+================================================================================
+PHASE 2: MEMORY OPERATIONS
+================================================================================
+
+[ ] Memory Read Commands
+    - 'R' : Read memory byte at address
+    - 'D' : Dump memory range (16 bytes)
+
+    Input format: Command followed by 4-digit hex address
+    Output format: "ADDR: XX" or hex dump with ASCII
+
+    Test criteria:
+    - Read from ROM shows correct program bytes
+    - Read from RAM shows previously written data
+    - Dump displays formatted output correctly
+
+[ ] Memory Write Commands
+    - 'W' : Write byte to RAM address
+
+    Input format: W ADDR DATA (hex)
+    Protection: Prevent writes to ROM range (0x0000-0x07FF)
+
+    Test criteria:
+    - Write to RAM succeeds
+    - Read back shows written value
+    - Write to ROM rejected with error message
+
+[ ] Memory Test Command
+    - 'M' : Memory test - write/read verify RAM
+
+    Pattern: Walking 1s (0x01, 0x02, 0x04, 0x08, ...)
+    Report: Pass/fail with error address if failed
+
+    Test criteria:
+    - Full RAM test completes
+    - Errors detected and reported
+    - RAM contents restored after test
+
+================================================================================
+PHASE 3: CPU REGISTER INSPECTION
+================================================================================
+
+[ ] Register Display
+    - 'G' : Show all CPU registers (A, B, C, D, E, H, L)
+    - 'P' : Show program counter and stack pointer
+
+    Implementation approach:
+    - Use known memory locations to store register snapshots
+    - Create subroutine to dump registers to RAM
+    - Format and display via UART
+
+    Test criteria:
+    - Register values match expected state
+    - Display format is readable
+    - No corruption of actual register values
+
+================================================================================
+PHASE 4: INTERRUPT TESTING
+================================================================================
+
+[ ] Interrupt Commands
+    - 'I' : Trigger software interrupt
+    - 'S' : Show interrupt status
+
+    Features:
+    - Demonstrate ISR execution
+    - Count interrupts received
+    - Measure interrupt latency (if possible)
+
+    Test criteria:
+    - ISR executes correctly
+    - Return from interrupt works
+    - Interrupt counter increments
+    - System remains stable after interrupt
+
+[ ] Interrupt Stress Test
+    - 'T' : Rapid interrupt test
+
+    Generate multiple interrupts in quick succession
+    Verify all are handled correctly
+
+    Test criteria:
+    - No missed interrupts
+    - No stack overflow
+    - Clean recovery to prompt
+
+================================================================================
+PHASE 5: UART DIAGNOSTICS
+================================================================================
+
+[ ] UART Test Commands
+    - 'U' : UART loopback test
+    - 'B' : Transmit test pattern
+    - 'E' : Echo test (continuous mode, ESC to exit)
+
+    Loopback: Send known pattern, verify received
+    Pattern: Send all printable ASCII characters
+    Echo: Real-time echo with character count
+
+    Test criteria:
+    - Loopback test passes
+    - All characters transmitted correctly
+    - Echo mode responsive, clean exit
+
+================================================================================
+PHASE 6: ALU VERIFICATION
+================================================================================
+
+[ ] Arithmetic Test Commands
+    - 'A' : ADD test - verify all carry combinations
+    - 'C' : SUB test - verify all borrow combinations
+    - 'N' : AND/OR/XOR logic tests
+
+    Approach:
+    - Use known test vectors
+    - Display: operation, operands, result, flags
+    - Compare against expected values
+
+    Test criteria:
+    - All arithmetic operations correct
+    - Carry/borrow flags set correctly
+    - Zero/sign flags accurate
+
+[ ] Shift/Rotate Tests
+    - 'L' : Rotate left test
+    - 'R' : Rotate right test
+
+    Test with patterns: 0x01, 0x80, 0xAA, 0x55
+
+    Test criteria:
+    - Bit patterns shift correctly
+    - Carry flag behavior accurate
+
+================================================================================
+PHASE 7: STACK OPERATIONS
+================================================================================
+
+[ ] Stack Test Commands
+    - 'K' : Stack push/pop test
+    - 'V' : Stack depth test (max depth)
+
+    Push test: Known values, pop and verify
+    Depth test: Push to near-overflow, verify recovery
+
+    Test criteria:
+    - Push/pop preserves data
+    - Stack pointer tracked correctly
+    - Overflow detection works
+
+================================================================================
+PHASE 8: TIMING AND PERFORMANCE
+================================================================================
+
+[ ] Timing Commands
+    - 'F' : Frequency test - measure CPU clock
+    - 'X' : Instruction timing test
+
+    Frequency: Use UART timing to estimate clock rate
+    Instruction: Compare known instruction cycle counts
+
+    Test criteria:
+    - Clock frequency within expected range
+    - Instruction cycles match datasheet
+
+================================================================================
+PHASE 9: UTILITY COMMANDS
+================================================================================
+
+[ ] Useful Tools
+    - 'J' : Jump to address (execute from RAM)
+    - 'Z' : Zero RAM (clear all RAM)
+    - '@' : Display system info (ROM size, RAM size, version)
+
+    Jump: Allow user programs in RAM
+    Zero: Quick RAM clear
+    Info: Build timestamp, memory map
+
+    Test criteria:
+    - Jump executes and returns
+    - RAM zeroed completely
+    - Info displays correctly
+
+================================================================================
+PHASE 10: INSTRUCTION SET VERIFICATION
+================================================================================
+
+[ ] Data Movement Instructions
+    - 'Y' : Test all MOV/MVI register-to-register transfers
+
+    Tests:
+    - MOV r1,r2 for all register combinations
+    - MVI r,data with test patterns (0x00, 0xFF, 0xAA, 0x55)
+    - Memory load/store (LrM, MrM with H,L addressing)
+
+    Test criteria:
+    - All 49 MOV variants work correctly
+    - Immediate loads produce correct values
+    - Memory addressing functions properly
+
+[ ] Arithmetic Instructions
+    - 'Q' : Test ADD/ADC/SUB/SBB with all registers
+
+    Tests:
+    - ADD with carry generation (0xFF + 0x01)
+    - ADC with carry propagation
+    - SUB with borrow generation
+    - SBB with borrow propagation
+    - Test patterns: 0x00, 0xFF, 0x7F, 0x80, 0x01
+
+    Test criteria:
+    - Carry flag set/clear correctly
+    - Zero flag accurate
+    - Sign flag accurate
+    - Results match expected values
+
+[ ] Logical Instructions
+    - 'O' : Test AND/OR/XOR/CMP operations
+
+    Tests:
+    - AND: verify bit masking (0xAA & 0x55 = 0x00)
+    - OR: verify bit combining (0xAA | 0x55 = 0xFF)
+    - XOR: verify bit toggling (0xFF ^ 0xFF = 0x00)
+    - CMP: verify flag setting without modifying accumulator
+
+    Test criteria:
+    - Logical operations correct
+    - Flags set appropriately
+    - Accumulator preserved in CMP
+
+[ ] Rotate and Increment Instructions
+    - '>' : Test RLC/RRC/RAL/RAR rotates
+    - '+' : Test INr/DCr for all registers
+
+    Rotate tests:
+    - RLC: 0x80 -> 0x01 (carry set)
+    - RRC: 0x01 -> 0x80 (carry set)
+    - RAL: with carry in different states
+    - RAR: with carry in different states
+
+    Inc/Dec tests:
+    - INr: 0xFF -> 0x00 (check zero flag)
+    - DCr: 0x00 -> 0xFF (check sign flag)
+
+    Test criteria:
+    - Bit rotation correct
+    - Carry flag behavior accurate
+    - Inc/Dec preserve other flags
+
+[ ] Branch and Call Instructions
+    - '{' : Test conditional/unconditional jumps
+    - '}' : Test CALL/RET and conditional variants
+
+    Jump tests:
+    - JMP unconditional
+    - JFC/JFZ/JFS/JFP (jump if flag clear)
+    - JTC/JTZ/JTS/JTP (jump if flag set)
+
+    Call/Return tests:
+    - CALL/RET nesting (3 levels deep)
+    - RFC/RFZ/RFS/RFP conditional returns
+    - RTC/RTZ/RTS/RTP conditional returns
+    - Stack pointer integrity
+
+    Test criteria:
+    - All branch conditions work
+    - Return address preserved
+    - Conditional execution correct
+    - Stack balanced after operations
+
+[ ] I/O Instructions
+    - '^' : Test INP/OUT on all ports
+
+    Tests:
+    - INP from UART status/data ports
+    - OUT to UART TX port
+    - Test all 8 input ports (0-7)
+    - Test all 32 output ports (0-31)
+
+    Test criteria:
+    - Known ports function correctly
+    - Unused ports don't crash system
+    - I/O timing acceptable
+
+[ ] Special Instructions
+    - '~' : Test HLT, NOP, and undefined opcodes
+
+    Tests:
+    - NOP: verify no state change
+    - HLT: verify system can recover
+    - Undefined opcodes: document behavior
+
+    Test criteria:
+    - NOP takes correct cycles
+    - HLT can be interrupted
+    - System stable after tests
+
+================================================================================
+PHASE 11: COMPREHENSIVE SELF-TEST
+================================================================================
+
+[ ] Self-Test Suite
+    - '*' : Run all tests in sequence
+
+    Execute:
+    - Memory test
+    - Instruction set tests (all Phase 10 tests)
+    - ALU test
+    - Stack test
+    - UART test
+    - Interrupt test
+
+    Report: Summary with pass/fail for each
+
+    Test criteria:
+    - All tests complete
+    - Results accurate
+    - System stable after full test
+
+================================================================================
+IMPLEMENTATION NOTES
+================================================================================
+
+Memory Map:
+    0x0000 - 0x07FF : ROM (2KB) - Monitor program
+    0x0800 - 0x09FF : RAM (512B) - User area
+    0x0A00 - 0x0AFF : RAM (256B) - Command buffer & variables
+    0x0B00 - 0x0BFF : RAM (256B) - Stack
+
+I/O Ports:
+    IN  0  : UART TX status
+    IN  1  : UART RX data
+    IN  2  : UART RX status
+    OUT 10 : UART TX data
+
+Assembly Structure:
+    - Modular subroutines for each command
+    - Shared utilities (hex print, string print, input read)
+    - Jump table for command dispatch
+    - Error handling throughout
+
+Code Organization:
+    monitor.asm sections:
+    - Command jump table
+    - Main command loop
+    - Command implementations
+    - Utility subroutines
+    - Test subroutines
+    - String constants
+
+================================================================================
+TESTING STRATEGY
+================================================================================
+
+1. Incremental Development
+   - Implement one command at a time
+   - Test in simulation first
+   - Verify on hardware before proceeding
+
+2. Regression Testing
+   - After each addition, test all previous commands
+   - Ensure no breakage
+   - Keep simulation testbench updated
+
+3. Documentation
+   - Comment each subroutine clearly
+   - Update help text as commands added
+   - Maintain this plan.txt with checkboxes
+
+4. Hardware Validation
+   - Test on real FPGA after each phase
+   - Verify timing on actual hardware
+   - Document any hardware-specific issues
+
+================================================================================
+CURRENT STATUS: Phase 1 - COMPLETE | Phase 2 - BLOCKED - CRITICAL BUG FOUND
+================================================================================
+
+================================================================================
+CRITICAL BUG: BASIC UART RX CHARACTER READING IS BROKEN
+================================================================================
+
+PROBLEM OBSERVED:
+    Echo test shows SEVERE character loss - not just parsing!
+
+    Input:  "the world is huge"
+    Output: "e worls i world is hugee"
+
+    Input:  "why did the original uart rx work, but not this?"
+    Output: "e worls i did the original uart rx work, but not this?e"
+
+    Pattern: Random character loss, garbled output, some characters duplicated
+
+ROOT CAUSE IDENTIFIED:
+
+✗ FUNDAMENTAL ISSUE: The basic uart_rx_char routine is BROKEN
+   - Characters are being lost during tight polling loop
+   - Echo test (which only uses uart_rx_char + uart_tx_char) is completely garbled
+   - This proves the problem is NOT in parsing logic
+   - This proves the problem IS in the UART RX read mechanism
+
+DETAILED ANALYSIS:
+
+1. UART RX Hardware (uart_rx.vhdl)
+   Status: ✓ VERIFIED WORKING in standalone uart_rx project
+   - Characters are received correctly by the uart_rx engine
+   - Hardware layer works fine in isolation
+
+2. Clock Domain Crossing (s8008_uart.vhdl)
+   Status: ✗ BROKEN - rx_ready flag synchronization is FUNDAMENTALLY FLAWED
+   - The cleared_locally approach does NOT work
+   - rx_ready_phi1 doesn't clear fast enough after CPU reads port
+   - When CPU loops back quickly, it sees stale rx_ready_phi1 = '1'
+   - Results in either:
+     a) Reading same character twice (missing next character)
+     b) Reading garbage data
+     c) Getting stuck in wait loop while character is available
+
+   The tight polling loop exposes the race condition:
+   ```
+   wait_rx:
+       in 4                ; Read status (sees stale rx_ready_phi1 = 1)
+       ani 01H
+       jz wait_rx          ; Doesn't wait
+       in 3                ; Reads port (but data might be stale or cleared)
+       ret                 ; Returns with wrong/duplicate character
+   ```
+
+3. Assembly Code (monitor.asm)
+   Status: ✓ PROBABLY FINE
+   - Parsing routines are likely correct (ported from working code)
+   - Cannot test parsing until basic character reading works
+   - Echo test uses minimal assembly (MOV, CPI, JZ) - these work
+
+ATTEMPTED FIXES (ALL FAILED):
+   a) Added phi1-synchronized rx_ready with immediate clearing
+   b) Removed "only latch when rx_ready = '0'" condition
+   c) Simplified rx_ready_phi1 logic
+   d) Added cleared_locally flag with rising edge detection
+   e) Prioritized new data over clearing in clk domain
+
+   None of these fixes work because the fundamental architecture is flawed.
+
+================================================================================
+NEW APPROACH: START FROM KNOWN WORKING CODE
+================================================================================
+
+STRATEGY:
+1. Go back to uart_rx project (KNOWN WORKING)
+2. Verify it still works in hardware
+3. Incrementally add ONLY the minimal changes needed for monitor
+4. Test after EACH change
+5. Do NOT proceed until basic character reading works perfectly
+
+IMPLEMENTATION PLAN:
+
+Step 1: Verify uart_rx baseline
+   [ ] Deploy uart_rx project to hardware
+   [ ] Confirm echo works perfectly
+   [ ] Document exact configuration (ports, timing, etc.)
+
+Step 2: Copy working uart_rx.asm to monitor.asm
+   [ ] Start with EXACT working uart_rx.asm code
+   [ ] Verify it assembles and deploys
+   [ ] Confirm echo still works
+
+Step 3: Add minimal monitor features ONE AT A TIME
+   [ ] Add command prompt (just "8008> ")
+   [ ] Test - echo should still work
+   [ ] Add single-character command dispatch ('?', 'h')
+   [ ] Test - echo should still work
+   [ ] Add help text
+   [ ] Test - echo should still work
+
+Step 4: Only after echo is bulletproof, add parsing
+   [ ] Add get_hex (ONE function at a time)
+   [ ] Test exhaustively
+   [ ] Add ascii2hex
+   [ ] Test exhaustively
+   [ ] Add get_four
+   [ ] Test exhaustively
+
+CRITICAL RULES:
+- NO changes to s8008_uart.vhdl until character reading works
+- NO complex features until basics work
+- TEST after EVERY change
+- If echo breaks, IMMEDIATELY revert last change
+- Do NOT proceed if ANY test fails
+
+WORKING FILE TO START FROM:
+   /Users/hambook/Development/intel-8008-vhdl/projects/uart_rx/test_programs/uart_rx.asm
+
+   This file is KNOWN to work - characters echo perfectly
+   Use this as the baseline - copy it to monitor.asm and build incrementally
+
+================================================================================
+PHASE 12: INSTRUCTION SET VALIDATION (For Parsing Debug)
+================================================================================
+
+CRITICAL INSTRUCTIONS USED IN HEX PARSING:
+
+These instructions are used extensively in get_hex, get_four, and ascii2hex.
+If ANY of these are broken, parsing will fail.
+
+[ ] RLC (Rotate Left Circular) - HIGHEST SUSPECT
+    Used in: get_four2, get_four7, get_four8
+    Purpose: Shift nibble to high position (0x01 → 0x10)
+
+    Test case for get_four2 (line 942-947):
+        Input: First hex digit '1' (ASCII 0x31)
+        Expected flow:
+            ascii2hex: 0x31 → 0x01
+            RLC x4:    0x01 → 0x02 → 0x04 → 0x08 → 0x10
+            ANI 0xF0:  0x10 → 0x10
+            MOV L, A:  L = 0x10
+
+    FAILURE MODE:
+        If RLC broken: 0x01 might become 0x02 instead of 0x10
+        Result: Wrong value in L, parsing fails
+
+    Minimal test program:
+        ```
+        MVI A, 0x01
+        RLC
+        RLC
+        RLC
+        RLC
+        ; A should be 0x10
+        OUT 10      ; Send to UART to verify
+        HLT
+        ```
+
+[ ] RRC (Rotate Right Circular) - SECOND SUSPECT
+    Used in: get_hex3, get_two, get_four (multiple places)
+    Purpose 1: Shift nibble to low position (0x10 → 0x01)
+    Purpose 2: SET CARRY FLAG (used in get_hex3 line 872-873)
+
+    Test case for get_hex3 (line 871-875):
+        Purpose: Set carry flag to indicate Enter/Escape/Space pressed
+        Code:
+            mov b,a        ; Save character
+            mvi a,1        ; A = 0x01
+            rrc            ; A = 0x80, CARRY = 1
+            mov a,b        ; Restore character
+            ret            ; Return with carry SET
+
+    FAILURE MODE:
+        If RRC doesn't set carry: Flow control breaks
+        get_four would not detect Enter key properly
+
+    Test case for nibble unpack (line 956-962):
+        Input: L = 0x10 (first nibble in high position)
+        Code:
+            mov a,l        ; A = 0x10
+            rrc            ; A = 0x08
+            rrc            ; A = 0x04
+            rrc            ; A = 0x02
+            rrc            ; A = 0x01
+            ani 0FH        ; A = 0x01
+
+    FAILURE MODE:
+        If RRC broken: Nibble won't be extracted correctly
+
+    Minimal test programs:
+        Test 1 - Carry flag:
+        ```
+        MVI A, 0x01
+        RRC
+        ; Carry should be SET, A should be 0x80
+        JC success      ; Jump if carry set
+        HLT             ; Failed - carry not set
+        success:
+        OUT 10          ; Success
+        HLT
+        ```
+
+        Test 2 - Nibble shift:
+        ```
+        MVI A, 0x10
+        RRC
+        RRC
+        RRC
+        RRC
+        ; A should be 0x01
+        OUT 10
+        HLT
+        ```
+
+[ ] ANI (AND Immediate) - THIRD SUSPECT
+    Used in: get_hex, get_two, get_four (extensively)
+    Purpose: Mask nibbles (0xF0 for high, 0x0F for low)
+
+    Test case from get_four2 (line 946):
+        ani 0F0H    ; Mask to keep only high nibble
+
+    Test case from get_four5 (line 969):
+        ani 0FH     ; Mask to keep only low nibble
+
+    FAILURE MODE:
+        If ANI broken: Wrong bits preserved/cleared
+        Example: 0x5A ANI 0x0F should give 0x0A
+                 If broken, might give 0x5A (no masking)
+
+    Minimal test program:
+        ```
+        MVI A, 0x5A
+        ANI 0x0F
+        ; A should be 0x0A
+        OUT 10
+        MVI A, 0x5A
+        ANI 0xF0
+        ; A should be 0x50
+        OUT 10
+        HLT
+        ```
+
+[ ] ORA (OR Accumulator) - FOURTH SUSPECT
+    Used in: get_four5, get_four9 (combine nibbles)
+    Purpose: Combine high and low nibbles
+
+    Test case from get_four5 (line 970-971):
+        Input: A = 0x02 (second nibble, low), L = 0x10 (first nibble, high)
+        Code:
+            ani 0FH        ; A = 0x02
+            ora l          ; A = 0x02 | 0x10 = 0x12
+            mov l,a        ; L = 0x12
+
+    FAILURE MODE:
+        If ORA broken: Nibbles won't combine correctly
+        Example: 0xF0 ORA 0x0A should give 0xFA
+                 If broken, might give 0xF0 or 0x0A (no combining)
+
+    Minimal test program:
+        ```
+        MVI A, 0xF0
+        MVI L, 0x0A
+        ORA L
+        ; A should be 0xFA
+        OUT 10
+        HLT
+        ```
+
+[ ] SUI (Subtract Immediate) - FIFTH SUSPECT
+    Used in: ascii2hex (ASCII to hex conversion)
+    Purpose: Convert ASCII '0'-'9','A'-'F' to hex 0x0-0xF
+
+    Test case from ascii2hex (line 829-835):
+        Input: A = '0' (0x30)
+        Code:
+            sui 30H        ; A = 0x30 - 0x30 = 0x00
+
+        Input: A = 'A' (0x41)
+        Code:
+            sui 30H        ; A = 0x41 - 0x30 = 0x11
+            sui 7          ; A = 0x11 - 0x07 = 0x0A
+
+    FAILURE MODE:
+        If SUI broken: ASCII conversion fails
+        Example: '1' (0x31) should become 0x01
+                 If broken, might stay 0x31
+
+    Minimal test program:
+        ```
+        MVI A, 0x31    ; ASCII '1'
+        SUI 0x30
+        ; A should be 0x01
+        OUT 10
+        MVI A, 0x41    ; ASCII 'A'
+        SUI 0x30
+        SUI 0x07
+        ; A should be 0x0A
+        OUT 10
+        HLT
+        ```
+
+[ ] CPI (Compare Immediate) - SIXTH SUSPECT
+    Used in: get_hex (validate input characters)
+    Purpose: Check if character is valid hex digit
+
+    Test case from get_hex (line 853-863):
+        Check for '0' through '9':
+            cpi '0'        ; Compare with '0'
+            jc get_hex     ; Jump if less than '0'
+            cpi ':'        ; Compare with ':' (one past '9')
+            jc get_hex2    ; Jump if '0'-'9'
+
+        Check for 'A' through 'F':
+            cpi 'A'
+            jc get_hex     ; Jump if less than 'A'
+            cpi 'G'
+            jnc get_hex    ; Jump if greater than 'F'
+
+    FAILURE MODE:
+        If CPI broken: Invalid characters accepted OR valid rejected
+        Flags (carry, zero) set incorrectly
+
+    Minimal test program:
+        ```
+        MVI A, 0x30    ; '0'
+        CPI 0x30
+        JZ match       ; Should jump (zero flag set)
+        HLT            ; Failed
+        match:
+        OUT 10         ; Success
+        HLT
+        ```
+
+[ ] MOV (Register to Register) - SEVENTH SUSPECT
+    Used: Throughout all parsing routines
+    Purpose: Save/restore values between registers
+
+    Critical uses:
+        mov b,a        ; Save accumulator
+        mov a,b        ; Restore accumulator
+        mov e,a        ; Save in E
+        mov l,a        ; Store in L
+        mov h,c        ; Transfer between registers
+
+    FAILURE MODE:
+        If MOV broken: Values lost during parsing
+        Example: MOV B, A might not actually copy A to B
+
+    Minimal test program:
+        ```
+        MVI A, 0x42
+        MOV B, A
+        MVI A, 0x00    ; Clear A
+        MOV A, B       ; Restore from B
+        ; A should be 0x42 again
+        OUT 10
+        HLT
+        ```
+
+================================================================================
+INSTRUCTION TEST EXECUTION PLAN
+================================================================================
+
+1. IMMEDIATE: Run Echo Test (E command)
+   - Determines if problem is UART timing or instruction execution
+
+2. IF Echo Test Works:
+   Create minimal instruction test programs in order of suspicion:
+
+   Priority 1: RLC test (most likely cause based on pattern)
+   Priority 2: RRC test (carry flag critical for flow control)
+   Priority 3: ANI test (masking must work for nibbles)
+   Priority 4: ORA test (combining must work)
+   Priority 5: SUI test (ASCII conversion must work)
+   Priority 6: CPI test (validation must work)
+   Priority 7: MOV test (data transfer must work)
+
+3. Test Methodology:
+   - Write minimal test program (5-10 instructions)
+   - Assemble and load to FPGA
+   - Observe UART output
+   - Compare to expected value
+   - If mismatch → Found broken instruction!
+
+4. Once Broken Instruction Found:
+   - Examine i8008_alu.vhdl implementation
+   - Check s8008.vhdl instruction decoder
+   - Fix and retest
+
+================================================================================
+FILES TO EXAMINE IF INSTRUCTIONS BROKEN
+================================================================================
+
+Primary suspects:
+   /Users/hambook/Development/intel-8008-vhdl/src/components/i8008_alu.vhdl
+       - Lines for RLC, RRC, ANI, ORA, SUI implementations
+
+   /Users/hambook/Development/intel-8008-vhdl/src/components/s8008.vhdl
+       - Instruction decoder
+       - Opcode mapping
+
+================================================================================

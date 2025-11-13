@@ -106,18 +106,22 @@ begin
     -- Build full memory address
     mem_addr <= addr_high_capture & addr_low_capture;
 
-    -- Memory region selection (simplified for 2KB ROM at 0x0000, 1KB RAM at 0x0800)
-    -- ROM: addresses where bits [13:11] = "000" (0x0000-0x07FF)
-    rom_selected <= '1' when mem_addr(13 downto 11) = "000" else '0';
-    -- RAM: addresses where bits [13:10] = "0010" (0x0800-0x0BFF)
-    ram_selected <= '1' when mem_addr(13 downto 10) = "0010" else '0';
+    -- Memory region selection (generic-based address decoding)
+    -- ROM: check if address is within [ROM_BASE_ADDR, ROM_BASE_ADDR + 2^ROM_SIZE_BITS)
+    rom_selected <= '1' when (unsigned(mem_addr) >= unsigned(ROM_BASE_ADDR)) and
+                             (unsigned(mem_addr) < unsigned(ROM_BASE_ADDR) + (2 ** ROM_SIZE_BITS)) else '0';
+    -- RAM: check if address is within [RAM_BASE_ADDR, RAM_BASE_ADDR + 2^RAM_SIZE_BITS)
+    ram_selected <= '1' when (unsigned(mem_addr) >= unsigned(RAM_BASE_ADDR)) and
+                             (unsigned(mem_addr) < unsigned(RAM_BASE_ADDR) + (2 ** RAM_SIZE_BITS)) else '0';
 
-    -- ROM interface
-    rom_addr <= mem_addr(ROM_SIZE_BITS - 1 downto 0);
+    -- ROM interface (subtract base address to get offset)
+    rom_addr <= std_logic_vector(unsigned(mem_addr(ROM_SIZE_BITS - 1 downto 0)) -
+                                 unsigned(ROM_BASE_ADDR(ROM_SIZE_BITS - 1 downto 0)));
     rom_cs_n <= not rom_selected;
 
-    -- RAM interface
-    ram_addr <= mem_addr(RAM_SIZE_BITS - 1 downto 0);
+    -- RAM interface (subtract base address to get offset)
+    ram_addr <= std_logic_vector(unsigned(mem_addr(RAM_SIZE_BITS - 1 downto 0)) -
+                                 unsigned(RAM_BASE_ADDR(RAM_SIZE_BITS - 1 downto 0)));
     ram_cs_n <= not ram_selected;
     ram_rw_n <= ram_rw_n_int;
 

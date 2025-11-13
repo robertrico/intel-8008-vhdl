@@ -85,7 +85,8 @@ architecture rtl of s8008_uart is
     -- Signals for UART RX engine
     signal rx_data_internal : std_logic_vector(7 downto 0) := (others => '0');
     signal rx_valid         : std_logic;
-    signal rx_ready         : std_logic := '0';  -- Latched flag: data available
+    signal rx_ready         : std_logic := '0';  -- Latched flag: data available (clk domain)
+    signal rx_ready_phi1    : std_logic := '0';  -- Synchronized rx_ready for phi1 domain
     signal rx_data_latched  : std_logic_vector(7 downto 0) := (others => '0');
 
     -- Write detection signal (TX only)
@@ -96,6 +97,10 @@ architecture rtl of s8008_uart is
     signal rx_read_clear_phi1 : std_logic := '0';  -- Pulse on phi1 clock
     signal rx_read_clear_sync : std_logic_vector(2 downto 0) := (others => '0');  -- Synchronizer to clk domain
     signal rx_read_clear : std_logic;  -- Synchronized signal in clk domain
+
+    -- Clock domain crossing for rx_ready (clk -> phi1)
+    signal rx_ready_sync : std_logic_vector(2 downto 0) := (others => '0');  -- Synchronizer from clk to phi1
+    signal cleared_locally : std_logic := '0';  -- Track if we cleared rx_ready_phi1 locally
 
     -- Reset stabilization counter - wait for system to stabilize after reset
     signal reset_stable_counter : unsigned(3 downto 0) := (others => '0');
@@ -140,7 +145,7 @@ begin
 
     -- Status outputs
     tx_status_out <= "0000000" & tx_busy;
-    rx_status_out <= "0000000" & rx_ready;
+    rx_status_out <= "0000000" & rx_ready_phi1;  -- Use phi1-synchronized version
     rx_data_out   <= rx_data_latched;
 
     --------------------------------------------------------------------------------
@@ -164,13 +169,47 @@ begin
     -- Edge detect: pulse when sync goes high
     rx_read_clear <= '1' when rx_read_clear_sync(2) = '0' and rx_read_clear_sync(1) = '1' else '0';
 
+    --------------------------------------------------------------------------------
+    -- Clock Domain Crossing: rx_ready from clk to phi1
+    --------------------------------------------------------------------------------
+    -- Synchronize rx_ready from clk domain to phi1 domain
+    -- Clear immediately on read to prevent double-reading due to sync delay
+    --------------------------------------------------------------------------------
+    process(phi1, reset_n)
+    begin
+        if reset_n = '0' then
+            rx_ready_sync <= (others => '0');
+            rx_ready_phi1 <= '0';
+            cleared_locally <= '0';
+        elsif rising_edge(phi1) then
+            -- 3-stage synchronizer from clk to phi1
+            rx_ready_sync <= rx_ready_sync(1 downto 0) & rx_ready;
+
+            -- If CPU reads (T3 with pending read), clear immediately
+            if port_read_pending = '1' and (S2 = '0' and S1 = '0' and S0 = '1') then
+                rx_ready_phi1 <= '0';
+                cleared_locally <= '1';  -- Remember we cleared it
+            -- If we cleared locally, wait until clk domain confirms clear
+            elsif cleared_locally = '1' then
+                -- Keep rx_ready_phi1 low while waiting
+                rx_ready_phi1 <= '0';
+                -- Only release when clk domain shows cleared
+                if rx_ready_sync(2) = '0' then
+                    cleared_locally <= '0';
+                end if;
+            -- Normal operation: follow synchronized signal
+            else
+                rx_ready_phi1 <= rx_ready_sync(2);
+            end if;
+        end if;
+    end process;
+
 
     --------------------------------------------------------------------------------
     -- RX Data Latching (conditional)
     --------------------------------------------------------------------------------
     -- When uart_rx engine pulses rx_valid, latch the data and set rx_ready flag
-    -- The rx_ready flag stays set until the next byte arrives (overwriting the previous one)
-    -- This is a simple approach that works for basic polling-based RX
+    -- Always overwrite with latest byte (no FIFO - simple last-byte-wins behavior)
     --------------------------------------------------------------------------------
     gen_rx_latch : if ENABLE_RX generate
         process(clk)
@@ -180,13 +219,15 @@ begin
                     rx_ready <= '0';
                     rx_data_latched <= (others => '0');
                 else
-                    -- Clear rx_ready when CPU reads the data
-                    if rx_read_clear = '1' then
-                        rx_ready <= '0';
-                    -- When new byte received, latch it
-                    elsif rx_valid = '1' then
+                    -- Handle clearing and latching independently to avoid losing data
+                    -- If both happen in same cycle, latch wins (new data is more important)
+                    if rx_valid = '1' then
+                        -- When new byte received, ALWAYS latch it (overwrite if needed)
                         rx_data_latched <= rx_data_internal;
-                        rx_ready <= '1';  -- Set ready immediately
+                        rx_ready <= '1';
+                    elsif rx_read_clear = '1' then
+                        -- Clear rx_ready when CPU reads the data (only if no new data)
+                        rx_ready <= '0';
                     end if;
                 end if;
             end if;

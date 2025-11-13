@@ -19,8 +19,8 @@
 --   INP 2: UART RX status register (bit 0 = rx_ready)
 --
 -- Memory Map:
---   ROM: 0x0000-0x07FF (2KB) - Monitor program
---   RAM: 0x0800-0x0BFF (1KB) - User area, buffers, stack
+--   ROM: 0x0000-0x0FFF (4KB) - Monitor program
+--   RAM: 0x1000-0x13FF (1KB) - User area, buffers, stack
 --
 -- Copyright (c) 2025 Robert Rico
 --------------------------------------------------------------------------------
@@ -108,12 +108,12 @@ architecture rtl of monitor_top is
         );
     end component;
 
-    component rom_2kx8 is
+    component rom_4kx8 is
         generic (
             ROM_FILE : string := "test_programs/monitor.mem"
         );
         port (
-            ADDR     : in  std_logic_vector(10 downto 0);
+            ADDR     : in  std_logic_vector(11 downto 0);
             DATA_OUT : out std_logic_vector(7 downto 0);
             CS_N     : in  std_logic
         );
@@ -155,10 +155,10 @@ architecture rtl of monitor_top is
 
     component memory_controller is
         generic (
-            ROM_SIZE_BITS : integer := 11;
+            ROM_SIZE_BITS : integer := 12;
             RAM_SIZE_BITS : integer := 10;
             ROM_BASE_ADDR : std_logic_vector(13 downto 0) := "00000000000000";
-            RAM_BASE_ADDR : std_logic_vector(13 downto 0) := "00100000000000"
+            RAM_BASE_ADDR : std_logic_vector(13 downto 0) := "00101000000000"
         );
         port (
             phi1            : in  std_logic;
@@ -218,7 +218,7 @@ architecture rtl of monitor_top is
     signal io_port_in       : std_logic_vector(39 downto 0);  -- 5 ports * 8 bits (0: TX status, 1-2: interrupts, 3: RX data, 4: RX status)
 
     -- ROM signals
-    signal rom_addr : std_logic_vector(10 downto 0);
+    signal rom_addr : std_logic_vector(11 downto 0);
     signal rom_data : std_logic_vector(7 downto 0);
     signal rom_cs_n : std_logic;
 
@@ -363,9 +363,9 @@ begin
     --------------------------------------------------------------------------------
     -- Memory Subsystem
     --------------------------------------------------------------------------------
-    -- ROM: 2KB at 0x0000-0x07FF
+    -- ROM: 4KB at 0x0000-0x0FFF
     -- ROM_FILE generic can be overridden by testbench
-    u_rom : rom_2kx8
+    u_rom : rom_4kx8
         generic map (
             ROM_FILE => ROM_FILE
         )
@@ -375,7 +375,7 @@ begin
             CS_N     => rom_cs_n
         );
 
-    -- RAM: 1KB at 0x0800-0x0BFF
+    -- RAM: 1KB at 0x0A00-0x0DFF
     u_ram : ram_1kx8
         port map (
             CLK          => phi1,
@@ -390,8 +390,9 @@ begin
     -- Memory Controller
     u_memory_controller : memory_controller
         generic map (
-            ROM_SIZE_BITS => 11,  -- 2KB
-            RAM_SIZE_BITS => 10   -- 1KB
+            ROM_SIZE_BITS => 12,  -- 4KB (0x0000-0x0FFF)
+            RAM_SIZE_BITS => 10,  -- 1KB (0x1000-0x13FF)
+            RAM_BASE_ADDR => "01000000000000"  -- 0x1000 (right after ROM)
         )
         port map (
             phi1            => phi1,

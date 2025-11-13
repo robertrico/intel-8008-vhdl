@@ -160,7 +160,7 @@ begin
     -- Override ROM_FILE generic for simulation testing
     dut: monitor_top
         generic map (
-            ROM_FILE => "test_programs/simple_uart_test.mem"
+            ROM_FILE => "test_programs/monitor.mem"
         )
         port map (
             clk         => master_clk_tb,
@@ -318,7 +318,7 @@ begin
         reset_tb <= '0';
 
         -- Wait for program to transmit "OK\r\n"
-        wait for 20 ms;
+        wait for 1000 ms;
 
         -- Summary
         report "" severity note;

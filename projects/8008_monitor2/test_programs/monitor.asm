@@ -20,10 +20,15 @@
 ;   Note: Ports 1 and 2 are reserved for interrupt controller
 ;
 ; Memory Map:
-;   ROM: 0x0000-0x07FF (2KB) - Monitor program
-;   RAM: 0x0800-0x09FF (512B) - User area
-;   RAM: 0x0A00-0x0AFF (256B) - Command buffer & variables
-;   RAM: 0x0B00-0x0BFF (256B) - Stack
+;   ROM: 0x0000-0x0FFF (4KB)
+;     - Code: 0x0000-0x0EFF
+;     - Shift LUT: 0x0F00-0x0F0F (16 bytes, nibble << 4 lookup)
+;   RAM: 0x1000-0x13FF (1KB)
+;     - Command buffer: 0x1000-0x107F (128 bytes)
+;     - cmd_length: 0x1080 (1 byte)
+;     - temp_h: 0x1081 (1 byte)
+;     - temp_l: 0x1082 (1 byte)
+;     - value_buffer: 0x1083-0x1086 (4 bytes, parsed hex nibbles)
 
             cpu 8008new         ; use "new" 8008 mnemonics
             org 0000H
@@ -74,41 +79,38 @@ rst7_vector:
             ret                   ; Return from interrupt
 
 ;==============================================================================
-; RAM Variables (0x0A00 area)
-; cmd_buffer: 0x0A00 - Command input buffer (up to 128 bytes)
-; cmd_length: 0x0A80 - Current command length (1 byte)
-; temp_h: 0x0A81 - Temporary storage for H register
-; temp_l: 0x0A82 - Temporary storage for L register
+; RAM Variables (0x1000 area)
+; cmd_buffer: 0x1000-0x107F - Command input buffer (128 bytes)
+; cmd_length: 0x1080 - Current command length (1 byte)
+; temp_h: 0x1081 - Temporary storage for H register (unused)
+; temp_l: 0x1082 - Temporary storage for L register (unused)
+; value_buffer: 0x1083-0x1086 - Parsed hex nibbles (4 bytes)
 ;==============================================================================
-temp_h      equ 0A81H
-temp_l      equ 0A82H
+cmd_buf_h   equ 10H           ; High byte of command buffer address
+cmd_buf_l   equ 00H           ; Low byte of command buffer address
+cmd_len_h   equ 10H           ; High byte of length storage
+cmd_len_l   equ 80H           ; Low byte of length storage
+temp_h      equ 1081H
+temp_l      equ 1082H
+val_buf_h   equ 10H           ; High byte of value buffer (0x1083-0x1086)
 
 ;==============================================================================
 ; Entry Point (code continues from here after RST 0 vector jumps to main)
 ;==============================================================================
             org 0040H
 main:
-            ; Debug: Boot marker
-            mvi a,'*'
-            call uart_tx_char
-
             ; Disable all interrupts (set mask to 0x00)
             mvi a,00H
             out 9                 ; Write to interrupt mask register (port 9)
 
-            ; Debug: Before banner
-            mvi a,'1'
-            call uart_tx_char
-
             ; Print startup banner
             call print_banner
 
-            ; Debug: After banner
-            mvi a,'2'
-            call uart_tx_char
+            ; Run MOV diagnostic test
+            call test_mov_diagnostic
 
 ;==============================================================================
-; Main Command Loop
+; Main Loop
 ;==============================================================================
 command_loop:
             ; Print prompt "8008>"
@@ -118,17 +120,13 @@ command_loop:
             call read_line
 
             ; Process the command (first character in buffer)
-            mvi h,0AH             ; H = high byte of cmd_buffer address (0x0A00)
-            mvi l,00H             ; L = low byte of cmd_buffer address
+            mvi h,cmd_buf_h       ; H = high byte of cmd_buffer address
+            mvi l,cmd_buf_l       ; L = low byte of cmd_buffer address
             mov a,m               ; A = first character of command
 
             ; Skip empty commands (just Enter pressed)
             cpi 0DH               ; Check if first char is CR
             jz command_loop
-
-            ; Convert to uppercase for case-insensitive matching
-            call to_upper
-            mov d,a               ; Save uppercase command in D
 
             ; Dispatch command
             ; Check for '?' - Help
@@ -150,6 +148,10 @@ command_loop:
             ; Check for 'D' - Dump memory
             cpi 'D'
             jz cmd_dump_mem
+
+            ; Check for 'P' - Print (register stress test)
+            cpi 'P'
+            jz cmd_print
 
             ; Unknown command
             call print_unknown
@@ -179,112 +181,61 @@ cmd_reset:
 
 ;==============================================================================
 ; Command: Read Memory ('R')
-; Format: R <addr>
-; Example: R 0800 -> reads byte at address 0x0800
+; NOP - Does nothing, just returns to command loop
 ;==============================================================================
 cmd_read_mem:
-            ; Point to buffer after command letter
-            mvi h,0AH             ; H = high byte (0x0A00)
-            mvi l,01H             ; L = low byte + 1 (skip 'R')
-            call skip_spaces
-
-            ; Parse 4-digit hex address
-            call parse_hex_word
-            jc cmd_read_error     ; Error if carry set
-
-            ; D,E now contains the address
-
-            ; Move to H,L for memory access
-            mov h,d               ; H = high byte of address
-            mov l,e               ; L = low byte of address
-
-            ; Print result: "ADDR: XX\r\n"
-            ; Print address (from H,L)
-            mov a,h
-            call print_hex_byte
-            mov a,l
-            call print_hex_byte
-
-            ; Print ": "
-            mvi a,':'
-            call uart_tx_char
-            mvi a,' '
-            call uart_tx_char
-
-            ; Now read the byte at that address
-            mov a,m               ; A = byte at M[HL]
-
-            ; Print byte value
-            call print_hex_byte
-            call print_crlf
-
-            jmp command_loop
-
-cmd_read_error:
-            call print_syntax_error
             jmp command_loop
 
 ;==============================================================================
 ; Command: Dump Memory ('D')
-; Format: D <addr>
-; Example: D 0800 -> dumps 16 bytes starting at 0x0800
+; NOP - Does nothing, just returns to command loop
 ;==============================================================================
 cmd_dump_mem:
-            ; Point to buffer after command letter
-            mvi h,0AH             ; H = high byte (0x0A00)
-            mvi l,01H             ; L = low byte + 1 (skip 'D')
-            call skip_spaces
-
-            ; Parse 4-digit hex address
-            call parse_hex_word
-            jc cmd_dump_error     ; Error if carry set
-
-            ; D,E now contains the start address
-            mov h,d               ; H = high byte of address
-            mov l,e               ; L = low byte of address
-
-            ; Print 16 bytes in format:
-            ; ADDR: XX XX XX XX XX XX XX XX XX XX XX XX XX XX XX XX
-
-            ; Print address (use H,L since we just copied D,E there)
-            mov a,h
-            call print_hex_byte
-            mov a,l
-            call print_hex_byte
-            mvi a,':'
-            call uart_tx_char
-            mvi a,' '
-            call uart_tx_char
-
-            ; Print 16 bytes
-            mvi d,16              ; Counter for 16 bytes (use D, it's free after move to H,L)
-
-dump_loop:
-            mov a,m               ; A = byte at M[HL]
-            call print_hex_byte
-            mvi a,' '
-            call uart_tx_char
-
-            ; Increment address (HL++)
-            inr l
-            mov a,l
-            cpi 0
-            jnz dump_no_carry
-            ; Handle carry to high byte
-            inr h
-
-dump_no_carry:
-            ; Decrement counter
-            dcr d
-            mov a,d
-            cpi 0
-            jnz dump_loop
-
-            call print_crlf
             jmp command_loop
 
-cmd_dump_error:
-            call print_syntax_error
+;==============================================================================
+; Command: Print ('P')
+; Format: P <text>
+; Purpose: Echo back the input text, but stress-test by cycling each character
+;          through all registers (A→B→C→D→E→back to A) before printing
+; This will help identify register clobbering issues
+;==============================================================================
+cmd_print:
+            ; Point to buffer after command letter
+            mvi h,cmd_buf_h             ; H = high byte (0x0A00)
+            mvi l,01H             ; L = low byte + 1 (skip 'P')
+
+print_loop:
+            ; Load character from buffer
+            mov a,m               ; A = character
+
+            ; Check for end of line (CR, LF, or null)
+            cpi 0DH               ; CR?
+            jz print_done
+            cpi 0AH               ; LF?
+            jz print_done
+            cpi 0                 ; Null?
+            jz print_done
+
+            ; Cycle through registers: A→B→C→D→E→A
+            mov b,a               ; A → B
+            mov a,b               ; B → A (verify)
+            mov c,a               ; A → C
+            mov a,c               ; C → A (verify)
+            mov d,a               ; A → D
+            mov a,d               ; D → A (verify)
+            mov e,a               ; A → E
+            mov a,e               ; E → A (verify)
+
+            ; Now print the character (should still be intact)
+            call uart_tx_char
+
+            ; Move to next character
+            inr l
+            jmp print_loop
+
+print_done:
+            call print_crlf
             jmp command_loop
 
 ;==============================================================================
@@ -304,10 +255,10 @@ wait_tx:
             ret
 
 ;==============================================================================
-; Subroutine: uart_rx_char
-; Purpose: Wait for RX ready and read a single character
-; Output: A = received character
-; Modifies: A
+; Subroutine: uart_rx_line
+; Purpose: Read characters until CR (0x0D), store in buffer at 0x0800
+;          Echo each character as typed
+; Modifies: A, B, H, L
 ;==============================================================================
 uart_rx_char:
 wait_rx:
@@ -327,7 +278,7 @@ wait_rx:
 ;==============================================================================
 read_line:
             ; Initialize buffer pointer and length
-            mvi h,0AH             ; H = high byte of buffer address (0x0A00)
+            mvi h,cmd_buf_h             ; H = high byte of buffer address (0x0A00)
             mvi l,00H             ; L = low byte of buffer address
             mvi c,0               ; C = current position in buffer
 
@@ -396,8 +347,8 @@ read_done:
             call print_crlf
 
             ; Save length to memory
-            mvi h,0AH             ; H = high byte (0x0A80)
-            mvi l,80H             ; L = low byte
+            mvi h,cmd_len_h       ; H = high byte of length storage
+            mvi l,cmd_len_l       ; L = low byte of length storage
             mov a,c
             mov m,a               ; Store length
 
@@ -437,7 +388,7 @@ print_prompt:
 
 ;==============================================================================
 ; Subroutine: print_banner
-; Purpose: Print "Intel 8008 Monitor v1.0\r\n"
+; Purpose: Print "Intel 8008 Monitor 2.0\r\n"
 ; Modifies: A
 ;==============================================================================
 print_banner:
@@ -485,14 +436,14 @@ print_banner:
             call uart_tx_char
             mvi a,'.'
             call uart_tx_char
-            mvi a,'0'
+            mvi a,'3'
             call uart_tx_char
             call print_crlf
             ret
 
 ;==============================================================================
-; Subroutine: print_help
-; Purpose: Print help text listing all commands
+; Subroutine: print_you_said
+; Purpose: Print "You said \""
 ; Modifies: A
 ;==============================================================================
 print_help:
@@ -666,8 +617,10 @@ print_help:
             ret
 
 ;==============================================================================
-; Subroutine: print_unknown
-; Purpose: Print "Unknown command\r\n"
+; Subroutine: ascii2hex
+; Purpose: Convert ASCII hex character ('0'-'9', 'A'-'F', 'a'-'f') to binary
+; Input: A = ASCII character
+; Output: A = hex value (0x00-0x0F), or 0xFF if invalid
 ; Modifies: A
 ;==============================================================================
 print_unknown:
@@ -704,38 +657,6 @@ print_unknown:
             call print_crlf
             ret
 
-;==============================================================================
-; Subroutine: print_syntax_error
-; Purpose: Print "Syntax error\r\n"
-; Modifies: A
-;==============================================================================
-print_syntax_error:
-            mvi a,'S'
-            call uart_tx_char
-            mvi a,'y'
-            call uart_tx_char
-            mvi a,'n'
-            call uart_tx_char
-            mvi a,'t'
-            call uart_tx_char
-            mvi a,'a'
-            call uart_tx_char
-            mvi a,'x'
-            call uart_tx_char
-            mvi a,' '
-            call uart_tx_char
-            mvi a,'e'
-            call uart_tx_char
-            mvi a,'r'
-            call uart_tx_char
-            mvi a,'r'
-            call uart_tx_char
-            mvi a,'o'
-            call uart_tx_char
-            mvi a,'r'
-            call uart_tx_char
-            call print_crlf
-            ret
 
 ;==============================================================================
 ; Subroutine: print_reset_msg
@@ -770,206 +691,184 @@ print_reset_msg:
             call print_crlf
             ret
 
-;==============================================================================
-; Subroutine: print_hex_byte
-; Purpose: Print a byte in hexadecimal format (e.g., "3F")
-; Input: A = byte to print
-; Modifies: A, B, C
-;==============================================================================
-print_hex_byte:
-            mov c,a               ; Save original byte
 
-            ; Print high nibble
-            rrc                   ; Rotate right 4 times to get high nibble
-            rrc
-            rrc
-            rrc
-            ani 0FH               ; Mask to get low 4 bits
-            call print_hex_digit
 
-            ; Print low nibble
-            mov a,c               ; Restore original byte
-            ani 0FH               ; Mask to get low 4 bits
-            call print_hex_digit
+;==============================================================================
+; Subroutine: test_mov_diagnostic
+; Purpose: Test parsing 4 hex characters and reading memory at those addresses
+; Test 1: Write "1234" to cmd_buf, parse it, read memory at 0x1234
+; Test 2: Write "1030" to cmd_buf, parse it, read memory at 0x1030
+; Output: "1234=XX 1030=XX" where XX should be different values
+; Modifies: A, B, C, D, E, H, L
+;==============================================================================
+test_mov_diagnostic:
+            ; Test 1: Write "D 1234" to cmd_buf and read memory at 0x1234
+            ; Initialize buffer pointer
+            mvi h,cmd_buf_h       ; H = 0x10 (high byte of cmd_buf)
+            mvi l,cmd_buf_l       ; L = 0x00 (low byte of cmd_buf)
+
+            ; Store "D 1234" character by character
+            mvi a,'D'
+            call store_char_in_buf
+            mvi a,' '
+            call store_char_in_buf
+            mvi a,'1'
+            call store_char_in_buf
+            mvi a,'2'
+            call store_char_in_buf
+            mvi a,'3'
+            call store_char_in_buf
+            mvi a,'4'
+            call store_char_in_buf
+
+            ; Call stub to parse and read (returns dummy value in A)
+            call parse_and_read
+            mov b,a               ; Save result in B
+
+            ; Print "1234="
+            mvi a,'1'
+            call uart_tx_char
+            mvi a,'2'
+            call uart_tx_char
+            mvi a,'3'
+            call uart_tx_char
+            mvi a,'4'
+            call uart_tx_char
+            mvi a,'='
+            call uart_tx_char
+
+            ; Print hex value
+            mov a,b               ; Restore result
+            call print_hex_byte
+
+            ; Print space separator
+            mvi a,' '
+            call uart_tx_char
+
+            ; Test 2: Write "D 0204" to cmd_buf and read memory at 0x0204
+            ; Reset buffer pointer
+            mvi h,cmd_buf_h       ; H = 0x10
+            mvi l,cmd_buf_l       ; L = 0x00
+
+            ; Store "D 0204" character by character
+            mvi a,'D'
+            call store_char_in_buf
+            mvi a,' '
+            call store_char_in_buf
+            mvi a,'0'
+            call store_char_in_buf
+            mvi a,'2'
+            call store_char_in_buf
+            mvi a,'0'
+            call store_char_in_buf
+            mvi a,'4'
+            call store_char_in_buf
+
+            ; Call stub to parse and read (returns dummy value in A)
+            call parse_and_read
+            mov b,a               ; Save result in B
+
+            ; Print "0204="
+            mvi a,'0'
+            call uart_tx_char
+            mvi a,'2'
+            call uart_tx_char
+            mvi a,'0'
+            call uart_tx_char
+            mvi a,'4'
+            call uart_tx_char
+            mvi a,'='
+            call uart_tx_char
+
+            ; Print hex value
+            mov a,b               ; Restore result
+            call print_hex_byte
+
+            ; Print CRLF
+            call print_crlf
+
             ret
 
 ;==============================================================================
-; Subroutine: print_hex_digit
+; Subroutine: store_char_in_buf
+; Purpose: Store character in A at buffer position HL and increment L
+; Input: A = character to store, HL = buffer address
+; Output: HL incremented to next position
+; Modifies: L
+;==============================================================================
+store_char_in_buf:
+            mov m,a               ; Store A at memory[HL]
+            inr l                 ; Increment L to next position
+            ret
+
+;==============================================================================
+; Subroutine: parse_and_read (STUB for TDD)
+; Purpose: Parse hex address from cmd_buf and read memory at that address
+; Input: cmd_buf contains "D XXXX" where XXXX is hex address
+; Output: A = memory byte at address (currently returns dummy values)
+; Modifies: A
+; NOTE: This is a stub - returns 0xAB first call, 0xCD second call for testing
+;==============================================================================
+parse_and_read:
+            ; Stub: Return dummy value
+            ; TODO: Implement actual parsing and memory read
+            mvi a,0ABH            ; Return dummy value 0xAB
+            ret
+
+;==============================================================================
+; Subroutine: print_hex_digit (STUB for TDD)
 ; Purpose: Print a single hex digit (0-F)
 ; Input: A = value 0-15
+; Output: Prints '0'-'9' or 'A'-'F'
 ; Modifies: A
+; NOTE: This is a stub - just prints '?' for now
 ;==============================================================================
 print_hex_digit:
-            cpi 10                ; Is it 0-9 or A-F?
-            jc print_digit_0_9    ; Jump if < 10
-
-            ; Print A-F
-            sui 10                ; Convert 10-15 to 0-5
-            adi 'A'               ; Add ASCII 'A'
-            call uart_tx_char
-            ret
-
-print_digit_0_9:
-            adi '0'               ; Add ASCII '0'
+            ; Stub: Just print '?'
+            ; TODO: Implement actual digit to ASCII conversion
+            mvi a,'?'
             call uart_tx_char
             ret
 
 ;==============================================================================
-; Subroutine: parse_hex_digit
-; Purpose: Convert ASCII hex character to value (0-15)
-; Input: A = ASCII character ('0'-'9', 'A'-'F', 'a'-'f')
-; Output: A = value 0-15, Carry flag clear if valid
-;         Carry flag set if invalid character
-; Modifies: A
+; Subroutine: print_hex_byte (STUB for TDD)
+; Purpose: Print a byte in hexadecimal (2 hex digits)
+; Input: A = byte to print
+; Modifies: A, C
+; NOTE: This is a stub - just prints "XX" for now
 ;==============================================================================
-parse_hex_digit:
-            ; Check if '0'-'9'
-            cpi '0'
-            jc parse_hex_invalid  ; Less than '0'
-            cpi '9' + 1
-            jc parse_hex_digit_0_9
-
-            ; Check if 'A'-'F'
-            cpi 'A'
-            jc parse_hex_invalid
-            cpi 'F' + 1
-            jc parse_hex_digit_upper
-
-            ; Check if 'a'-'f'
-            cpi 'a'
-            jc parse_hex_invalid
-            cpi 'f' + 1
-            jc parse_hex_digit_lower
-
-parse_hex_invalid:
-            ; Set carry flag to indicate error
-            mvi a,0FFH
-            adi 1                 ; Set carry
-            ret
-
-parse_hex_digit_0_9:
-            sui '0'               ; Convert to 0-9
-            ret                   ; Carry is clear
-
-parse_hex_digit_upper:
-            sui 'A'               ; Convert to 0-5
-            adi 10                ; Add 10 to get 10-15
-            ret
-
-parse_hex_digit_lower:
-            sui 'a'               ; Convert to 0-5
-            adi 10                ; Add 10 to get 10-15
+print_hex_byte:
+            ; Stub: Just print "XX"
+            ; TODO: Implement actual hex printing
+            mov c,a               ; Save byte
+            mvi a,'X'
+            call uart_tx_char
+            mvi a,'X'
+            call uart_tx_char
             ret
 
 ;==============================================================================
-; Subroutine: parse_hex_byte
-; Purpose: Parse 2-character hex string from buffer to byte value
-; Input: H,L = pointer to first hex character in buffer
-; Output: A = parsed byte value
-;         H,L = pointer advanced by 2
-;         Carry flag set if parse error
-; Modifies: A, B, H, L
+; Lookup Table: Nibble Shift (at 0x0F00)
+; Purpose: Convert nibble value (0-15) to shifted byte (0x00, 0x10, ..., 0xF0)
+; Usage: Load nibble into A, use as offset: mvi h,0FH / mov l,a / mov a,m
 ;==============================================================================
-parse_hex_byte:
-            ; Parse high nibble
-            mov a,m               ; A = first character
-            call parse_hex_digit
-            jc parse_byte_error   ; Error if carry set
-
-            ; Shift to high nibble (rotate left 4 times)
-            rlc
-            rlc
-            rlc
-            rlc
-            mov b,a               ; B = high nibble << 4
-
-            ; Advance pointer
-            inr l
-
-            ; Parse low nibble
-            mov a,m               ; A = second character
-            call parse_hex_digit
-            jc parse_byte_error   ; Error if carry set
-
-            ; Combine nibbles
-            ora b                 ; A = (high << 4) | low
-
-            ; Advance pointer
-            inr l
-
-            ; Clear carry to indicate success
-            ani 0FFH              ; Clears carry
-            ret
-
-parse_byte_error:
-            mvi a,0FFH
-            adi 1                 ; Set carry
-            ret
-
-;==============================================================================
-; Subroutine: parse_hex_word
-; Purpose: Parse 4-character hex string from buffer to 16-bit address
-; Input: H,L = pointer to first hex character
-; Output: D = high byte of address
-;         E = low byte of address
-;         H,L = pointer advanced by 4
-;         Carry flag set if parse error
-; Modifies: A, B, D, E, H, L
-;==============================================================================
-parse_hex_word:
-            ; Parse high byte (first 2 chars)
-            call parse_hex_byte
-            jc parse_word_error
-            mov d,a               ; D = high byte
-
-            ; Parse low byte (next 2 chars)
-            call parse_hex_byte
-            jc parse_word_error
-            mov e,a               ; E = low byte
-
-            ; Clear carry to indicate success
-            ani 0FFH
-            ret
-
-parse_word_error:
-            mvi a,0FFH
-            adi 1                 ; Set carry
-            ret
-
-;==============================================================================
-; Subroutine: skip_spaces
-; Purpose: Skip space characters in command buffer
-; Input: H,L = pointer to current position in buffer
-; Output: H,L = pointer to first non-space character
-; Modifies: A, H, L
-;==============================================================================
-skip_spaces:
-            mov a,m               ; A = current character
-            cpi ' '               ; Is it a space?
-            rnz                   ; If not space, return immediately
-
-            ; It's a space, skip it
-            inr l
-            jmp skip_spaces       ; Loop to check next character
-
-;==============================================================================
-; Subroutine: to_upper
-; Purpose: Convert lowercase letter to uppercase (a-z -> A-Z)
-; Input: A = character
-; Output: A = uppercase character (if input was lowercase), unchanged otherwise
-; Modifies: A
-;==============================================================================
-to_upper:
-            ; Check if character is lowercase (a-z)
-            cpi 'a'
-            jc to_upper_done      ; Less than 'a', not lowercase
-            cpi 'z' + 1
-            jnc to_upper_done     ; Greater than 'z', not lowercase
-
-            ; Convert to uppercase by subtracting 32 (0x20)
-            sui 20H               ; 'a' - 0x20 = 'A'
-
-to_upper_done:
-            ret
+            org 0F00H
+shift_lut:
+            db 00H                ; 0 << 4 = 0x00
+            db 10H                ; 1 << 4 = 0x10
+            db 20H                ; 2 << 4 = 0x20
+            db 30H                ; 3 << 4 = 0x30
+            db 40H                ; 4 << 4 = 0x40
+            db 50H                ; 5 << 4 = 0x50
+            db 60H                ; 6 << 4 = 0x60
+            db 70H                ; 7 << 4 = 0x70
+            db 80H                ; 8 << 4 = 0x80
+            db 90H                ; 9 << 4 = 0x90
+            db 0A0H               ; 10 << 4 = 0xA0
+            db 0B0H               ; 11 << 4 = 0xB0
+            db 0C0H               ; 12 << 4 = 0xC0
+            db 0D0H               ; 13 << 4 = 0xD0
+            db 0E0H               ; 14 << 4 = 0xE0
+            db 0F0H               ; 15 << 4 = 0xF0
 
             end

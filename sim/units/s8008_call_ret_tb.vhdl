@@ -135,7 +135,7 @@ architecture behavior of s8008_call_ret_tb is
         -- ========================================
         32 => x"26", -- LrI E,0xE1 (marker: in subroutine 1)
         33 => x"E1",
-        34 => x"47", -- RET = 01 000 111 = 0x47
+        34 => x"07", -- RET = 00 000 111 = 0x07
 
         -- ========================================
         -- Subroutine 2 (address 48): Nested CALL
@@ -150,14 +150,14 @@ architecture behavior of s8008_call_ret_tb is
         -- Returns here from level 2
         53 => x"36", -- LrI L,0xE3 (marker: back in subroutine 2)
         54 => x"E3",
-        55 => x"47", -- RET to main = 0x47
+        55 => x"07", -- RET to main = 0x07
 
         -- ========================================
         -- Subroutine 3 (address 64): Level 2 of nested call
         -- ========================================
         64 => x"06", -- LrI A,0xF2 (marker: in subroutine 3, level 2)
         65 => x"F2",
-        66 => x"47", -- RET to subroutine 2 = 0x47
+        66 => x"07", -- RET to subroutine 2 = 0x07
 
         -- ========================================
         -- Subroutine 4 (address 80): Stack depth test
@@ -172,7 +172,7 @@ architecture behavior of s8008_call_ret_tb is
         -- Returns here from level 2
         85 => x"16", -- LrI C,0xD2 (marker: back in level 1)
         86 => x"D2",
-        87 => x"47", -- RET to main = 0x47
+        87 => x"07", -- RET to main = 0x07
 
         -- ========================================
         -- Subroutine 5 (address 96): Stack level 2
@@ -187,14 +187,14 @@ architecture behavior of s8008_call_ret_tb is
         -- Returns here from level 3
         101 => x"26", -- LrI E,0xC2 (marker: back in level 2)
         102 => x"C2",
-        103 => x"47", -- RET to level 1 = 0x47
+        103 => x"07", -- RET to level 1 = 0x07
 
         -- ========================================
         -- Subroutine 6 (address 112): Stack level 3 (deepest)
         -- ========================================
         112 => x"2E", -- LrI H,0xB1 (marker: in subroutine 6, level 3 - deepest)
         113 => x"B1",
-        114 => x"47", -- RET to level 2 = 0x47
+        114 => x"07", -- RET to level 2 = 0x07
 
         others => x"00"
     );

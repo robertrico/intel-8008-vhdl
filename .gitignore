@@ -4,6 +4,7 @@ TODO_*.txt
 *.lst
 *.hex
 *.mem
+*.p
 # FPGA Build Artifacts
 build/
 work/

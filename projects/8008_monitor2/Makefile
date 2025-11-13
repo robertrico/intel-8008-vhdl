@@ -15,8 +15,8 @@ WORK_DIR = work
 #==========================================
 # Simulation Configuration
 #==========================================
-# Run simulation for 500ms (longer to observe interactive echo with CPU polling)
-SIM_STOP_TIME = 500ms
+# Run simulation for 1000ms (longer to observe interactive echo with CPU polling)
+SIM_STOP_TIME = 1000ms
 
 #==========================================
 # Source Files
@@ -30,7 +30,7 @@ RTL_SOURCES = $(PROJECT_ROOT)/src/components/uart_tx.vhdl \
               $(PROJECT_ROOT)/src/components/i8008_alu.vhdl \
               $(PROJECT_ROOT)/src/components/s8008.vhdl \
               $(PROJECT_ROOT)/src/components/phase_clocks.vhdl \
-              $(PROJECT_ROOT)/src/components/rom_2kx8.vhdl \
+              $(PROJECT_ROOT)/src/components/rom_4kx8.vhdl \
               $(PROJECT_ROOT)/src/components/ram_1kx8.vhdl \
               src/monitor_top.vhdl
 

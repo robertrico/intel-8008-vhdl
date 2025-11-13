@@ -42,7 +42,7 @@ STOP_TIME_s8008_conditional_ret_tb = 2000us
 STOP_TIME_s8008_call_ret_tb = 800us
 STOP_TIME_s8008_alu_tb = 1800us
 STOP_TIME_s8008_io_tb = 600us
-STOP_TIME_s8008_rotate_tb = 400us
+STOP_TIME_s8008_rotate_tb = 4000us
 STOP_TIME_s8008_stack_tb = 200us
 STOP_TIME_s8008_inc_dec_tb = 2000us
 STOP_TIME_s8008_rst_tb = 800us
@@ -53,6 +53,8 @@ STOP_TIME_s8008_simple_add_tb = 1000us
 STOP_TIME_s8008_inp_cpi_tb = 1000us
 STOP_TIME_s8008_interrupt_tb = 5000us
 STOP_TIME_test_rst1_interrupt = 500us
+STOP_TIME_s8008_monitor_tb = 150000us
+STOP_TIME_s8008_mov_all_tb = 10000us
 
 # Get stop time for active test, or use default
 SIM_STOP_TIME ?= $(or $(STOP_TIME_$(ACTIVE_TB_ENTITY)),1ms)
@@ -177,6 +179,12 @@ test-interrupt:
 test-rst-jmp-loop:
 	@$(MAKE) sim TEST=test_rst1_interrupt
 
+test-monitor:
+	@$(MAKE) sim TEST=s8008_monitor_tb
+
+test-mov-all:
+	@$(MAKE) sim TEST=s8008_mov_all_tb
+
 # Run all assembly program tests
 test-all-programs:
 	@echo "=========================================="
@@ -239,9 +247,9 @@ list-programs:
 	@echo ""
 	@echo "Current ROM program: $(ROM_PROGRAM)"
 
-# Assemble a program
+# Assemble a program with Naken assembler
 asm:
-	@echo "=== Assembling $(ROM_PROGRAM).asm ==="
+	@echo "=== Assembling $(ROM_PROGRAM).asm with Naken ==="
 	@if [ ! -f "$(TEST_PROG_DIR)/$(ROM_PROGRAM).asm" ]; then \
 		echo "Error: $(TEST_PROG_DIR)/$(ROM_PROGRAM).asm not found"; \
 		echo "Available programs:"; \
@@ -251,6 +259,31 @@ asm:
 	cd $(TEST_PROG_DIR) && $(NAKEN_ASM) -I . -l -type hex -o $(ROM_PROGRAM).hex $(ROM_PROGRAM).asm
 	@echo "✓ Assembly complete: $(TEST_PROG_DIR)/$(ROM_PROGRAM).hex"
 	@echo "✓ Listing file: $(TEST_PROG_DIR)/$(ROM_PROGRAM).lst"
+
+# Assemble a program with AS assembler (takes program name as argument)
+as-asm:
+	@echo "=== Assembling $(filter-out $@,$(MAKECMDGOALS)).asm with AS ==="
+	@PROG_NAME=$(filter-out $@,$(MAKECMDGOALS)); \
+	if [ -z "$$PROG_NAME" ]; then \
+		echo "Error: No program specified"; \
+		echo "Usage: make as-asm <program_name>"; \
+		echo "Example: make as-asm test_mov_all"; \
+		exit 1; \
+	fi; \
+	if [ ! -f "$(TEST_PROG_DIR)/$$PROG_NAME.asm" ]; then \
+		echo "Error: $(TEST_PROG_DIR)/$$PROG_NAME.asm not found"; \
+		echo "Available programs:"; \
+		cd $(TEST_PROG_DIR) && ls -1 *.asm; \
+		exit 1; \
+	fi; \
+	cd $(TEST_PROG_DIR) && $(AS_ASM) -cpu 8008new -i $(AS_INCLUDE) -o $$PROG_NAME.p -L $$PROG_NAME.asm; \
+	cd $(TEST_PROG_DIR) && $(P2HEX) $$PROG_NAME.p $$PROG_NAME.hex -F Intel; \
+	echo "✓ Assembly complete: $(TEST_PROG_DIR)/$$PROG_NAME.hex"; \
+	echo "✓ Listing file: $(TEST_PROG_DIR)/$$PROG_NAME.lst"
+
+# Prevent make from treating program name as a target
+%:
+	@:
 
 # Convert HEX to MEM format and update ROM
 load-rom:
