@@ -66,6 +66,10 @@ include common.mk
 # Program Assembly Configuration
 #==========================================
 NAKEN_ASM ?= /Users/$(USERNAME)/Development/naken_asm/naken_asm
+AS_ASM ?= /Users/$(USERNAME)/Development/as_assembler/asl
+P2HEX ?= /Users/$(USERNAME)/Development/as_assembler/p2hex
+P2BIN ?= /Users/$(USERNAME)/Development/as_assembler/p2bin
+AS_INCLUDE ?= /Users/$(USERNAME)/Development/as_assembler/include
 TEST_PROG_DIR = test_programs
 PROJECTS_DIR = projects
 PYTHON = python3

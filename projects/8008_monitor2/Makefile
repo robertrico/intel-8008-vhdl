@@ -45,7 +45,11 @@ LPF_FILE = $(PROJECT_ROOT)/projects/8008_monitor2/constraints/monitor.lpf
 #==========================================
 # Program Assembly Configuration
 #==========================================
-NAKEN_ASM ?= /Users/${USERNAME}/Development/naken_asm/naken_asm
+# Import assembler paths from root Makefile
+AS_ASM ?= /Users/${USERNAME}/Development/as_assembler/asl
+P2HEX ?= /Users/${USERNAME}/Development/as_assembler/p2hex
+P2BIN ?= /Users/${USERNAME}/Development/as_assembler/p2bin
+AS_INCLUDE ?= /Users/${USERNAME}/Development/as_assembler/include
 PYTHON = python3
 
 #==========================================
@@ -57,18 +61,22 @@ include $(PROJECT_ROOT)/common.mk
 # Project-Specific Targets
 #==========================================
 
-# Assemble the monitor program
+# Assemble the monitor program with AS assembler
 .PHONY: asm
 asm:
-	@echo "=== Assembling monitor.asm ==="
-	$(NAKEN_ASM) -I . -l -type hex -o test_programs/monitor.hex test_programs/monitor.asm
+	@echo "=== Assembling monitor.asm with AS ==="
+	cd test_programs && $(AS_ASM) -cpu 8008new -i $(AS_INCLUDE) -o monitor.p -L monitor.asm
+	@echo "=== Converting to Intel HEX ==="
+	cd test_programs && $(P2HEX) monitor.p monitor.hex -F Intel
 	@echo "✓ Assembly complete"
 
-# Assemble simple UART test (for testbench)
+# Assemble simple UART test (keeping for compatibility, but AS is now default)
 .PHONY: asm-test
 asm-test:
-	@echo "=== Assembling simple_uart_test.asm ==="
-	$(NAKEN_ASM) -I . -l -type hex -o test_programs/simple_uart_test.hex test_programs/simple_uart_test.asm
+	@echo "=== Assembling simple_uart_test.asm with AS ==="
+	cd test_programs && $(AS_ASM) -cpu 8008new -i $(AS_INCLUDE) -o simple_uart_test.p -L simple_uart_test.asm
+	@echo "=== Converting to Intel HEX ==="
+	cd test_programs && $(P2HEX) simple_uart_test.p simple_uart_test.hex -F Intel
 	@echo "✓ Test assembly complete"
 
 # Convert monitor to MEM format
@@ -116,7 +124,8 @@ deploy: clean-proj hex2mem bitstream program
 # Clean project files
 .PHONY: clean-proj
 clean-proj: clean
-	rm -f test_programs/monitor.hex test_programs/monitor.lst test_programs/monitor.mem
+	rm -f test_programs/monitor.hex test_programs/monitor.lst test_programs/monitor.mem test_programs/monitor.p
+	rm -f test_programs/simple_uart_test.hex test_programs/simple_uart_test.lst test_programs/simple_uart_test.mem test_programs/simple_uart_test.p
 	rm -f build/*
 
 .PHONY: help-proj
