@@ -20,9 +20,6 @@ entity v8008 is
         phi1 : in std_logic;
         phi2 : in std_logic;
 
-        -- Reset (active low)
-        reset_n : in std_logic;
-
         -- 8-bit multiplexed address/data bus
         data_bus_in     : in  std_logic_vector(7 downto 0);
         data_bus_out    : out std_logic_vector(7 downto 0);
@@ -82,6 +79,16 @@ architecture rtl of v8008 is
     signal alu_command : std_logic_vector(2 downto 0);
     signal alu_result : std_logic_vector(8 downto 0);
     signal flag_carry : std_logic;
+    
+    -- SYNC signal generation
+    -- Per Intel 8008 datasheet: SYNC is phi2 divided by 2
+    -- SYNC changes on both rising and falling edges of phi2
+    signal sync_reg : std_logic := '0';      -- Registered SYNC output
+    
+    -- Timing state machine
+    -- The 8008 starts in STOPPED state (no reset pin!)
+    type timing_state_t is (T1, T1I, T2, TWAIT, T3, T4, T5, STOPPED);
+    signal timing_state : timing_state_t := STOPPED;  -- Power-on state is STOPPED
 
 begin
 
@@ -100,19 +107,40 @@ begin
         );
 
     --===========================================
-    -- Output Assignments (Safe Defaults)
+    -- SYNC Signal Generation
     --===========================================
-
-    -- Drive all outputs to safe default values
+    -- Per Intel 8008 datasheet:
+    -- SYNC is phi2 divided by 2, with transitions on phi2 edges
+    -- This is the master timing reference for the CPU
+    
+    -- SYNC generation process - toggles on EVERY phi2 edge (both rising and falling)
+    sync_generation: process(phi2)
+    begin
+        if phi2'event then  -- Triggers on both rising and falling edges
+            sync_reg <= not sync_reg;
+        end if;
+    end process sync_generation;
+    
+    -- SYNC output assignment
+    SYNC <= sync_reg;
+    
+    --===========================================
+    -- State Output Generation
+    --===========================================
+    -- Generate S0, S1, S2 based on current timing state
+    -- Per Intel 8008 datasheet state encoding
+    
+    -- State outputs based on timing_state
+    -- STOPPED state outputs S0=1, S1=1, S2=0 (binary 011)
+    S0 <= '1' when timing_state = STOPPED else '0';  -- Temporary until full implementation
+    S1 <= '1' when timing_state = STOPPED else '0';
+    S2 <= '0';
+    
+    -- Data bus (temporary)
     data_bus_out    <= (others => '0');
     data_bus_enable <= '0';
-
-    S0   <= '0';
-    S1   <= '0';
-    S2   <= '0';
-    SYNC <= '0';
-
-    -- Debug outputs
+    
+    -- Debug outputs (temporary)
     debug_reg_A <= (others => '0');
     debug_reg_B <= (others => '0');
     debug_reg_C <= (others => '0');
@@ -123,24 +151,10 @@ begin
     debug_pc    <= (others => '0');
     debug_flags <= (others => '0');
 
-    -- ALU inputs (safe defaults)
+    -- ALU inputs (temporary)
     alu_data_0  <= (others => '0');
     alu_data_1  <= (others => '0');
     alu_command <= (others => '0');
     flag_carry  <= '0';
-
-    --===========================================
-    -- Placeholder Processes
-    --===========================================
-    -- These will be filled in during implementation
-
-    -- Main state machine process (placeholder)
-    -- Will handle: timing states, microcode states, instruction execution
-
-    -- Register file process (placeholder)
-    -- Will handle: register read/write, program counter, stack pointer
-
-    -- Bus interface process (placeholder)
-    -- Will handle: data bus tri-state control, address output
 
 end rtl;
