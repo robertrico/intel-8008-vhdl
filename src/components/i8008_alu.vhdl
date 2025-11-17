@@ -55,7 +55,7 @@ begin
             when OP_SUB =>
                 result <= std_logic_vector(unsigned('0' & data_0) - unsigned('0' & data_1));
             when OP_SBB =>
-                result <= std_logic_vector(unsigned('0' & data_0) - unsigned('0' & data_1) + carry_val);
+                result <= std_logic_vector(unsigned('0' & data_0) - unsigned('0' & data_1) - carry_val);
             when OP_ANA =>
                 result <= '0' & (data_0 and data_1);
             when OP_XRA =>

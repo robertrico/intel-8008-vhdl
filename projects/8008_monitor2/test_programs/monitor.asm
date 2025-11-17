@@ -103,11 +103,18 @@ main:
             mvi a,00H
             out 9                 ; Write to interrupt mask register (port 9)
 
+            ; IMMEDIATE TEST: ORA C before anything else
+            mvi a,30H             ; A = 0x30
+            mvi c,04H             ; C = 0x04
+            ora c                 ; A = 0x30 | 0x04 = should be 0x34
+            mov b,a               ; Save result in B
+
+            ; Run MOV diagnostic test (will print the ORA result)
+            call test_mov_diagnostic
+
             ; Print startup banner
             call print_banner
 
-            ; Run MOV diagnostic test
-            call test_mov_diagnostic
 
 ;==============================================================================
 ; Main Loop
@@ -242,15 +249,15 @@ print_done:
 ; Subroutine: uart_tx_char
 ; Purpose: Wait for TX ready and transmit character in A register
 ; Input: A = character to transmit
-; Modifies: B (preserves A via B)
+; Modifies: E (preserves A via E)
 ;==============================================================================
 uart_tx_char:
-            mov b,a               ; Save character to B
+            mov e,a               ; Save character to E
 wait_tx:
             in 0                  ; Read TX status (port 0)
             ani 01H               ; Check tx_busy bit
             jnz wait_tx           ; If busy, keep waiting
-            mov a,b               ; Restore character
+            mov a,e               ; Restore character
             out 10                ; Send to TX data port
             ret
 
@@ -702,6 +709,81 @@ print_reset_msg:
 ; Modifies: A, B, C, D, E, H, L
 ;==============================================================================
 test_mov_diagnostic:
+            ; Diagnostic: Print ORA C result from boot (B register preserved from main)
+            mvi a,'O'
+            call uart_tx_char
+            mvi a,'='
+            call uart_tx_char
+            mov a,b               ; B contains result from main's ORA C test
+            call print_hex_byte
+            mvi a,' '
+            call uart_tx_char
+
+            ; Diagnostic: Test SUI instruction with '4'
+            mvi a,'4'             ; A = 0x34 (ASCII '4')
+            sui '0'               ; A = 0x34 - 0x30 = should be 0x04
+            mov b,a               ; Save result
+
+            mvi a,'S'
+            call uart_tx_char
+            mvi a,'='
+            call uart_tx_char
+            mov a,b
+            call print_hex_byte
+            mvi a,' '
+            call uart_tx_char
+
+            ; Diagnostic: Test ascii_to_hex_nibble with '3'
+            mvi a,'3'
+            call ascii_to_hex_nibble
+            mov b,a               ; Save result
+
+            mvi a,'T'
+            call uart_tx_char
+            mvi a,'='
+            call uart_tx_char
+            mov a,b
+            call print_hex_byte
+            mvi a,' '
+            call uart_tx_char
+
+            ; Diagnostic: Test E register preservation
+            mvi e,04H             ; Set E = 4
+            mvi h,0FH             ; Do some operations that shouldn't touch E
+            mvi l,03H
+            mov a,m               ; Read from lookup table
+            mov b,e               ; Get E value into B
+
+            mvi a,'E'
+            call uart_tx_char
+            mvi a,'='
+            call uart_tx_char
+            mov a,b
+            call print_hex_byte
+            mvi a,' '
+            call uart_tx_char
+
+            ; Diagnostic: Test combining two nibbles (3 and 4 -> 0x34)
+            mvi b,03H             ; High nibble = 3
+            mvi c,04H             ; Low nibble = 4
+
+            ; Combine using lookup table and ORA
+            mov a,b               ; A = 3
+            mov l,a               ; L = 3 (index into lookup table)
+            mvi h,0FH             ; Point to shift_lut
+            mov a,m               ; A = 0x30 (3 << 4)
+            ora c                 ; A = 0x30 | 0x04 = 0x34
+            mov b,a               ; Save result
+
+            mvi a,'N'
+            call uart_tx_char
+            mvi a,'='
+            call uart_tx_char
+            mov a,b
+            call print_hex_byte
+            mvi a,' '
+            call uart_tx_char
+
             ; Test 1: Write "D 1234" to cmd_buf and read memory at 0x1234
             ; Initialize buffer pointer
             mvi h,cmd_buf_h       ; H = 0x10 (high byte of cmd_buf)
@@ -802,49 +884,166 @@ store_char_in_buf:
             ret
 
 ;==============================================================================
-; Subroutine: parse_and_read (STUB for TDD)
-; Purpose: Parse hex address from cmd_buf and read memory at that address
-; Input: cmd_buf contains "D XXXX" where XXXX is hex address
-; Output: A = memory byte at address (currently returns dummy values)
+; Subroutine: ascii_to_hex_nibble
+; Purpose: Convert ASCII hex character to nibble value
+; Input: A = ASCII character ('0'-'9', 'A'-'F', 'a'-'f')
+; Output: A = nibble value (0x00-0x0F)
 ; Modifies: A
-; NOTE: This is a stub - returns 0xAB first call, 0xCD second call for testing
 ;==============================================================================
-parse_and_read:
-            ; Stub: Return dummy value
-            ; TODO: Implement actual parsing and memory read
-            mvi a,0ABH            ; Return dummy value 0xAB
+ascii_to_hex_nibble:
+            ; Check if it's '0'-'9'
+            cpi '0'
+            jc invalid_hex        ; Less than '0' - invalid
+            cpi '9'+1
+            jc convert_digit      ; Between '0' and '9'
+
+            ; Check if it's 'A'-'F'
+            cpi 'A'
+            jc invalid_hex        ; Between '9' and 'A' - invalid
+            cpi 'F'+1
+            jc convert_upper      ; Between 'A' and 'F'
+
+            ; Check if it's 'a'-'f'
+            cpi 'a'
+            jc invalid_hex        ; Between 'F' and 'a' - invalid
+            cpi 'f'+1
+            jc convert_lower      ; Between 'a' and 'f'
+
+invalid_hex:
+            ; Return 0 for invalid characters
+            mvi a,0
+            ret
+
+convert_digit:
+            ; '0'-'9': subtract '0'
+            sui '0'
+            ret
+
+convert_upper:
+            ; 'A'-'F': subtract 'A' and add 10
+            sui 'A'
+            adi 10
+            ret
+
+convert_lower:
+            ; 'a'-'f': subtract 'a' and add 10
+            sui 'a'
+            adi 10
             ret
 
 ;==============================================================================
-; Subroutine: print_hex_digit (STUB for TDD)
+; Subroutine: parse_and_read
+; Purpose: Parse hex address from cmd_buf and read memory at that address
+; Input: cmd_buf contains "D XXXX" where XXXX is hex address
+; Output: A = memory byte at parsed address
+; Modifies: A, B, C, D, H, L
+; NOTE: Currently returns the low byte of parsed address as test data
+;==============================================================================
+parse_and_read:
+            ; Parse 4 hex characters from cmd_buf[2..5] into HL
+            ; Result will be in HL register pair
+
+            ; Parse first hex digit (high nibble of H)
+            mvi h,cmd_buf_h       ; Point to cmd_buf
+            mvi l,02H             ; Offset 2 (first hex char after "D ")
+            mov a,m               ; A = first hex char
+            call ascii_to_hex_nibble  ; Convert to nibble
+            mov b,a               ; Save in B
+
+            ; Parse second hex digit (low nibble of H)
+            mvi h,cmd_buf_h
+            mvi l,03H             ; Offset 3
+            mov a,m
+            call ascii_to_hex_nibble
+            mov c,a               ; Save in C
+
+            ; Parse third hex digit (high nibble of L)
+            mvi h,cmd_buf_h
+            mvi l,04H             ; Offset 4
+            mov a,m
+            call ascii_to_hex_nibble
+            mov d,a               ; Save in D
+
+            ; Parse fourth hex digit (low nibble of L)
+            mvi h,cmd_buf_h
+            mvi l,05H             ; Offset 5
+            mov a,m
+            call ascii_to_hex_nibble
+            mov e,a               ; Save in E (now we have all 4 nibbles: B,C,D,E)
+
+            ; Combine nibbles into HL
+            ; H = (B << 4) | C
+            ; L = (D << 4) | E
+
+            ; Combine high byte: H = (B << 4) | C
+            ; Use lookup table at 0x0F00 to shift B left 4 bits
+            mov a,b               ; A = high nibble of H
+            mov l,a               ; Use as index
+            mvi h,0FH             ; Point to shift_lut
+            mov a,m               ; A = B << 4
+            ora c                 ; A = (B << 4) | C
+            mov b,a               ; Save high byte in B (reusing B after combining)
+
+            ; Combine low byte: L = (D << 4) | E
+            mov a,d               ; A = high nibble of L
+            mov l,a               ; Use as index
+            mvi h,0FH             ; Point to shift_lut
+            mov a,m               ; A = D << 4
+            ora e                 ; A = (D << 4) | E
+            mov l,a               ; L = low byte of address
+
+            ; Restore high byte from B
+            mov h,b               ; H = high byte of address
+
+            ; For now, return L (low byte) as the "memory value"
+            ; TODO: Later we'll do: mov a,m to read actual memory
+            mov a,l               ; Return low byte of parsed address
+            ret
+
+;==============================================================================
+; Subroutine: print_hex_digit
 ; Purpose: Print a single hex digit (0-F)
 ; Input: A = value 0-15
 ; Output: Prints '0'-'9' or 'A'-'F'
 ; Modifies: A
-; NOTE: This is a stub - just prints '?' for now
 ;==============================================================================
 print_hex_digit:
-            ; Stub: Just print '?'
-            ; TODO: Implement actual digit to ASCII conversion
-            mvi a,'?'
+            cpi 10                ; Compare with 10 (is it 0-9 or A-F?)
+            jc print_digit_0_9    ; Jump if A < 10 (carry set)
+
+            ; Print A-F (value is 10-15)
+            sui 10                ; Subtract 10 (convert 10-15 to 0-5)
+            adi 'A'               ; Add ASCII 'A' (convert to 'A'-'F')
+            call uart_tx_char
+            ret
+
+print_digit_0_9:
+            ; Print 0-9 (value is 0-9)
+            adi '0'               ; Add ASCII '0' (convert to '0'-'9')
             call uart_tx_char
             ret
 
 ;==============================================================================
-; Subroutine: print_hex_byte (STUB for TDD)
+; Subroutine: print_hex_byte
 ; Purpose: Print a byte in hexadecimal (2 hex digits)
 ; Input: A = byte to print
 ; Modifies: A, C
-; NOTE: This is a stub - just prints "XX" for now
 ;==============================================================================
 print_hex_byte:
-            ; Stub: Just print "XX"
-            ; TODO: Implement actual hex printing
-            mov c,a               ; Save byte
-            mvi a,'X'
-            call uart_tx_char
-            mvi a,'X'
-            call uart_tx_char
+            mov c,a               ; Save original byte in C
+
+            ; Print high nibble (upper 4 bits)
+            rrc                   ; Rotate right 4 times to get high nibble
+            rrc
+            rrc
+            rrc
+            ani 00001111B         ; Mask to get only low 4 bits (the shifted nibble)
+            call print_hex_digit
+
+            ; Print low nibble (lower 4 bits)
+            mov a,c               ; Restore original byte
+            ani 00001111B         ; Mask to get low 4 bits
+            call print_hex_digit
             ret
 
 ;==============================================================================

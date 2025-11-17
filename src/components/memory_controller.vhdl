@@ -128,7 +128,7 @@ begin
     -- Memory data output selection
     mem_data_out <= rom_data when rom_selected = '1' else
                     ram_data_out when ram_selected = '1' else
-                    x"B2";  -- Unmapped memory debug value
+                    (others => 'Z');  -- Unmapped memory debug value
 
     -- Memory drives bus only during T3 of read cycles
     mem_data_enable <= '1' when (is_t3 = '1' and is_read_cycle = '1') else '0';

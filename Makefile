@@ -15,7 +15,8 @@ RTL_SOURCES = $(SRC_DIR)/components/i8008_alu.vhdl \
               $(SRC_DIR)/components/rom_2kx8.vhdl \
               $(SRC_DIR)/components/ram_1kx8.vhdl \
               $(SRC_DIR)/components/io_console.vhdl \
-              $(SRC_DIR)/components/s8008.vhdl
+              $(SRC_DIR)/components/s8008.vhdl \
+              $(SRC_DIR)/components/v8008.vhdl
 
 # Main comprehensive testbench
 TB_SOURCES = $(SIM_DIR)/s8008_tb.vhdl
@@ -40,7 +41,8 @@ STOP_TIME_s8008_conditional_tb = 3000us
 STOP_TIME_s8008_conditional_call_tb = 3000us
 STOP_TIME_s8008_conditional_ret_tb = 2000us
 STOP_TIME_s8008_call_ret_tb = 800us
-STOP_TIME_s8008_alu_tb = 1800us
+STOP_TIME_s8008_alu_tb = 200000us
+STOP_TIME_s8008_alu_or_tb = 15000us
 STOP_TIME_s8008_io_tb = 600us
 STOP_TIME_s8008_rotate_tb = 4000us
 STOP_TIME_s8008_stack_tb = 200us
@@ -55,6 +57,9 @@ STOP_TIME_s8008_interrupt_tb = 5000us
 STOP_TIME_test_rst1_interrupt = 500us
 STOP_TIME_s8008_monitor_tb = 150000us
 STOP_TIME_s8008_mov_all_tb = 10000us
+
+# v8008 refactored CPU tests
+STOP_TIME_v8008_minimal_tb = 2us
 
 # Get stop time for active test, or use default
 SIM_STOP_TIME ?= $(or $(STOP_TIME_$(ACTIVE_TB_ENTITY)),1ms)
@@ -127,7 +132,7 @@ test-complete: test test-units test-all-programs test-interrupt
 	@echo "========================================"
 
 # Quick shortcuts for specific unit tests
-.PHONY: test-conditional test-conditional-call test-conditional-ret test-call-ret test-alu test-io test-rotate test-stack test-inc-dec test-rst
+.PHONY: test-conditional test-conditional-call test-conditional-ret test-call-ret test-alu test-alu-or test-io test-rotate test-stack test-inc-dec test-rst
 test-conditional:
 	@$(MAKE) sim TEST=s8008_conditional_tb
 
@@ -142,6 +147,9 @@ test-call-ret:
 
 test-alu:
 	@$(MAKE) sim TEST=s8008_alu_tb
+
+test-alu-or:
+	@$(MAKE) sim TEST=s8008_alu_or_tb
 
 test-io:
 	@$(MAKE) sim TEST=s8008_io_tb
@@ -184,6 +192,10 @@ test-monitor:
 
 test-mov-all:
 	@$(MAKE) sim TEST=s8008_mov_all_tb
+
+# v8008 refactored CPU test shortcuts
+test-v8008-minimal:
+	@$(MAKE) sim TEST=v8008_minimal_tb
 
 # Run all assembly program tests
 test-all-programs:
