@@ -176,6 +176,12 @@ architecture rtl of v8008 is
     signal decode_instruction : boolean := false;
     signal execute_instruction : boolean := false;
     
+    -- Cycle and instruction tracking
+    signal cycle_complete : boolean := false;      -- True when current machine cycle ends (T3 or T5)
+    signal instruction_complete : boolean := true; -- True when entire instruction finishes
+    signal cycles_in_instruction : integer := 1;   -- How many cycles this instruction needs
+    signal current_cycle : integer := 0;           -- Which cycle we're in
+    
     -- Register control signals
     signal reg_write_enable : boolean := false;
     signal reg_read_enable : boolean := false;
@@ -223,7 +229,7 @@ begin
             elsif timing_state = T1I then
                 -- CPU acknowledged interrupt: clear latch
                 int_latched <= '0';
-                in_int_ack_cycle <= '1';  -- Start interrupt acknowledge sequence
+                in_int_ack_cycle <= '1';  -- Mark that external hardware is providing instruction
             elsif timing_state = T1 and in_int_ack_cycle = '1' then
                 -- Clear interrupt acknowledge flag after returning to T1
                 in_int_ack_cycle <= '0';
@@ -265,12 +271,18 @@ begin
             
             case timing_state is
                 when T1 =>
-                    -- T1: Normal instruction fetch cycle
+                    -- T1: Start of a machine cycle
+                    cycle_complete <= false;  -- Starting new cycle
+                    -- Note: instruction_complete is set by instruction decoder
                     timing_state <= T2;
                     
                 when T1I =>
                     -- T1I: Interrupt acknowledge cycle
-                    -- External hardware will provide RST instruction
+                    -- External hardware provides an instruction on data bus
+                    -- (typically RST, but can be any valid 8008 instruction)
+                    -- This acts like a normal instruction fetch, but externally driven
+                    cycle_complete <= false;  -- Starting new cycle
+                    -- Don't touch instruction_complete - let decoder handle instruction normally
                     timing_state <= T2;
                     
                 when T2 =>
@@ -289,35 +301,100 @@ begin
                     end if;
                     
                 when T3 =>
-                    -- T3: Data transfer cycle - capture instruction
-                    if in_int_ack_cycle = '1' then
-                        -- Latch RST instruction provided by external hardware
-                        instruction_reg <= data_bus_in;
-                        -- RST is always 3-state, go back to T1
-                        timing_state <= T1;
-                    else
-                        -- Normal instruction fetch
-                        instruction_reg <= data_bus_in;
-                        -- For now, assume 3-state instructions
-                        -- Check for pending interrupts
-                        if int_latched = '1' then
-                            timing_state <= T1I;
+                    -- T3: Data transfer cycle - capture instruction from data bus
+                    instruction_reg <= data_bus_in;
+                    
+                    -- TODO: Instruction decoder determines if this is 3-state or 5-state
+                    -- For now, assume 3-state (most common)
+                    cycle_complete <= true;  -- 3-state cycle ends after T3
+                    
+                    -- Check if cycle ended (3-state ends here, 5-state continues)
+                    if cycle_complete then
+                        -- Cycle ended at T3 (3-state instruction)
+                        -- TODO: Decoder determines if instruction needs more cycles
+                        instruction_complete <= true;  -- For now, assume single cycle
+                        
+                        -- Now check if instruction is complete
+                        if instruction_complete then
+                            -- Instruction complete - check for interrupt
+                            if int_latched = '1' then
+                                timing_state <= T1I;  -- Service interrupt
+                            else
+                                timing_state <= T1;   -- Next instruction
+                            end if;
                         else
-                            timing_state <= T1;
+                            -- Instruction NOT complete (multi-cycle)
+                            -- Check if instruction was jammed during interrupt cycle
+                            if in_int_ack_cycle = '1' then
+                                timing_state <= T1I;  -- Instruction jammed by interrupt controller
+                            else
+                                timing_state <= T1;   -- Continue multi-cycle instruction
+                            end if;
                         end if;
+                    else
+                        -- Cycle not complete - this is a 5-state instruction
+                        -- Continue to T4
+                        timing_state <= T4;
                     end if;
                     
                 when T4 =>
                     -- T4: Extended cycle for 5-state instructions
-                    timing_state <= T5;
+                    -- TODO: Some operations might complete at T4
+                    -- For now, assume 5-state continues to T5
+                    cycle_complete <= false;  -- Not done yet
+                    
+                    -- Check if cycle ended at T4
+                    if cycle_complete then
+                        -- Some instructions might end at T4
+                        -- TODO: Decoder determines if instruction is complete
+                        instruction_complete <= true;  -- For now, assume complete
+                        
+                        -- Check if instruction is complete
+                        if instruction_complete then
+                            -- Instruction complete - check for interrupt
+                            if int_latched = '1' then
+                                timing_state <= T1I;  -- Service interrupt
+                            else
+                                timing_state <= T1;   -- Next instruction
+                            end if;
+                        else
+                            -- Instruction NOT complete (multi-cycle)
+                            -- Check if instruction was jammed during interrupt cycle
+                            if in_int_ack_cycle = '1' then
+                                timing_state <= T1I;  -- Instruction jammed by interrupt controller
+                            else
+                                timing_state <= T1;   -- Continue multi-cycle instruction
+                            end if;
+                        end if;
+                    else
+                        -- Cycle not complete - continue to T5
+                        timing_state <= T5;
+                    end if;
                     
                 when T5 =>
-                    -- T5: Final state
-                    -- Check for pending interrupts at instruction boundary
-                    if int_latched = '1' then
-                        timing_state <= T1I;
+                    -- T5: Final state of 5-state cycle
+                    -- 5-state cycles always end at T5
+                    cycle_complete <= true;
+                    
+                    -- TODO: Decoder determines if instruction needs more cycles
+                    instruction_complete <= true;  -- For now, assume complete
+                    
+                    -- Since cycle definitely ends at T5, check instruction completion
+                    if instruction_complete then
+                        -- Instruction complete - check for interrupt
+                        if int_latched = '1' then
+                            timing_state <= T1I;  -- Service interrupt
+                        else
+                            timing_state <= T1;   -- Next instruction
+                        end if;
                     else
-                        timing_state <= T1;
+                        -- Instruction NOT complete (multi-cycle)
+                        -- Check if RST was jammed during interrupt cycle
+                        if in_int_ack_cycle = '1' then
+                            timing_state <= T1I;  -- RST jammed, go to T1I
+                        else
+                            timing_state <= T1;   -- Continue multi-cycle instruction
+                        end if;
                     end if;
                     
                 when STOPPED =>

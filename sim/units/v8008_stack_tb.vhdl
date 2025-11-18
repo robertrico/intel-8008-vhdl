@@ -167,7 +167,7 @@ begin
             debug_hl_address => debug_hl_address_tb
         );
 
-    -- Data bus process - provides RST instruction during interrupt acknowledge  
+    -- Data bus process - provides instruction during interrupt acknowledge  
     data_bus_proc: process(S2_tb, S1_tb, S0_tb)
     begin
         -- Default: high-Z
@@ -180,7 +180,7 @@ begin
         
         -- During T3 (data transfer): S2=0, S1=0, S0=1 (001)
         if S2_tb = '0' and S1_tb = '0' and S0_tb = '1' and is_int_ack then
-            -- Provide RST 0 instruction (0x05 = 00 000 101)
+            -- Provide instruction for interrupt service (0x05 = 00 000 101)
             data_bus_in_tb <= X"05";
         end if;
         
