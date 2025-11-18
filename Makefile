@@ -59,7 +59,11 @@ STOP_TIME_s8008_monitor_tb = 150000us
 STOP_TIME_s8008_mov_all_tb = 10000us
 
 # v8008 refactored CPU tests
-STOP_TIME_v8008_minimal_tb = 2us
+STOP_TIME_v8008_minimal_tb = 2000us
+STOP_TIME_v8008_registers_tb = 500us
+STOP_TIME_v8008_instruction_tb = 500us
+STOP_TIME_v8008_stack_tb = 500us
+STOP_TIME_v8008_scratchpad_tb = 500us
 
 # Get stop time for active test, or use default
 SIM_STOP_TIME ?= $(or $(STOP_TIME_$(ACTIVE_TB_ENTITY)),1ms)
@@ -196,6 +200,24 @@ test-mov-all:
 # v8008 refactored CPU test shortcuts
 test-v8008-minimal:
 	@$(MAKE) sim TEST=v8008_minimal_tb
+
+test-v8008-registers:
+	@$(MAKE) sim TEST=v8008_registers_tb
+
+test-v8008-instruction:
+	@$(MAKE) sim TEST=v8008_instruction_tb
+
+test-v8008-stack:
+	@$(MAKE) sim TEST=v8008_stack_tb
+
+test-v8008-scratchpad:
+	@$(MAKE) sim TEST=v8008_scratchpad_tb
+
+# Run all v8008 tests
+test-v8008: test-v8008-minimal test-v8008-registers test-v8008-instruction test-v8008-stack test-v8008-scratchpad
+	@echo "=========================================="
+	@echo "All v8008 tests completed successfully!"
+	@echo "==========================================="
 
 # Run all assembly program tests
 test-all-programs:
