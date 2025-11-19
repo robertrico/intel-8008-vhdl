@@ -316,7 +316,13 @@ architecture rtl of v8008 is
                     );
                     
                 when T3 =>
-                    -- Generic T3: Fetch instruction to IR and Reg.b
+                    -- Generic T3: ALWAYS fetch instruction to IR and Reg.b
+                    -- Per Intel 8008 behavior, temp_b holds instruction for later use
+                    -- PC increment behavior:
+                    --   - HLT: No increment (stays at same address)
+                    --   - RST/JMP/CALL: No increment (PC will be loaded)
+                    --   - Single-byte instructions: Increment after fetch
+                    --   - Multi-byte: Increment after each byte (handled in later cycles)
                     -- Then decode and determine next state
                     
                     -- ========== HLT (HALT) ==========
@@ -327,12 +333,12 @@ architecture rtl of v8008 is
                             next_state => STOPPED,
                             new_cycle => false,
                             instruction_complete => true,   -- HLT is complete
-                            load_ir => true,
+                            load_ir => true,                -- Always load IR
                             load_temp_a => false,
-                            load_temp_b => false,
+                            load_temp_b => true,             -- Always load temp_b with instruction
                             temp_a_source => "00",
-                            temp_b_source => "00",
-                            pc_inc => false,  -- Don't increment PC for HLT
+                            temp_b_source => "01",           -- temp_b = data_bus (instruction)
+                            pc_inc => false,                 -- Don't increment PC for HLT
                             pc_load_high => false,
                             pc_load_low => false,
                             stack_push => false,
@@ -380,16 +386,17 @@ architecture rtl of v8008 is
                     else
                         -- DEFAULT: Unknown instructions treated as NOP
                         -- Cycle ends at T3, instruction complete
+                        -- For single-byte instructions, PC increments after fetch
                         return (
-                            next_state => T1,  -- Will be overridden by interrupt logic
+                            next_state => T1,                -- Will be overridden by interrupt logic
                             new_cycle => false,
-                            instruction_complete => true,   -- Single cycle instruction
-                            load_ir => true,
+                            instruction_complete => true,    -- Single cycle instruction
+                            load_ir => true,                 -- Always load IR
                             load_temp_a => false,
-                            load_temp_b => false,
+                            load_temp_b => true,             -- Always load temp_b with instruction
                             temp_a_source => "00",
-                            temp_b_source => "00",
-                            pc_inc => true,                -- Increment PC for next instruction
+                            temp_b_source => "01",           -- temp_b = data_bus (instruction)
+                            pc_inc => true,                  -- Increment PC after fetch
                             pc_load_high => false,
                             pc_load_low => false,
                             stack_push => false,
