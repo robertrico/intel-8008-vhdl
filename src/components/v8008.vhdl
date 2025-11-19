@@ -243,8 +243,165 @@ architecture rtl of v8008 is
         next_cycle_type => CYCLE_PCI
     );
     
+    --===========================================
+    -- Instruction Decoder Types
+    --===========================================
+    -- Instruction classes based on opcode bits [7:6]
+    type instruction_class_t is (
+        CLASS_00,  -- Mixed ops: HLT, RST, MVI, ALU immediate, rotate, inc/dec
+        CLASS_01,  -- Jump, call, return, I/O
+        CLASS_10,  -- ALU register operations
+        CLASS_11,  -- MOV operations
+        CLASS_UNKNOWN
+    );
+
+    -- Decoded instruction information
+    type decoded_instruction_t is record
+        -- Primary class (from bits [7:6])
+        iclass : instruction_class_t;
+
+        -- Extracted opcode fields (3-bit fields from instruction)
+        ddd_field : std_logic_vector(2 downto 0);  -- Destination register (bits 5:3)
+        sss_field : std_logic_vector(2 downto 0);  -- Source register (bits 2:0)
+        fff_field : std_logic_vector(2 downto 0);  -- Function code (bits 5:3)
+        aaa_field : std_logic_vector(2 downto 0);  -- RST vector (bits 5:3)
+        ccc_field : std_logic_vector(2 downto 0);  -- Condition code (bits 5:3)
+        mmm_field : std_logic_vector(2 downto 0);  -- I/O port (bits 3:1)
+
+        -- Variant detection flags
+        is_memory_source : boolean;  -- SSS = 111 (M register - memory indirect)
+        is_memory_dest   : boolean;  -- DDD = 111 (M register - memory indirect)
+        is_immediate     : boolean;  -- Instruction has immediate byte following
+
+        -- Specific instruction identifiers
+        is_hlt : boolean;   -- HLT instruction
+        is_rst : boolean;   -- RST instruction
+        is_mvi : boolean;   -- MVI instruction (all variants)
+        is_inp : boolean;   -- INP instruction
+        is_out : boolean;   -- OUT instruction
+        is_mov : boolean;   -- MOV instruction (future)
+        is_alu : boolean;   -- ALU operation (future)
+    end record;
+
     -- Current microcode being executed (moved to process as variable)
-    
+
+    --===========================================
+    -- Instruction Decoder Function
+    --===========================================
+    -- Decodes an opcode and returns all relevant instruction information
+    -- This eliminates hardcoded bit-pattern checks throughout the microcode
+    function decode_instruction(
+        opcode : std_logic_vector(7 downto 0)
+    ) return decoded_instruction_t is
+        variable result : decoded_instruction_t;
+    begin
+        -- Extract all opcode fields (always extract, use as needed)
+        result.ddd_field := opcode(5 downto 3);  -- Destination register
+        result.sss_field := opcode(2 downto 0);  -- Source register
+        result.fff_field := opcode(5 downto 3);  -- ALU/rotate function
+        result.aaa_field := opcode(5 downto 3);  -- RST vector
+        result.ccc_field := opcode(5 downto 3);  -- Condition code
+        result.mmm_field := opcode(3 downto 1);  -- I/O port
+
+        -- Memory reference detection (M register = 111)
+        result.is_memory_source := (opcode(2 downto 0) = "111");
+        result.is_memory_dest   := (opcode(5 downto 3) = "111");
+
+        -- Default all instruction flags to false
+        result.is_immediate := false;
+        result.is_hlt := false;
+        result.is_rst := false;
+        result.is_mvi := false;
+        result.is_inp := false;
+        result.is_out := false;
+        result.is_mov := false;
+        result.is_alu := false;
+        result.iclass := CLASS_UNKNOWN;
+
+        -- Special case: HLT has multiple encodings across different classes
+        -- 0x00, 0x01 (CLASS_00) and 0xFF (CLASS_11)
+        if opcode = x"00" or opcode = x"01" or opcode = x"FF" then
+            result.is_hlt := true;
+            -- Set class based on opcode bits for consistency
+            if opcode = x"FF" then
+                result.iclass := CLASS_11;
+            else
+                result.iclass := CLASS_00;
+            end if;
+        end if;
+
+        -- Decode by instruction class (bits [7:6])
+        case opcode(7 downto 6) is
+            when "00" =>
+                if not result.is_hlt then  -- Skip if already identified as HLT
+                    result.iclass := CLASS_00;
+                end if;
+
+                -- HLT already handled above, skip redundant check here
+
+                -- RST: 00 AAA 101
+                if opcode(2 downto 0) = "101" then
+                    result.is_rst := true;
+
+                -- MVI: 00 DDD 110 (includes MVI M when DDD=111)
+                elsif opcode(2 downto 0) = "110" then
+                    result.is_mvi := true;
+                    result.is_immediate := true;
+
+                -- ALU immediate: 00 FFF 100 (ADI, ACI, SUI, SBI, ANI, XRI, ORI, CPI)
+                elsif opcode(2 downto 0) = "100" then
+                    result.is_alu := true;
+                    result.is_immediate := true;
+
+                -- More CLASS_00 instructions can be added here:
+                -- INR: 00 DDD 000 (DDD ≠ 000)
+                -- DCR: 00 DDD 001 (DDD ≠ 000)
+                -- Rotate: 00 FFF 010 (RLC, RRC, RAL, RAR)
+                -- RET: 00 XXX 111, 00 CCC 011
+
+                end if;
+
+            when "01" =>
+                result.iclass := CLASS_01;
+
+                -- INP: 01 00M MM1
+                if opcode(5 downto 4) = "00" and opcode(0) = '1' then
+                    result.is_inp := true;
+
+                -- OUT: 01 RRM MM0 (RR ≠ 00, distinguishes from INP)
+                elsif opcode(0) = '0' and opcode(5 downto 4) /= "00" then
+                    result.is_out := true;
+
+                -- More CLASS_01 instructions can be added here:
+                -- JMP: 01 XXX 100
+                -- Conditional JMP: 01 CCC 000
+                -- CALL: 01 XXX 110
+                -- Conditional CALL: 01 CCC 010
+
+                end if;
+
+            when "10" =>
+                result.iclass := CLASS_10;
+                result.is_alu := true;
+                -- ALU register operations: 10 FFF SSS
+                -- ADD, ADC, SUB, SBB, ANA, XRA, ORA, CMP
+                -- Source can be register (SSS ≠ 111) or memory (SSS = 111)
+
+            when "11" =>
+                result.iclass := CLASS_11;
+                result.is_mov := true;
+                -- MOV: 11 DDD SSS
+                -- Destination can be register (DDD ≠ 111) or memory (DDD = 111)
+                -- Source can be register (SSS ≠ 111) or memory (SSS = 111)
+                -- Both cannot be memory simultaneously (invalid encoding)
+
+            when others =>
+                result.iclass := CLASS_UNKNOWN;
+        end case;
+
+        return result;
+    end function;
+
     --===========================================
     -- Microcode Lookup Function
     --===========================================
@@ -256,6 +413,7 @@ architecture rtl of v8008 is
         int_ack : std_logic;
         data_in : std_logic_vector(7 downto 0)  -- For T3 instruction fetch
     ) return microcode_entry is
+        variable decoded : decoded_instruction_t;  -- Decoded instruction info
     begin
         -- ===========================================
         -- CYCLE 0: INSTRUCTION FETCH & DECODE
@@ -346,10 +504,13 @@ architecture rtl of v8008 is
                     --   - Single-byte instructions: Increment after fetch
                     --   - Multi-byte: Increment after each byte (handled in later cycles)
                     -- Then decode and determine next state
-                    
+
+                    -- Decode the instruction (eliminates hardcoded bit-pattern checks)
+                    decoded := decode_instruction(data_in);
+
                     -- ========== HLT (HALT) ==========
                     -- HLT opcodes: 0000000x (0x00, 0x01) and 11111111 (0xFF)
-                    if data_in = x"00" or data_in = x"01" or data_in = x"FF" then
+                    if decoded.is_hlt then
                         -- HLT: Cycle ends at T3, instruction complete
                         -- Special case: Go to STOPPED (not T1/T1I)
                         return (
@@ -374,7 +535,8 @@ architecture rtl of v8008 is
                         );
 
                     -- ========== RST (RESTART) ==========
-                    elsif (data_in(7 downto 6) = "00" and data_in(2 downto 0) = "101") then
+                    -- RST: 00 AAA 101
+                    elsif decoded.is_rst then
                         -- RST: Cycle continues to T4 (needs T4 and T5)
                         return (
                             next_state => T4,               -- Continue to T4
@@ -397,10 +559,11 @@ architecture rtl of v8008 is
                             next_cycle_type => CYCLE_PCI
                         );
                         
-                    -- ========== MVI M (Load Memory Immediate) ==========
-                    -- MVI M: 00 111 110 (0x3E)
-                    -- 3-cycle instruction: fetch opcode, fetch immediate, write to memory[HL]
-                    elsif data_in = "00111110" then  -- MVI M opcode
+                    -- ========== MVI (Move Immediate) ==========
+                    -- MVI: 00 DDD 110 + immediate byte
+                    -- Includes MVI M (DDD=111, 0x3E) which writes to memory[HL]
+                    -- 3-cycle for MVI M, 2-cycle for MVI r
+                    elsif decoded.is_mvi then
                         -- Start multi-cycle instruction
                         return (
                             next_state => T1,                -- Will be overridden by interrupt logic
@@ -426,10 +589,8 @@ architecture rtl of v8008 is
                     -- ========== INP (Input from Port) ==========
                     -- INP: 01 00M MM1 (0x41, 0x43, 0x45, 0x47, 0x49, 0x4B, 0x4D, 0x4F)
                     -- 2-cycle instruction: fetch opcode, perform I/O read
-                    -- MMM bits (3-1) specify which of 8 input ports to read from
-                    elsif data_in(7 downto 6) = "01" and
-                          data_in(5 downto 4) = "00" and
-                          data_in(0) = '1' then  -- INP opcode
+                    -- MMM bits [3:1] specify which of 8 input ports (0-7)
+                    elsif decoded.is_inp then
                         -- Start I/O read cycle
                         return (
                             next_state => T1,                -- Will be overridden by interrupt logic
@@ -486,7 +647,7 @@ architecture rtl of v8008 is
                             next_cycle_type => CYCLE_PCI
                         );
                     end if;
-                    
+
                 when T4 =>
                     -- T4: Instruction-specific behavior
                     -- Only reached if instruction needs more than 3 states
@@ -540,9 +701,12 @@ architecture rtl of v8008 is
                 when T5 =>
                     -- T5: Final state for 5-state instructions
                     -- Cycle ALWAYS ends at T5
-                    
+
+                    -- Decode instruction to eliminate hardcoded checks
+                    decoded := decode_instruction(instr);
+
                     -- ========== RST (RESTART) ==========
-                    if (instr(7 downto 6) = "00" and instr(2 downto 0) = "101") then
+                    if decoded.is_rst then
                         -- RST T5: Load PC low, instruction complete
                         return (
                             next_state => T1,               -- Will be overridden by interrupt logic
@@ -578,7 +742,7 @@ architecture rtl of v8008 is
                         -- Should not reach here - only instructions that need T5 should get here
                         return DEFAULT_UCODE;
                     end if;
-                    
+
                 when others =>
                     return DEFAULT_UCODE;
             end case;
@@ -637,8 +801,10 @@ architecture rtl of v8008 is
                     
                 when T3 =>
                     -- Cycle 1 T3: Data IN - instruction specific
-                    -- Check instruction in temp_b (saved from cycle 0)
-                    if instr = "00111110" then  -- MVI M
+                    -- Decode instruction to eliminate hardcoded checks
+                    decoded := decode_instruction(instr);
+
+                    if decoded.is_mvi then  -- MVI (all variants including MVI M)
                         -- Fetch immediate data and save to temp_a
                         return (
                             next_state => T1,               -- Will be overridden if needed
@@ -661,9 +827,7 @@ architecture rtl of v8008 is
                             next_cycle_type => CYCLE_PCW    -- Next cycle is memory write
                         );
 
-                    elsif (instr(7 downto 6) = "01" and
-                           instr(5 downto 4) = "00" and
-                           instr(0) = '1') then  -- INP instruction
+                    elsif decoded.is_inp then  -- INP instruction
                         -- Cycle 1 T3: Read data from I/O port into temp_b
                         return (
                             next_state => T4,               -- Continue to T4 for flag output
@@ -690,13 +854,13 @@ architecture rtl of v8008 is
                         -- Default for unknown instructions in cycle 1
                         return DEFAULT_UCODE;
                     end if;
-                    
+
                 when T4 =>
                     -- Cycle 1 T4 - instruction specific
-                    -- Check instruction in temp_b (saved from cycle 0)
-                    if (instr(7 downto 6) = "01" and
-                        instr(5 downto 4) = "00" and
-                        instr(0) = '1') then  -- INP instruction
+                    -- Decode instruction to eliminate hardcoded checks
+                    decoded := decode_instruction(instr);
+
+                    if decoded.is_inp then  -- INP instruction
                         -- Cycle 1 T4: Output flags to data bus
                         -- Per datasheet: S→D0, Z→D1, P→D2, C→D3
                         -- Data bus output handled in data_bus_output process
@@ -726,10 +890,10 @@ architecture rtl of v8008 is
 
                 when T5 =>
                     -- Cycle 1 T5 - instruction specific
-                    -- Check instruction in temp_b (saved from cycle 0)
-                    if (instr(7 downto 6) = "01" and
-                        instr(5 downto 4) = "00" and
-                        instr(0) = '1') then  -- INP instruction
+                    -- Decode instruction to eliminate hardcoded checks
+                    decoded := decode_instruction(instr);
+
+                    if decoded.is_inp then  -- INP instruction
                         -- Cycle 1 T5: Transfer I/O data from temp_b to accumulator
                         return (
                             next_state => T1,               -- Will be overridden by interrupt logic
@@ -754,11 +918,11 @@ architecture rtl of v8008 is
                     else
                         return DEFAULT_UCODE;
                     end if;
-                    
+
                 when others =>
                     return DEFAULT_UCODE;
             end case;
-            
+
         -- ===========================================
         -- CYCLE 2: Third machine cycle
         -- ===========================================
@@ -815,7 +979,10 @@ architecture rtl of v8008 is
                     
                 when T3 =>
                     -- Cycle 2 T3: Data OUT - write to memory
-                    if instr = "00111110" then  -- MVI M
+                    -- Decode instruction to eliminate hardcoded checks
+                    decoded := decode_instruction(instr);
+
+                    if decoded.is_mvi and decoded.is_memory_dest then  -- MVI M
                         -- Write immediate data (in temp_a) to memory[HL]
                         -- Data output will be handled by bus control logic
                         return (
@@ -842,7 +1009,7 @@ architecture rtl of v8008 is
                         -- Default for unknown instructions in cycle 2
                         return DEFAULT_UCODE;
                     end if;
-                    
+
                 when T4 =>
                     -- Cycle 2 T4 - instruction specific
                     return DEFAULT_UCODE;  -- TODO: implement for other instructions
@@ -861,9 +1028,9 @@ architecture rtl of v8008 is
         end if;
     end function;
     
-    -- Control signals from microcode
+    -- Control signals from microcode (unused legacy signals)
     signal fetch_instruction : boolean := false;
-    signal decode_instruction : boolean := false;
+    signal instr_decode_phase : boolean := false;  -- Renamed to avoid conflict with decode_instruction function
     signal execute_instruction : boolean := false;
 
     -- Cycle and instruction tracking
