@@ -326,7 +326,8 @@ architecture rtl of v8008 is
                     -- Then decode and determine next state
                     
                     -- ========== HLT (HALT) ==========
-                    if data_in = x"00" or data_in = x"FF" then
+                    -- HLT opcodes: 0000000x (0x00, 0x01) and 11111111 (0xFF)
+                    if data_in = x"00" or data_in = x"01" or data_in = x"FF" then
                         -- HLT: Cycle ends at T3, instruction complete
                         -- Special case: Go to STOPPED (not T1/T1I)
                         return (
