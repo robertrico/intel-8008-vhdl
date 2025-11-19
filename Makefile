@@ -64,6 +64,7 @@ STOP_TIME_v8008_registers_tb = 500us
 STOP_TIME_v8008_instruction_tb = 500us
 STOP_TIME_v8008_stack_tb = 500us
 STOP_TIME_v8008_scratchpad_tb = 500us
+STOP_TIME_v8008_interrupt_tb = 1000us
 
 # Get stop time for active test, or use default
 SIM_STOP_TIME ?= $(or $(STOP_TIME_$(ACTIVE_TB_ENTITY)),1ms)
@@ -213,8 +214,11 @@ test-v8008-stack:
 test-v8008-scratchpad:
 	@$(MAKE) sim TEST=v8008_scratchpad_tb
 
+test-v8008-interrupt:
+	@$(MAKE) sim TEST=v8008_interrupt_tb
+
 # Run all v8008 tests
-test-v8008: test-v8008-minimal test-v8008-registers test-v8008-instruction test-v8008-stack test-v8008-scratchpad
+test-v8008: test-v8008-minimal test-v8008-registers test-v8008-instruction test-v8008-stack test-v8008-scratchpad test-v8008-interrupt
 	@echo "=========================================="
 	@echo "All v8008 tests completed successfully!"
 	@echo "==========================================="
