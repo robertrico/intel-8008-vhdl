@@ -210,7 +210,13 @@ architecture rtl of v8008 is
         -- Stack control
         stack_push          : boolean;           -- Push PC to stack
         stack_pop           : boolean;           -- Pop PC from stack
-        
+
+        -- Register control
+        reg_write           : boolean;           -- Write to register file
+        reg_read            : boolean;           -- Read from register file
+        reg_target          : std_logic_vector(2 downto 0); -- Which register (A/B/C/D/E/H/L)
+        reg_source          : std_logic_vector(1 downto 0); -- 00=zero, 01=data_bus_in, 10=temp_a, 11=temp_b
+
         -- Next cycle type (for T2 output)
         next_cycle_type     : std_logic_vector(1 downto 0);
     end record;
@@ -230,6 +236,10 @@ architecture rtl of v8008 is
         pc_load_low => false,
         stack_push => false,
         stack_pop => false,
+        reg_write => false,
+        reg_read => false,
+        reg_target => "000",
+        reg_source => "00",
         next_cycle_type => CYCLE_PCI
     );
     
@@ -273,6 +283,10 @@ architecture rtl of v8008 is
                         pc_load_low => false,
                         stack_push => false,
                         stack_pop => false,
+                        reg_write => false,
+                        reg_read => false,
+                        reg_target => "000",
+                        reg_source => "00",
                         next_cycle_type => CYCLE_PCI
                     );
                     
@@ -292,6 +306,10 @@ architecture rtl of v8008 is
                         pc_load_low => false,
                         stack_push => false,
                         stack_pop => false,
+                        reg_write => false,
+                        reg_read => false,
+                        reg_target => "000",
+                        reg_source => "00",
                         next_cycle_type => CYCLE_PCI
                     );
                     
@@ -312,6 +330,10 @@ architecture rtl of v8008 is
                         pc_load_low => false,
                         stack_push => false,
                         stack_pop => false,
+                        reg_write => false,
+                        reg_read => false,
+                        reg_target => "000",
+                        reg_source => "00",
                         next_cycle_type => CYCLE_PCI
                     );
                     
@@ -344,9 +366,13 @@ architecture rtl of v8008 is
                             pc_load_low => false,
                             stack_push => false,
                             stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
                             next_cycle_type => CYCLE_PCI
                         );
-                        
+
                     -- ========== RST (RESTART) ==========
                     elsif (data_in(7 downto 6) = "00" and data_in(2 downto 0) = "101") then
                         -- RST: Cycle continues to T4 (needs T4 and T5)
@@ -364,18 +390,69 @@ architecture rtl of v8008 is
                             pc_load_low => false,
                             stack_push => true,        -- Push PC to stack
                             stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
                             next_cycle_type => CYCLE_PCI
                         );
                         
+                    -- ========== MVI M (Load Memory Immediate) ==========
+                    -- MVI M: 00 111 110 (0x3E)
+                    -- 3-cycle instruction: fetch opcode, fetch immediate, write to memory[HL]
+                    elsif data_in = "00111110" then  -- MVI M opcode
+                        -- Start multi-cycle instruction
+                        return (
+                            next_state => T1,                -- Will be overridden by interrupt logic
+                            new_cycle => true,               -- Start new cycle for immediate fetch
+                            instruction_complete => false,   -- Not complete yet (need 2 more cycles)
+                            load_ir => true,                 -- Load instruction register
+                            load_temp_a => false,
+                            load_temp_b => true,             -- Save instruction in temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",           -- temp_b = data_bus (instruction)
+                            pc_inc => true,                  -- Increment PC to point to immediate data
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            next_cycle_type => CYCLE_PCI     -- Next cycle fetches immediate data
+                        );
+
+                    -- ========== INP (Input from Port) ==========
+                    -- INP: 01 00M MM1 (0x41, 0x43, 0x45, 0x47, 0x49, 0x4B, 0x4D, 0x4F)
+                    -- 2-cycle instruction: fetch opcode, perform I/O read
+                    -- MMM bits (3-1) specify which of 8 input ports to read from
+                    elsif data_in(7 downto 6) = "01" and
+                          data_in(5 downto 4) = "00" and
+                          data_in(0) = '1' then  -- INP opcode
+                        -- Start I/O read cycle
+                        return (
+                            next_state => T1,                -- Will be overridden by interrupt logic
+                            new_cycle => true,               -- Start cycle 1 for I/O operation
+                            instruction_complete => false,   -- Not complete yet (need cycle 1)
+                            load_ir => true,                 -- Load instruction register
+                            load_temp_a => false,
+                            load_temp_b => true,             -- Save instruction in temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",           -- temp_b = data_bus (instruction)
+                            pc_inc => true,                  -- Increment PC to next instruction
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            next_cycle_type => CYCLE_PCC     -- Next cycle is I/O (PCC)
+                        );
+
                     -- ========== ADD MORE INSTRUCTIONS HERE ==========
-                    -- Template for 3-state instruction (ends at T3):
-                    -- elsif (data_in matches pattern) then
-                    --     return (
-                    --         next_state => T1,  -- Will be overridden by interrupt logic
-                    --         instruction_complete => true/false,  -- Is whole instruction done?
-                    --         ... other control signals ...
-                    --     );
-                    
                     -- Template for 5-state instruction (continues to T4):
                     -- elsif (data_in matches pattern) then
                     --     return (
@@ -402,6 +479,10 @@ architecture rtl of v8008 is
                             pc_load_low => false,
                             stack_push => false,
                             stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
                             next_cycle_type => CYCLE_PCI
                         );
                     end if;
@@ -427,6 +508,10 @@ architecture rtl of v8008 is
                             pc_load_low => false,
                             stack_push => false,
                             stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
                             next_cycle_type => CYCLE_PCI
                         );
                         
@@ -473,6 +558,10 @@ architecture rtl of v8008 is
                             pc_load_low => true,       -- PC(7:0) = RST vector
                             stack_push => false,
                             stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
                             next_cycle_type => CYCLE_PCI
                         );
                         
@@ -497,29 +586,174 @@ architecture rtl of v8008 is
         -- ===========================================
         -- CYCLE 1: Second machine cycle
         -- ===========================================
-        elsif cycle = 1 and int_ack = '0' then
+        elsif cycle = 1 then
             -- Instruction-specific behavior for cycle 1
-            -- TODO: Add multi-cycle instruction handlers here
             case state is
                 when T1 =>
-                    -- Cycle 1 T1 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
+                    -- Cycle 1 T1: PCL OUT for immediate/address fetch
+                    return (
+                        next_state => T2,
+                        new_cycle => false,
+                        instruction_complete => false,
+                        load_ir => false,
+                        load_temp_a => false,
+                        load_temp_b => false,
+                        temp_a_source => "00",
+                        temp_b_source => "00",
+                        pc_inc => false,
+                        pc_load_high => false,
+                        pc_load_low => false,
+                        stack_push => false,
+                        stack_pop => false,
+                        reg_write => false,
+                        reg_read => false,
+                        reg_target => "000",
+                        reg_source => "00",
+                        next_cycle_type => CYCLE_PCI  -- Still fetching from PC
+                    );
                     
                 when T2 =>
-                    -- Cycle 1 T2 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
+                    -- Cycle 1 T2: PCH OUT for immediate/address fetch
+                    return (
+                        next_state => T3,
+                        new_cycle => false,
+                        instruction_complete => false,
+                        load_ir => false,
+                        load_temp_a => false,
+                        load_temp_b => false,
+                        temp_a_source => "00",
+                        temp_b_source => "00",
+                        pc_inc => false,
+                        pc_load_high => false,
+                        pc_load_low => false,
+                        stack_push => false,
+                        stack_pop => false,
+                        reg_write => false,
+                        reg_read => false,
+                        reg_target => "000",
+                        reg_source => "00",
+                        next_cycle_type => CYCLE_PCI
+                    );
                     
                 when T3 =>
-                    -- Cycle 1 T3 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
+                    -- Cycle 1 T3: Data IN - instruction specific
+                    -- Check instruction in temp_b (saved from cycle 0)
+                    if instr = "00111110" then  -- MVI M
+                        -- Fetch immediate data and save to temp_a
+                        return (
+                            next_state => T1,               -- Will be overridden if needed
+                            new_cycle => true,              -- Start cycle 2 for memory write
+                            instruction_complete => false,  -- Not done yet
+                            load_ir => false,
+                            load_temp_a => true,            -- Save immediate data to temp_a
+                            load_temp_b => false,
+                            temp_a_source => "01",          -- temp_a = data_bus (immediate)
+                            temp_b_source => "00",
+                            pc_inc => true,                 -- Increment PC past immediate
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            next_cycle_type => CYCLE_PCW    -- Next cycle is memory write
+                        );
+
+                    elsif (instr(7 downto 6) = "01" and
+                           instr(5 downto 4) = "00" and
+                           instr(0) = '1') then  -- INP instruction
+                        -- Cycle 1 T3: Read data from I/O port into temp_b
+                        return (
+                            next_state => T4,               -- Continue to T4 for flag output
+                            new_cycle => false,
+                            instruction_complete => false,  -- Not done yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => true,            -- Save I/O data to temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",          -- temp_b = data_bus_in (I/O data)
+                            pc_inc => false,                -- PC already incremented in cycle 0
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            next_cycle_type => CYCLE_PCC    -- Still in I/O cycle
+                        );
+
+                    else
+                        -- Default for unknown instructions in cycle 1
+                        return DEFAULT_UCODE;
+                    end if;
                     
                 when T4 =>
                     -- Cycle 1 T4 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
-                    
+                    -- Check instruction in temp_b (saved from cycle 0)
+                    if (instr(7 downto 6) = "01" and
+                        instr(5 downto 4) = "00" and
+                        instr(0) = '1') then  -- INP instruction
+                        -- Cycle 1 T4: Output flags to data bus
+                        -- Per datasheet: S→D0, Z→D1, P→D2, C→D3
+                        -- Data bus output handled in data_bus_output process
+                        return (
+                            next_state => T5,               -- Continue to T5
+                            new_cycle => false,
+                            instruction_complete => false,  -- Not done yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            next_cycle_type => CYCLE_PCC    -- Still in I/O cycle
+                        );
+                    else
+                        return DEFAULT_UCODE;
+                    end if;
+
                 when T5 =>
                     -- Cycle 1 T5 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
+                    -- Check instruction in temp_b (saved from cycle 0)
+                    if (instr(7 downto 6) = "01" and
+                        instr(5 downto 4) = "00" and
+                        instr(0) = '1') then  -- INP instruction
+                        -- Cycle 1 T5: Transfer I/O data from temp_b to accumulator
+                        return (
+                            next_state => T1,               -- Will be overridden by interrupt logic
+                            new_cycle => false,
+                            instruction_complete => true,   -- INP instruction complete!
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,                -- PC already incremented in cycle 0
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => true,              -- Write to accumulator
+                            reg_read => false,
+                            reg_target => REG_A,            -- Target: Accumulator
+                            reg_source => "11",             -- Source: temp_b (I/O data)
+                            next_cycle_type => CYCLE_PCI    -- Next instruction fetch
+                        );
+                    else
+                        return DEFAULT_UCODE;
+                    end if;
                     
                 when others =>
                     return DEFAULT_UCODE;
@@ -528,29 +762,94 @@ architecture rtl of v8008 is
         -- ===========================================
         -- CYCLE 2: Third machine cycle
         -- ===========================================
-        elsif cycle = 2 and int_ack = '0' then
+        elsif cycle = 2 then
             -- Instruction-specific behavior for cycle 2
-            -- TODO: Add 3-cycle instruction handlers here
             case state is
                 when T1 =>
-                    -- Cycle 2 T1 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
+                    -- Cycle 2 T1: Address LOW out (memory write cycle)
+                    -- For MVI M, output L register contents
+                    return (
+                        next_state => T2,
+                        new_cycle => false,
+                        instruction_complete => false,
+                        load_ir => false,
+                        load_temp_a => false,
+                        load_temp_b => false,
+                        temp_a_source => "00",
+                        temp_b_source => "00",
+                        pc_inc => false,
+                        pc_load_high => false,
+                        pc_load_low => false,
+                        stack_push => false,
+                        stack_pop => false,
+                        reg_write => false,
+                        reg_read => false,
+                        reg_target => "000",
+                        reg_source => "00",
+                        next_cycle_type => CYCLE_PCW  -- Memory write cycle
+                    );
                     
                 when T2 =>
-                    -- Cycle 2 T2 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
+                    -- Cycle 2 T2: Address HIGH out (memory write cycle)
+                    -- For MVI M, output H register contents
+                    return (
+                        next_state => T3,
+                        new_cycle => false,
+                        instruction_complete => false,
+                        load_ir => false,
+                        load_temp_a => false,
+                        load_temp_b => false,
+                        temp_a_source => "00",
+                        temp_b_source => "00",
+                        pc_inc => false,
+                        pc_load_high => false,
+                        pc_load_low => false,
+                        stack_push => false,
+                        stack_pop => false,
+                        reg_write => false,
+                        reg_read => false,
+                        reg_target => "000",
+                        reg_source => "00",
+                        next_cycle_type => CYCLE_PCW
+                    );
                     
                 when T3 =>
-                    -- Cycle 2 T3 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
+                    -- Cycle 2 T3: Data OUT - write to memory
+                    if instr = "00111110" then  -- MVI M
+                        -- Write immediate data (in temp_a) to memory[HL]
+                        -- Data output will be handled by bus control logic
+                        return (
+                            next_state => T1,               -- Will be overridden by interrupt logic
+                            new_cycle => false,
+                            instruction_complete => true,   -- MVI M complete!
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,               -- PC already points to next instruction
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            next_cycle_type => CYCLE_PCI    -- Next cycle will fetch next instruction
+                        );
+                    else
+                        -- Default for unknown instructions in cycle 2
+                        return DEFAULT_UCODE;
+                    end if;
                     
                 when T4 =>
                     -- Cycle 2 T4 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
+                    return DEFAULT_UCODE;  -- TODO: implement for other instructions
                     
                 when T5 =>
                     -- Cycle 2 T5 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement
+                    return DEFAULT_UCODE;  -- TODO: implement for other instructions
                     
                 when others =>
                     return DEFAULT_UCODE;
@@ -566,16 +865,17 @@ architecture rtl of v8008 is
     signal fetch_instruction : boolean := false;
     signal decode_instruction : boolean := false;
     signal execute_instruction : boolean := false;
-    
+
     -- Cycle and instruction tracking
     signal cycle_complete : boolean := false;      -- True when current machine cycle ends (T3 or T5)
     signal instruction_complete : boolean := true; -- True when entire instruction finishes
     signal cycles_in_instruction : integer := 1;   -- How many cycles this instruction needs
-    
+
     -- Register control signals
     signal reg_write_enable : boolean := false;
     signal reg_read_enable : boolean := false;
     signal reg_select : std_logic_vector(2 downto 0) := "000";  -- Which register to access
+    signal reg_data_source : std_logic_vector(1 downto 0) := "00";  -- Source selector for cross-clock-domain
     
     -- H:L indirect addressing
     -- Combines H (high 6 bits) and L (low 8 bits) for 14-bit memory address
@@ -660,7 +960,11 @@ begin
             report "State machine: Running, timing_state=" & timing_state_t'image(timing_state);
             -- Store previous state
             timing_state_prev <= timing_state;
-            
+
+            -- Clear register control signals at start of each cycle
+            reg_write_enable <= false;
+            reg_read_enable <= false;
+
             -- Default to current state
             next_state := timing_state;
             
@@ -677,7 +981,9 @@ begin
                 end if;
             -- Normal operation: fetch and execute microcode for current state
             else
-                report "State machine: Fetching microcode for state " & timing_state_t'image(timing_state);
+                report "State machine: Fetching microcode for state " & timing_state_t'image(timing_state) &
+                       ", cycle=" & integer'image(current_cycle) &
+                       ", instr=0x" & to_hstring(instruction_reg);
                 ucode := get_microcode(instruction_reg, current_cycle, timing_state, in_int_ack_cycle, data_bus_in);
             
                 -- Execute microcode commands
@@ -709,9 +1015,11 @@ begin
                     when others => null;
                 end case;
             end if;
-            
+
             -- PC control
-            if ucode.pc_inc then
+            -- Suppress PC increment during interrupt ack cycle 0 (instruction injection)
+            -- PC should only increment during normal fetches or subsequent cycles of injected instruction
+            if ucode.pc_inc and not (in_int_ack_cycle = '1' and current_cycle = 0) then
                 pc <= pc + 1;
             end if;
             
@@ -750,7 +1058,26 @@ begin
                 stack_pointer <= stack_pointer - 1;
                 -- PC will be loaded from stack on next cycle
             end if;
-            
+
+            -- Register control
+            if ucode.reg_write then
+                -- Set register control signals for register_control process
+                -- Note: Don't set internal_data_bus here due to cross-clock-domain issues
+                -- The register_control process will select the source directly
+                reg_select <= ucode.reg_target;
+                reg_data_source <= ucode.reg_source;  -- Tell phi2 process which source to use
+                reg_write_enable <= true;
+                report "Microcode: Writing to register " & integer'image(to_integer(unsigned(ucode.reg_target))) &
+                       " from source " & integer'image(to_integer(unsigned(ucode.reg_source)));
+            end if;
+
+            if ucode.reg_read then
+                -- Read from register file to internal_data_bus
+                reg_select <= ucode.reg_target;
+                reg_read_enable <= true;
+                report "Microcode: Reading from register " & integer'image(to_integer(unsigned(ucode.reg_target)));
+            end if;
+
             -- Cycle management
             if ucode.new_cycle then
                 current_cycle <= current_cycle + 1;
@@ -847,31 +1174,52 @@ begin
     -- Handles register read/write operations and H:L indirect addressing
     
     register_control: process(phi2)
+        variable write_data : std_logic_vector(7 downto 0);
     begin
         if rising_edge(phi2) then
             -- H:L address combination (H provides high 6 bits, L provides low 8 bits)
             -- Bits 7-6 of H are ignored (don't cares) for 14-bit addressing
             hl_address <= registers(REG_H_DATA)(5 downto 0) & registers(REG_L_DATA);
-            
+
             -- Check if accessing memory through M register
             memory_reference <= (reg_select = REG_M);
-            
+
             -- Register write operation
             if reg_write_enable and not memory_reference then
-                -- Direct register write
+                -- Select data source based on reg_data_source
+                -- Use a variable to avoid delta-cycle issues
+                case reg_data_source is
+                    when "00" =>  -- Zero
+                        write_data := (others => '0');
+                    when "01" =>  -- data_bus_in
+                        write_data := data_bus_in;
+                    when "10" =>  -- temp_a
+                        write_data := temp_a;
+                    when "11" =>  -- temp_b
+                        write_data := temp_b;
+                    when others =>
+                        write_data := (others => '0');
+                end case;
+
+                -- Write to selected register
                 case reg_select is
-                    when REG_A => registers(REG_A_DATA) <= internal_data_bus;
-                    when REG_B => registers(REG_B_DATA) <= internal_data_bus;
-                    when REG_C => registers(REG_C_DATA) <= internal_data_bus;
-                    when REG_D => registers(REG_D_DATA) <= internal_data_bus;
-                    when REG_E => registers(REG_E_DATA) <= internal_data_bus;
-                    when REG_H => registers(REG_H_DATA) <= internal_data_bus;
-                    when REG_L => registers(REG_L_DATA) <= internal_data_bus;
+                    when REG_A =>
+                        registers(REG_A_DATA) <= write_data;
+                        report "Register Control (phi2): Writing 0x" & to_hstring(write_data) & " to accumulator (source=" &
+                               integer'image(to_integer(unsigned(reg_data_source))) & ", temp_b=0x" & to_hstring(temp_b) & ")";
+                    when REG_B => registers(REG_B_DATA) <= write_data;
+                    when REG_C => registers(REG_C_DATA) <= write_data;
+                    when REG_D => registers(REG_D_DATA) <= write_data;
+                    when REG_E => registers(REG_E_DATA) <= write_data;
+                    when REG_H => registers(REG_H_DATA) <= write_data;
+                    when REG_L => registers(REG_L_DATA) <= write_data;
                     when others => null;  -- REG_M handled separately
                 end case;
-                reg_write_enable <= false;
+
+                -- Also update internal_data_bus for other uses
+                internal_data_bus <= write_data;
             end if;
-            
+
             -- Register read operation
             if reg_read_enable and not memory_reference then
                 -- Direct register read
@@ -885,7 +1233,6 @@ begin
                     when REG_L => internal_data_bus <= registers(REG_L_DATA);
                     when others => null;  -- REG_M handled separately
                 end case;
-                reg_read_enable <= false;
             end if;
             
             -- Memory reference through H:L requires external memory access
@@ -935,31 +1282,91 @@ begin
     -- Data Bus Output Control
     --===========================================
     -- Output appropriate data based on state and cycle type
-    data_bus_output: process(timing_state, pc, cycle_type)
+    data_bus_output: process(timing_state, pc, cycle_type, current_cycle, instruction_reg,
+                           hl_address, temp_a, temp_b, registers)
     begin
         case timing_state is
             when T1 | T1I =>
                 -- T1/T1I: Output lower 8 bits of address
-                data_bus_out <= std_logic_vector(pc(7 downto 0));
+                -- Special case: INP instruction Cycle 1 T1 outputs accumulator
+                if current_cycle = 1 and cycle_type = CYCLE_PCC and
+                   (instruction_reg(7 downto 6) = "01" and
+                    instruction_reg(5 downto 4) = "00" and
+                    instruction_reg(0) = '1') then  -- INP instruction
+                    -- Output accumulator value for I/O cycle
+                    data_bus_out <= registers(REG_A_DATA);
+                -- Check if this is a memory write cycle for MVI M
+                elsif current_cycle = 2 and instruction_reg = "00111110" then
+                    -- Output L register (low byte of HL address)
+                    data_bus_out <= registers(REG_L_DATA);
+                else
+                    -- Normal PC output
+                    data_bus_out <= std_logic_vector(pc(7 downto 0));
+                end if;
                 data_bus_enable <= '1';
                 
             when T2 =>
                 -- T2: Output cycle type (D7:D6) and upper address (D5:D0)
-                data_bus_out <= cycle_type & std_logic_vector(pc(13 downto 8));
+                -- Special case: INP instruction Cycle 1 T2 outputs instruction (for I/O decode)
+                if current_cycle = 1 and cycle_type = CYCLE_PCC and
+                   (instruction_reg(7 downto 6) = "01" and
+                    instruction_reg(5 downto 4) = "00" and
+                    instruction_reg(0) = '1') then  -- INP instruction
+                    -- Output instruction from temp_b (contains INP opcode with MMM bits)
+                    data_bus_out <= temp_b;
+                -- Check if this is a memory write cycle for MVI M
+                elsif current_cycle = 2 and instruction_reg = "00111110" then
+                    -- Output cycle type PCW and H register (high byte of HL address)
+                    data_bus_out <= CYCLE_PCW & registers(REG_H_DATA)(5 downto 0);
+                else
+                    -- Normal PC output with cycle type
+                    data_bus_out <= cycle_type & std_logic_vector(pc(13 downto 8));
+                end if;
                 data_bus_enable <= '1';
                 
             when T3 =>
                 -- T3: Data transfer
-                -- For PCI (instruction fetch), we read - don't drive
                 if cycle_type = CYCLE_PCI then
-                    data_bus_enable <= '0';  -- Reading instruction
+                    -- Instruction/data fetch - we read, don't drive
+                    data_bus_enable <= '0';
+                    data_bus_out <= (others => '0');
+                elsif cycle_type = CYCLE_PCC then
+                    -- I/O read - tristate (external I/O provides data)
+                    data_bus_enable <= '0';
+                    data_bus_out <= (others => '0');
+                elsif cycle_type = CYCLE_PCW and current_cycle = 2 and instruction_reg = "00111110" then
+                    -- MVI M memory write - output immediate data from temp_a
+                    data_bus_out <= temp_a;
+                    data_bus_enable <= '1';
                 else
-                    data_bus_enable <= '0';  -- For now, only PCI implemented
+                    -- Default: don't drive
+                    data_bus_enable <= '0';
+                    data_bus_out <= (others => '0');
                 end if;
+
+            when T4 =>
+                -- T4: Output flags for INP instruction
+                if current_cycle = 1 and cycle_type = CYCLE_PCC and
+                   (instruction_reg(7 downto 6) = "01" and
+                    instruction_reg(5 downto 4) = "00" and
+                    instruction_reg(0) = '1') then  -- INP instruction
+                    -- Output flags: S→D0, Z→D1, P→D2, C→D3
+                    -- Upper 4 bits are zero
+                    data_bus_out <= "0000" & flags;
+                    data_bus_enable <= '1';
+                else
+                    -- Default: don't drive bus
+                    data_bus_out <= (others => '0');
+                    data_bus_enable <= '0';
+                end if;
+
+            when T5 =>
+                -- T5: Internal data transfer, don't drive external bus
                 data_bus_out <= (others => '0');
-                
+                data_bus_enable <= '0';
+
             when others =>
-                -- T4, T5, TWAIT, STOPPED: Don't drive bus
+                -- TWAIT, STOPPED: Don't drive bus
                 data_bus_out <= (others => '0');
                 data_bus_enable <= '0';
         end case;
