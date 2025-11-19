@@ -199,10 +199,16 @@ begin
         variable state_vec : std_logic_vector(2 downto 0);
         variable decoded_port : integer range 0 to 7;
         variable is_inp_instruction : boolean;
+        variable in_int_ack : boolean := false;
     begin
         wait on S0, S1, S2, data_bus_out, data_bus_enable, cpu_cycle, debug_instruction;
 
         state_vec := S2 & S1 & S0;
+
+        -- Detect T1I state (S2S1S0 = 110) to enter interrupt ack
+        if state_vec = "110" then  -- T1I state
+            in_int_ack := true;
+        end if;
 
         -- Check if current instruction is INP
         is_inp_instruction := (debug_instruction(7 downto 6) = "01" and
@@ -215,33 +221,29 @@ begin
                 -- Check if CPU is driving the bus or expecting input
                 if data_bus_enable = '0' then
                     -- CPU is reading - determine what to provide
+
+                    -- During interrupt ack, inject INP opcode for current test
+                    -- This is the MVI M pattern: each test injects its own instruction
+                    if in_int_ack then
+                        data_bus_in <= test_cases(test_num).opcode;  -- Inject INP opcode for current test
+                        report "MEM: Interrupt ack injecting INP opcode 0x" & to_hstring(test_cases(test_num).opcode) &
+                               " for test " & integer'image(test_num) & " (port " & integer'image(test_cases(test_num).port_num) & ")";
+                        in_int_ack := false;  -- Clear flag after injection
+
                     -- Check if we're in cycle 1 of an INP instruction (I/O read)
-                    if cpu_cycle = 1 and is_inp_instruction then
+                    elsif cpu_cycle = 1 and is_inp_instruction then
                         -- I/O read - decode port from instruction and provide corresponding data
                         decoded_port := to_integer(unsigned(debug_instruction(3 downto 1)));
                         data_bus_in <= test_cases(decoded_port).io_data;
                         report "I/O: Providing data 0x" & to_hstring(test_cases(decoded_port).io_data) &
                                " from port " & integer'image(decoded_port) &
-                               " (cycle=" & integer'image(cpu_cycle) & ")";
-                    elsif to_integer(unsigned(debug_pc)) < 100 then
-                        -- Program area - provide instructions
-                        -- Sequential INP instructions (no HLT between them)
-                        case to_integer(unsigned(debug_pc)) is
-                            when 0  => data_bus_in <= test_cases(0).opcode;  -- INP port 0
-                            when 1  => data_bus_in <= test_cases(1).opcode;  -- INP port 1
-                            when 2  => data_bus_in <= test_cases(2).opcode;  -- INP port 2
-                            when 3  => data_bus_in <= test_cases(3).opcode;  -- INP port 3
-                            when 4  => data_bus_in <= test_cases(4).opcode;  -- INP port 4
-                            when 5  => data_bus_in <= test_cases(5).opcode;  -- INP port 5
-                            when 6  => data_bus_in <= test_cases(6).opcode;  -- INP port 6
-                            when 7  => data_bus_in <= test_cases(7).opcode;  -- INP port 7
-                            when 8  => data_bus_in <= x"FF";  -- HLT at end
+                               " (cycle=" & integer'image(cpu_cycle) &
+                               ", debug_instr=0x" & to_hstring(debug_instruction) & ")";
 
-                            when others => data_bus_in <= x"FF";  -- HLT
-                        end case;
+                    -- Normal program memory - always provide HLT
+                    -- Each test injects its own instruction via interrupt, so program memory just halts CPU
                     else
-                        -- Default
-                        data_bus_in <= x"00";
+                        data_bus_in <= x"FF";  -- HLT
                     end if;
                 end if;
 
@@ -301,16 +303,8 @@ begin
             report "ERROR: CPU not starting in STOPPED state"
             severity error;
 
-        -- Trigger interrupt once to start CPU
-        report "";
-        report "Starting CPU execution...";
-        wait until rising_edge(phi1);
-        INT <= '1';
-        wait for 3000 ns;
-        INT <= '0';
-
         -- Test each INP instruction for all 8 ports
-        -- They execute sequentially without interrupts
+        -- Each test injects its own opcode via interrupt (like MVI M pattern)
         for i in 0 to 7 loop
             test_num <= i;
 
@@ -333,8 +327,14 @@ begin
             report "  I/O Data = 0x" & to_hstring(test_cases(i).io_data);
             report "--------------------------------------";
 
-            -- Wait for INP instruction to complete
-            -- Each INP: Cycle 0 (~7us) + Cycle 1 (~11us) = ~18us
+            -- Trigger interrupt to inject this test's INP opcode
+            wait until rising_edge(phi1);
+            INT <= '1';
+            wait for 3000 ns;
+            INT <= '0';
+
+            -- Wait for INP instruction to complete (~18us total)
+            -- Interrupt ack (~7us) + INP execution (~11us)
             wait for 20000 ns;
 
             -- Verify accumulator received I/O data

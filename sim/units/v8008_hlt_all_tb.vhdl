@@ -45,11 +45,20 @@ architecture behavior of v8008_hlt_all_tb is
             
             -- Interrupt request
             INT : in std_logic;
-            
+
             -- Debug outputs
+            debug_reg_A : out std_logic_vector(7 downto 0);
+            debug_reg_B : out std_logic_vector(7 downto 0);
+            debug_reg_C : out std_logic_vector(7 downto 0);
+            debug_reg_D : out std_logic_vector(7 downto 0);
+            debug_reg_E : out std_logic_vector(7 downto 0);
+            debug_reg_H : out std_logic_vector(7 downto 0);
+            debug_reg_L : out std_logic_vector(7 downto 0);
             debug_pc : out std_logic_vector(13 downto 0);
+            debug_flags : out std_logic_vector(3 downto 0);
             debug_instruction : out std_logic_vector(7 downto 0);
-            debug_stack_pointer : out std_logic_vector(2 downto 0)
+            debug_stack_pointer : out std_logic_vector(2 downto 0);
+            debug_hl_address : out std_logic_vector(13 downto 0)
         );
     end component;
     
@@ -69,9 +78,18 @@ architecture behavior of v8008_hlt_all_tb is
     signal SYNC        : std_logic;
     
     -- Debug signals
+    signal debug_reg_A : std_logic_vector(7 downto 0);
+    signal debug_reg_B : std_logic_vector(7 downto 0);
+    signal debug_reg_C : std_logic_vector(7 downto 0);
+    signal debug_reg_D : std_logic_vector(7 downto 0);
+    signal debug_reg_E : std_logic_vector(7 downto 0);
+    signal debug_reg_H : std_logic_vector(7 downto 0);
+    signal debug_reg_L : std_logic_vector(7 downto 0);
     signal debug_pc    : std_logic_vector(13 downto 0);
+    signal debug_flags : std_logic_vector(3 downto 0);
     signal debug_instruction : std_logic_vector(7 downto 0);
     signal debug_stack_pointer : std_logic_vector(2 downto 0);
+    signal debug_hl_address : std_logic_vector(13 downto 0);
     
     -- Test control
     signal done        : boolean := false;
@@ -122,9 +140,18 @@ begin
             SYNC => SYNC,
             READY => READY,
             INT => INT,
+            debug_reg_A => debug_reg_A,
+            debug_reg_B => debug_reg_B,
+            debug_reg_C => debug_reg_C,
+            debug_reg_D => debug_reg_D,
+            debug_reg_E => debug_reg_E,
+            debug_reg_H => debug_reg_H,
+            debug_reg_L => debug_reg_L,
             debug_pc => debug_pc,
+            debug_flags => debug_flags,
             debug_instruction => debug_instruction,
-            debug_stack_pointer => debug_stack_pointer
+            debug_stack_pointer => debug_stack_pointer,
+            debug_hl_address => debug_hl_address
         );
     
     -- ROM process
