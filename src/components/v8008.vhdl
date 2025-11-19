@@ -138,9 +138,9 @@ architecture rtl of v8008 is
     constant CYCLE_PCW : std_logic_vector(1 downto 0) := "11";  -- Memory write
     
     -- Interrupt handling signals
-    signal int_latched : std_logic := '0';     -- Latched interrupt request
-    signal int_previous : std_logic := '0';    -- Previous INT value for edge detection
-    signal in_int_ack_cycle : std_logic := '0';  -- '1' during T1I→T2→T3 interrupt acknowledge
+    signal int_pending : std_logic := '0';      -- Latched interrupt request (cleared at T3 of int ack)
+    signal int_previous : std_logic := '0';     -- Previous INT value for edge detection
+    signal in_int_ack_cycle : std_logic := '0'; -- '1' during entire interrupt acknowledge cycle
     
     -- Instruction Register (8-bit)
     -- Holds the current instruction being executed
@@ -243,14 +243,19 @@ architecture rtl of v8008 is
         instr : std_logic_vector(7 downto 0);
         cycle : integer;
         state : timing_state_t;
-        int_ack : std_logic
+        int_ack : std_logic;
+        data_in : std_logic_vector(7 downto 0)  -- For T3 instruction fetch
     ) return microcode_entry is
     begin
-        -- During interrupt acknowledge cycle, handle RST execution
-        -- int_ack = '1' from T1I through T5
-        if int_ack = '1' then
-            report "get_microcode: int_ack=1, state=" & timing_state_t'image(state) & 
-                   ", instr=0x" & to_hstring(unsigned(instr));
+        -- ===========================================
+        -- CYCLE 0: INSTRUCTION FETCH & DECODE
+        -- ===========================================
+        -- This handles ALL cycle 0 operations including:
+        -- - Normal instruction fetch (T1, T2, T3)
+        -- - Interrupt acknowledge (T1I transitions to T2)
+        -- - Instruction-specific T4/T5 states
+        -- Note: When int_ack='1', external hardware injects instruction at T3
+        if cycle = 0 then
             case state is
                 when T1I =>
                     -- T1I: Start interrupt acknowledge cycle
@@ -271,8 +276,28 @@ architecture rtl of v8008 is
                         next_cycle_type => CYCLE_PCI
                     );
                     
+                when T1 =>
+                    -- Generic T1 for ALL instructions: PCL OUT
+                    return (
+                        next_state => T2,
+                        new_cycle => false,  -- Already in cycle 0
+                        instruction_complete => false,
+                        load_ir => false,
+                        load_temp_a => false,
+                        load_temp_b => false,
+                        temp_a_source => "00",
+                        temp_b_source => "00",
+                        pc_inc => false,
+                        pc_load_high => false,
+                        pc_load_low => false,
+                        stack_push => false,
+                        stack_pop => false,
+                        next_cycle_type => CYCLE_PCI
+                    );
+                    
                 when T2 =>
-                    -- T2: Output cycle type and upper address
+                    -- Generic T2 for ALL instructions: PCH OUT
+                    -- Same for both normal fetch and interrupt acknowledge
                     return (
                         next_state => T3,
                         new_cycle => false,
@@ -291,176 +316,238 @@ architecture rtl of v8008 is
                     );
                     
                 when T3 =>
-                    -- T3: Capture RST instruction, load temps, push stack
-                    return (
-                        next_state => T4,
-                        new_cycle => false,
-                        instruction_complete => false,
-                        load_ir => true,          -- Capture instruction
-                        load_temp_a => true,       -- Load 0x00 to temp_a
-                        load_temp_b => true,       -- Load instruction to temp_b
-                        temp_a_source => "00",     -- temp_a = 0x00
-                        temp_b_source => "01",     -- temp_b = data_bus (instruction)
-                        pc_inc => false,
-                        pc_load_high => false,
-                        pc_load_low => false,
-                        stack_push => true,        -- Push PC to stack
-                        stack_pop => false,
-                        next_cycle_type => CYCLE_PCI
-                    );
+                    -- Generic T3: Fetch instruction to IR and Reg.b
+                    -- Then decode and determine next state
+                    
+                    -- ========== HLT (HALT) ==========
+                    if data_in = x"00" or data_in = x"FF" then
+                        -- HLT: Cycle ends at T3, instruction complete
+                        -- Special case: Go to STOPPED (not T1/T1I)
+                        return (
+                            next_state => STOPPED,
+                            new_cycle => false,
+                            instruction_complete => true,   -- HLT is complete
+                            load_ir => true,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,  -- Don't increment PC for HLT
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            next_cycle_type => CYCLE_PCI
+                        );
+                        
+                    -- ========== RST (RESTART) ==========
+                    elsif (data_in(7 downto 6) = "00" and data_in(2 downto 0) = "101") then
+                        -- RST: Cycle continues to T4 (needs T4 and T5)
+                        return (
+                            next_state => T4,               -- Continue to T4
+                            new_cycle => false,
+                            instruction_complete => false,   -- Not complete yet
+                            load_ir => true,
+                            load_temp_a => true,       -- Zero Reg.a
+                            load_temp_b => true,       -- Load instruction to Reg.b
+                            temp_a_source => "00",     -- temp_a = 0x00
+                            temp_b_source => "01",     -- temp_b = data_bus (instruction)
+                            pc_inc => false,
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => true,        -- Push PC to stack
+                            stack_pop => false,
+                            next_cycle_type => CYCLE_PCI
+                        );
+                        
+                    -- ========== ADD MORE INSTRUCTIONS HERE ==========
+                    -- Template for 3-state instruction (ends at T3):
+                    -- elsif (data_in matches pattern) then
+                    --     return (
+                    --         next_state => T1,  -- Will be overridden by interrupt logic
+                    --         instruction_complete => true/false,  -- Is whole instruction done?
+                    --         ... other control signals ...
+                    --     );
+                    
+                    -- Template for 5-state instruction (continues to T4):
+                    -- elsif (data_in matches pattern) then
+                    --     return (
+                    --         next_state => T4,
+                    --         instruction_complete => false,  -- Not done yet
+                    --         ... other control signals ...
+                    --     );
+                        
+                    else
+                        -- DEFAULT: Unknown instructions treated as NOP
+                        -- Cycle ends at T3, instruction complete
+                        return (
+                            next_state => T1,  -- Will be overridden by interrupt logic
+                            new_cycle => false,
+                            instruction_complete => true,   -- Single cycle instruction
+                            load_ir => true,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => true,                -- Increment PC for next instruction
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            next_cycle_type => CYCLE_PCI
+                        );
+                    end if;
                     
                 when T4 =>
-                    -- T4: Load PC high byte from temp_a (0x00)
-                    return (
-                        next_state => T5,
-                        new_cycle => false,
-                        instruction_complete => false,
-                        load_ir => false,
-                        load_temp_a => false,
-                        load_temp_b => false,
-                        temp_a_source => "00",
-                        temp_b_source => "00",
-                        pc_inc => false,
-                        pc_load_high => true,      -- PC(13:8) = temp_a(5:0)
-                        pc_load_low => false,
-                        stack_push => false,
-                        stack_pop => false,
-                        next_cycle_type => CYCLE_PCI
-                    );
+                    -- T4: Instruction-specific behavior
+                    -- Only reached if instruction needs more than 3 states
+                    
+                    -- ========== RST (RESTART) ==========
+                    if (instr(7 downto 6) = "00" and instr(2 downto 0) = "101") then
+                        -- RST T4: Load PC high, continue to T5
+                        return (
+                            next_state => T5,               -- Continue to T5
+                            new_cycle => false,
+                            instruction_complete => false,   -- Not complete yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => true,      -- PC(13:8) = temp_a(5:0)
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            next_cycle_type => CYCLE_PCI
+                        );
+                        
+                    -- ========== ADD MORE INSTRUCTIONS HERE ==========
+                    -- Template for instruction ending at T4:
+                    -- elsif (instr matches pattern) then
+                    --     return (
+                    --         next_state => T1,  -- Will be overridden by interrupt logic
+                    --         instruction_complete => true/false,
+                    --         ... other control signals ...
+                    --     );
+                    
+                    -- Template for instruction continuing to T5:
+                    -- elsif (instr matches pattern) then
+                    --     return (
+                    --         next_state => T5,
+                    --         instruction_complete => false,
+                    --         ... other control signals ...
+                    --     );
+                        
+                    else
+                        -- Should not reach here - only instructions that need T4 should get here
+                        return DEFAULT_UCODE;
+                    end if;
                     
                 when T5 =>
-                    -- T5: Load PC low byte from RST vector
-                    return (
-                        next_state => T1,
-                        new_cycle => false,
-                        instruction_complete => true,  -- RST complete
-                        load_ir => false,
-                        load_temp_a => false,
-                        load_temp_b => false,
-                        temp_a_source => "00",
-                        temp_b_source => "00",
-                        pc_inc => false,
-                        pc_load_high => false,
-                        pc_load_low => true,       -- PC(7:0) = RST vector
-                        stack_push => false,
-                        stack_pop => false,
-                        next_cycle_type => CYCLE_PCI
-                    );
+                    -- T5: Final state for 5-state instructions
+                    -- Cycle ALWAYS ends at T5
                     
-                when others =>
-                    return DEFAULT_UCODE;
-            end case;
-        
-        -- For T1I state outside interrupt acknowledge (shouldn't happen but handle it)
-        elsif state = T1I then
-            return (
-                next_state => T2,
-                new_cycle => false,
-                instruction_complete => false,
-                load_ir => false,
-                load_temp_a => false,
-                load_temp_b => false,
-                temp_a_source => "00",
-                temp_b_source => "00",
-                pc_inc => false,
-                pc_load_high => false,
-                pc_load_low => false,
-                stack_push => false,
-                stack_pop => false,
-                next_cycle_type => CYCLE_PCI
-            );
-        
-        -- RST instructions (0x05, 0x0D, 0x15, 0x1D, 0x25, 0x2D, 0x35, 0x3D)
-        -- Format: 00 AAA 101 where AAA is the vector number
-        -- Note: Normal execution of RST (not during interrupt) would go here
-        -- Currently not implemented as RST is primarily used via interrupt
-        elsif (instr(7 downto 6) = "00" and instr(2 downto 0) = "101") and cycle = 0 then
-            case state is
-                when T2 =>
-                    -- T2: Output cycle type and upper address
-                    return (
-                        next_state => T3,
-                        new_cycle => false,
-                        instruction_complete => false,
-                        load_ir => false,
-                        load_temp_a => false,
-                        load_temp_b => false,
-                        temp_a_source => "00",
-                        temp_b_source => "00",
-                        pc_inc => false,
-                        pc_load_high => false,
-                        pc_load_low => false,
-                        stack_push => false,
-                        stack_pop => false,
-                        next_cycle_type => CYCLE_PCI
-                    );
-                    
-                when T3 =>
-                    -- T3: Capture RST instruction, load temps, push stack
-                    -- temp_b gets the instruction (e.g. 0x05 for RST 0)
-                    -- temp_a gets 0x00
-                    -- Stack pointer increments (push)
-                    report "get_microcode: int_ack T3 - loading instruction to temp_b";
-                    return (
-                        next_state => T4,
-                        new_cycle => false,
-                        instruction_complete => false,
-                        load_ir => true,          -- Capture instruction
-                        load_temp_a => true,       -- Load 0x00 to temp_a
-                        load_temp_b => true,       -- Load instruction to temp_b
-                        temp_a_source => "00",     -- temp_a = 0x00
-                        temp_b_source => "01",     -- temp_b = data_bus (instruction)
-                        pc_inc => false,
-                        pc_load_high => false,
-                        pc_load_low => false,
-                        stack_push => true,        -- Push PC to stack
-                        stack_pop => false,
-                        next_cycle_type => CYCLE_PCI
-                    );
-                    
-                when T4 =>
-                    -- T4: Load PC high byte from temp_a (0x00)
-                    return (
-                        next_state => T5,
-                        new_cycle => false,
-                        instruction_complete => false,
-                        load_ir => false,
-                        load_temp_a => false,
-                        load_temp_b => false,
-                        temp_a_source => "00",
-                        temp_b_source => "00",
-                        pc_inc => false,
-                        pc_load_high => true,      -- PC(13:8) = temp_a(5:0)
-                        pc_load_low => false,
-                        stack_push => false,
-                        stack_pop => false,
-                        next_cycle_type => CYCLE_PCI
-                    );
-                    
-                when T5 =>
-                    -- T5: Load PC low byte from RST vector
-                    -- RST 0 = 0x05 (00 000 101) -> jumps to 0x0000
-                    return (
-                        next_state => T1,
-                        new_cycle => false,
-                        instruction_complete => true,  -- RST complete
-                        load_ir => false,
-                        load_temp_a => false,
-                        load_temp_b => false,
-                        temp_a_source => "00",
-                        temp_b_source => "00",
-                        pc_inc => false,
-                        pc_load_high => false,
-                        pc_load_low => true,       -- PC(7:0) = RST vector
-                        stack_push => false,
-                        stack_pop => false,
-                        next_cycle_type => CYCLE_PCI
-                    );
+                    -- ========== RST (RESTART) ==========
+                    if (instr(7 downto 6) = "00" and instr(2 downto 0) = "101") then
+                        -- RST T5: Load PC low, instruction complete
+                        return (
+                            next_state => T1,               -- Will be overridden by interrupt logic
+                            new_cycle => false,
+                            instruction_complete => true,    -- RST is complete
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => false,
+                            pc_load_low => true,       -- PC(7:0) = RST vector
+                            stack_push => false,
+                            stack_pop => false,
+                            next_cycle_type => CYCLE_PCI
+                        );
+                        
+                    -- ========== ADD MORE INSTRUCTIONS HERE ==========
+                    -- Template for any instruction reaching T5:
+                    -- elsif (instr matches pattern) then
+                    --     return (
+                    --         next_state => T1,  -- Will be overridden by interrupt logic
+                    --         instruction_complete => true/false,  -- Usually true at T5
+                    --         ... other control signals ...
+                    --     );
+                        
+                    else
+                        -- Should not reach here - only instructions that need T5 should get here
+                        return DEFAULT_UCODE;
+                    end if;
                     
                 when others =>
                     return DEFAULT_UCODE;
             end case;
             
+        -- ===========================================
+        -- CYCLE 1: Second machine cycle
+        -- ===========================================
+        elsif cycle = 1 and int_ack = '0' then
+            -- Instruction-specific behavior for cycle 1
+            -- TODO: Add multi-cycle instruction handlers here
+            case state is
+                when T1 =>
+                    -- Cycle 1 T1 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when T2 =>
+                    -- Cycle 1 T2 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when T3 =>
+                    -- Cycle 1 T3 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when T4 =>
+                    -- Cycle 1 T4 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when T5 =>
+                    -- Cycle 1 T5 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when others =>
+                    return DEFAULT_UCODE;
+            end case;
+            
+        -- ===========================================
+        -- CYCLE 2: Third machine cycle
+        -- ===========================================
+        elsif cycle = 2 and int_ack = '0' then
+            -- Instruction-specific behavior for cycle 2
+            -- TODO: Add 3-cycle instruction handlers here
+            case state is
+                when T1 =>
+                    -- Cycle 2 T1 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when T2 =>
+                    -- Cycle 2 T2 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when T3 =>
+                    -- Cycle 2 T3 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when T4 =>
+                    -- Cycle 2 T4 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when T5 =>
+                    -- Cycle 2 T5 - instruction specific
+                    return DEFAULT_UCODE;  -- TODO: implement
+                    
+                when others =>
+                    return DEFAULT_UCODE;
+            end case;
+
         -- Default case for unimplemented instructions
         else
             return DEFAULT_UCODE;
@@ -520,16 +607,13 @@ begin
             -- Detect rising edge of INT and latch the request
             if INT = '1' and int_previous = '0' then
                 -- Clean rising edge of INT: latch the request
-                int_latched <= '1';
-                report "Interrupt: INT rising edge detected, latching interrupt";
-            elsif timing_state = T1I then
-                -- CPU acknowledged interrupt: clear latch
-                int_latched <= '0';
-                in_int_ack_cycle <= '1';  -- Mark that external hardware is providing instruction
-            elsif timing_state = T1 and in_int_ack_cycle = '1' then
-                -- Clear interrupt acknowledge flag after returning to T1
-                in_int_ack_cycle <= '0';
-                report "Interrupt: Clearing in_int_ack_cycle flag at T1";
+                int_pending <= '1';
+                report "Interrupt: INT rising edge detected, setting int_pending";
+            elsif timing_state = T3 and in_int_ack_cycle = '1' then
+                -- Clear interrupt pending at T3 of interrupt ack cycle
+                -- This is when external hardware provides the instruction
+                int_pending <= '0';
+                report "Interrupt: T3 of int ack cycle, clearing int_pending";
             end if;
             
             -- Store current INT value for next edge detection
@@ -574,19 +658,19 @@ begin
             
             -- Special handling for STOPPED state (8008 has no reset, stays STOPPED until INT)
             if timing_state = STOPPED then
-                if int_latched = '1' then
+                if int_pending = '1' then
                     next_state := T1I;
-                    report "Microcode: STOPPED -> T1I (interrupt)";
+                    in_int_ack_cycle <= '1';  -- Start interrupt acknowledge cycle
+                    report "Microcode: STOPPED -> T1I (interrupt), setting in_int_ack_cycle";
                     -- Don't execute microcode on transition from STOPPED to T1I
                 else
                     -- Stay in STOPPED
-                    report "Microcode: Staying in STOPPED, int_latched=" & std_logic'image(int_latched);
+                    report "Microcode: Staying in STOPPED, int_pending=" & std_logic'image(int_pending);
                 end if;
             -- Normal operation: fetch and execute microcode for current state
-            -- During interrupt acknowledge, we execute the injected instruction  
-            elsif timing_state /= STOPPED then
-                report "State machine: Fetching microcode for state " & timing_state_t'image(next_state);
-                ucode := get_microcode(instruction_reg, current_cycle, next_state, in_int_ack_cycle);
+            else
+                report "State machine: Fetching microcode for state " & timing_state_t'image(timing_state);
+                ucode := get_microcode(instruction_reg, current_cycle, timing_state, in_int_ack_cycle, data_bus_in);
             
                 -- Execute microcode commands
             
@@ -665,28 +749,47 @@ begin
                 cycle_type <= ucode.next_cycle_type;
             end if;
             
-            if ucode.instruction_complete then
+            -- ===========================================
+            -- INTERRUPT ACKNOWLEDGE CYCLE
+            -- ===========================================
+            -- Per Intel 8008 datasheet:
+            -- After completing instruction, if interrupt pending:
+            -- - Goes to T1I state (interrupt acknowledge)
+            -- - External hardware provides RST instruction
+            -- - RST executes, jumping to interrupt vector
+            
+            -- Get base next state from microcode
+            next_state := ucode.next_state;
+            
+            -- Update instruction complete flag
+            instruction_complete <= ucode.instruction_complete;
+            
+            -- Check for cycle management
+            if ucode.new_cycle then
+                current_cycle <= current_cycle + 1;
+            elsif ucode.instruction_complete then
                 current_cycle <= 0;
-                instruction_complete <= true;
-                -- Check for pending interrupt
-                if int_latched = '1' then
-                    next_state := T1I;
-                    report "Microcode: Instruction complete, servicing interrupt";
-                else
-                    next_state := ucode.next_state;
-                end if;
-            else
-                instruction_complete <= false;
-                -- Normal state transition
-                next_state := ucode.next_state;
             end if;
             
-                -- Handle WAIT states
-                if next_state = T2 and READY = '0' then
-                    next_state := TWAIT;
-                elsif next_state = TWAIT and READY = '1' then
-                    next_state := T3;
-                end if;
+            -- Override next_state for interrupt handling
+            -- Only check at instruction boundaries (when instruction_complete = true)
+            if ucode.instruction_complete and int_pending = '1' and timing_state /= STOPPED then
+                -- Instruction just completed and interrupt is pending
+                next_state := T1I;  -- Start interrupt acknowledge cycle
+                in_int_ack_cycle <= '1';  -- Mark start of interrupt ack cycle
+                report "Interrupt: Instruction complete, starting interrupt acknowledge";
+            elsif ucode.instruction_complete and in_int_ack_cycle = '1' then
+                -- Interrupt acknowledge cycle complete, clear flag
+                in_int_ack_cycle <= '0';
+                report "Interrupt: Int ack instruction complete, clearing in_int_ack_cycle";
+            end if;
+            
+            -- Handle WAIT states
+            if next_state = T2 and READY = '0' then
+                next_state := TWAIT;
+            elsif next_state = TWAIT and READY = '1' then
+                next_state := T3;
+            end if;
                 
             end if;  -- End of STOPPED/normal operation check
             
