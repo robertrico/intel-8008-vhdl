@@ -15,6 +15,16 @@ end v8008_interrupt_tb;
 
 architecture behavior of v8008_interrupt_tb is
 
+    -- Component declaration for phase_clocks
+    component phase_clocks
+        port (
+            clk_in : in std_logic;
+            reset  : in std_logic;
+            phi1   : out std_logic;
+            phi2   : out std_logic
+        );
+    end component;
+
     -- Component declaration for v8008 CPU
     component v8008
         port (
@@ -58,6 +68,8 @@ architecture behavior of v8008_interrupt_tb is
     end component;
 
     -- Clock and control signals
+    signal clk_master  : std_logic := '0';
+    signal reset       : std_logic := '0';
     signal phi1        : std_logic := '0';
     signal phi2        : std_logic := '0';
     signal INT         : std_logic := '0';
@@ -91,12 +103,19 @@ architecture behavior of v8008_interrupt_tb is
     signal test_phase  : string(1 to 20) := (others => ' ');
     
     -- Constants
-    constant PHI1_PERIOD : time := 1100 ns;
-    constant PHI2_PERIOD : time := 1100 ns;
-    constant OVERLAP_TIME : time := 100 ns;
+    constant CLK_PERIOD : time := 10 ns;  -- 100 MHz master clock
     constant RST0_OPCODE : std_logic_vector(7 downto 0) := "00000101";  -- RST 0 = 00 000 101
     
 begin
+
+    -- Instantiate phase_clocks generator
+    CLK_GEN: phase_clocks
+        port map (
+            clk_in => clk_master,
+            reset => reset,
+            phi1 => phi1,
+            phi2 => phi2
+        );
 
     -- Instantiate v8008 CPU
     UUT: v8008
@@ -126,25 +145,14 @@ begin
             debug_hl_address => debug_hl_address
         );
     
-    -- Clock generation
+    -- Master clock generation (100 MHz)
     CLOCK_PROC: process
     begin
         while not done loop
-            -- phi1 high phase
-            phi1 <= '1';
-            wait for PHI1_PERIOD - OVERLAP_TIME;
-            
-            -- phi2 rises while phi1 still high (overlap)
-            phi2 <= '1';
-            wait for OVERLAP_TIME;
-            
-            -- phi1 falls, phi2 stays high
-            phi1 <= '0';
-            wait for PHI2_PERIOD - OVERLAP_TIME;
-            
-            -- phi2 falls
-            phi2 <= '0';
-            wait for OVERLAP_TIME;
+            clk_master <= '0';
+            wait for CLK_PERIOD / 2;
+            clk_master <= '1';
+            wait for CLK_PERIOD / 2;
         end loop;
         wait;
     end process CLOCK_PROC;
