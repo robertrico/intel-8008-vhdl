@@ -184,7 +184,14 @@ architecture rtl of v8008 is
     -- Temporary registers for instruction execution
     signal temp_a : std_logic_vector(7 downto 0) := (others => '0');  -- Reg.a from datasheet
     signal temp_b : std_logic_vector(7 downto 0) := (others => '0');  -- Reg.b from datasheet
-    
+
+    -- Sub-phase tracking for proper φ₁/φ₂ timing
+    -- Each timing state (T1-T5) has TWO phi1/phi2 cycles:
+    --   φ₁₁/φ₂₁ (sub=0): First half - setup, register reads
+    --   φ₁₂/φ₂₂ (sub=1): Second half - data movement, temp register loads
+    signal phi1_sub : integer range 0 to 1 := 0;  -- 0=φ₁₁, 1=φ₁₂
+    signal phi2_sub : integer range 0 to 1 := 0;  -- 0=φ₂₁, 1=φ₂₂
+
     --===========================================
     -- Microcode Architecture
     --===========================================
@@ -192,9 +199,10 @@ architecture rtl of v8008 is
     type microcode_entry is record
         -- State control
         next_state          : timing_state_t;
+        advance_state       : boolean;           -- True=advance to next_state, False=stay in current state
         new_cycle           : boolean;           -- Start new machine cycle
         instruction_complete: boolean;           -- Entire instruction done
-        
+
         -- Data movement
         load_ir             : boolean;           -- Load instruction register
         load_temp_a         : boolean;           -- Load temp_a
@@ -221,9 +229,10 @@ architecture rtl of v8008 is
         next_cycle_type     : std_logic_vector(1 downto 0);
     end record;
     
-    -- Default microcode entry (safe do-nothing)  
+    -- Default microcode entry (safe do-nothing)
     constant DEFAULT_UCODE : microcode_entry := (
         next_state => T1,  -- Will be overridden for STOPPED state
+        advance_state => true,  -- By default, advance to next_state after both sub-phases
         new_cycle => false,
         instruction_complete => false,
         load_ir => false,
@@ -422,6 +431,7 @@ architecture rtl of v8008 is
         instr : std_logic_vector(7 downto 0);
         cycle : integer;
         state : timing_state_t;
+        sub_phase : integer;  -- 0=φ₁₁/φ₂₁ (first half), 1=φ₁₂/φ₂₂ (second half)
         int_ack : std_logic;
         data_in : std_logic_vector(7 downto 0)  -- For T3 instruction fetch
     ) return microcode_entry is
@@ -441,6 +451,7 @@ architecture rtl of v8008 is
                     -- T1I: Start interrupt acknowledge cycle
                     return (
                         next_state => T2,
+                        advance_state => true,
                         new_cycle => false,
                         instruction_complete => false,
                         load_ir => false,
@@ -464,6 +475,7 @@ architecture rtl of v8008 is
                     -- Generic T1 for ALL instructions: PCL OUT
                     return (
                         next_state => T2,
+                        advance_state => true,
                         new_cycle => false,  -- Already in cycle 0
                         instruction_complete => false,
                         load_ir => false,
@@ -488,6 +500,7 @@ architecture rtl of v8008 is
                     -- Same for both normal fetch and interrupt acknowledge
                     return (
                         next_state => T3,
+                        advance_state => true,
                         new_cycle => false,
                         instruction_complete => false,
                         load_ir => false,
@@ -516,9 +529,137 @@ architecture rtl of v8008 is
                     --   - Single-byte instructions: Increment after fetch
                     --   - Multi-byte: Increment after each byte (handled in later cycles)
                     -- Then decode and determine next state
+                    --
+                    -- SUB-PHASE HANDLING FOR T3:
+                    --   sub_phase=0: Load IR, set control signals, advance_state=false (stay in T3)
+                    --   sub_phase=1: Execute state transition, advance_state=true (move to next_state)
 
-                    -- Decode the instruction (eliminates hardcoded bit-pattern checks)
+                    -- AT SUB_PHASE=1: Just advance state without reloading IR
+                    -- Decode from instr (which is instruction_reg, already loaded at sub_phase=0)
+                    if sub_phase = 1 then
+                        decoded := decode_instruction(instr);
+
+                        -- Determine next_state and return minimal microcode
+                        if decoded.is_hlt then
+                            return (
+                                next_state => STOPPED,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => true,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        elsif decoded.is_rst then
+                            return (
+                                next_state => T4,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        elsif decoded.is_mvi or decoded.is_inp or decoded.is_alu_memory then
+                            return (
+                                next_state => T1,
+                                advance_state => true,
+                                new_cycle => true,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        elsif decoded.is_mov and not decoded.is_memory_source and not decoded.is_memory_dest then
+                            return (
+                                next_state => T4,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else
+                            -- Default: single-cycle instruction
+                            return (
+                                next_state => T1,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => true,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+                    end if;
+
+                    -- AT SUB_PHASE=0: Decode from data_in and load IR
                     decoded := decode_instruction(data_in);
+
+                    -- FOR T3: Only perform IR loading and setup at sub_phase=0
+                    -- At sub_phase=1, just advance to the next_state determined at sub_phase=0
+                    -- This is done by modifying advance_state in all T3 returns below
 
                     -- ========== HLT (HALT) ==========
                     -- HLT opcodes: 0000000x (0x00, 0x01) and 11111111 (0xFF)
@@ -527,6 +668,7 @@ architecture rtl of v8008 is
                         -- Special case: Go to STOPPED (not T1/T1I)
                         return (
                             next_state => STOPPED,
+                        advance_state => (sub_phase = 1),
                             new_cycle => false,
                             instruction_complete => true,   -- HLT is complete
                             load_ir => true,                -- Always load IR
@@ -552,6 +694,7 @@ architecture rtl of v8008 is
                         -- RST: Cycle continues to T4 (needs T4 and T5)
                         return (
                             next_state => T4,               -- Continue to T4
+                        advance_state => (sub_phase = 1),
                             new_cycle => false,
                             instruction_complete => false,   -- Not complete yet
                             load_ir => true,
@@ -580,6 +723,7 @@ architecture rtl of v8008 is
                         -- NOTE: PC increment moved to cycle 1 T1 to avoid ROM race condition
                         return (
                             next_state => T1,                -- Will be overridden by interrupt logic
+                        advance_state => (sub_phase = 1),
                             new_cycle => true,               -- Start new cycle for immediate fetch
                             instruction_complete => false,   -- Not complete yet (need 2 more cycles)
                             load_ir => true,                 -- Load instruction register
@@ -607,6 +751,7 @@ architecture rtl of v8008 is
                         -- Start I/O read cycle
                         return (
                             next_state => T1,                -- Will be overridden by interrupt logic
+                        advance_state => (sub_phase = 1),
                             new_cycle => true,               -- Start cycle 1 for I/O operation
                             instruction_complete => false,   -- Not complete yet (need cycle 1)
                             load_ir => true,                 -- Load instruction register
@@ -633,6 +778,7 @@ architecture rtl of v8008 is
                         -- Start memory read cycle from HL address
                         return (
                             next_state => T1,                -- Will be overridden by interrupt logic
+                        advance_state => (sub_phase = 1),
                             new_cycle => true,               -- Start cycle 1 for memory read
                             instruction_complete => false,   -- Not complete yet (need cycle 1)
                             load_ir => true,                 -- Load instruction register
@@ -652,11 +798,42 @@ architecture rtl of v8008 is
                             next_cycle_type => CYCLE_PCR     -- Next cycle is memory read from HL
                         );
 
+                    -- ========== MOV r1, r2 (Register-to-Register Move) ==========
+                    -- MOV r1, r2: 11 DDD SSS (where DDD ≠ 111 and SSS ≠ 111)
+                    -- 5-state instruction (T1-T5) in single machine cycle
+                    -- Excludes MOV M,r and MOV r,M (memory variants)
+                    elsif decoded.is_mov and
+                          not decoded.is_memory_source and
+                          not decoded.is_memory_dest then
+                        -- Start 5-state register transfer
+                        return (
+                            next_state => T4,                -- Continue to T4
+                        advance_state => (sub_phase = 1),
+                            new_cycle => false,              -- Same machine cycle
+                            instruction_complete => false,   -- Not done yet (need T4, T5)
+                            load_ir => true,                 -- Load instruction register
+                            load_temp_a => false,
+                            load_temp_b => true,             -- Save instruction in temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",           -- temp_b = data_bus (instruction)
+                            pc_inc => true,                  -- Increment PC after fetch
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,              -- Don't write yet
+                            reg_read => false,               -- Don't read yet
+                            reg_target => "000",
+                            reg_source => "00",
+                            next_cycle_type => CYCLE_PCI
+                        );
+
                     -- ========== ADD MORE INSTRUCTIONS HERE ==========
                     -- Template for 5-state instruction (continues to T4):
                     -- elsif (data_in matches pattern) then
                     --     return (
                     --         next_state => T4,
+                    --         advance_state => (sub_phase = 1),
                     --         instruction_complete => false,  -- Not done yet
                     --         ... other control signals ...
                     --     );
@@ -667,6 +844,7 @@ architecture rtl of v8008 is
                         -- For single-byte instructions, PC increments after fetch
                         return (
                             next_state => T1,                -- Will be overridden by interrupt logic
+                        advance_state => (sub_phase = 1),
                             new_cycle => false,
                             instruction_complete => true,    -- Single cycle instruction
                             load_ir => true,                 -- Always load IR
@@ -696,6 +874,7 @@ architecture rtl of v8008 is
                         -- RST T4: Load PC high, continue to T5
                         return (
                             next_state => T5,               -- Continue to T5
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => false,   -- Not complete yet
                             load_ir => false,
@@ -714,24 +893,85 @@ architecture rtl of v8008 is
                             reg_source => "00",
                             next_cycle_type => CYCLE_PCI
                         );
-                        
+
+                    -- ========== MOV r1, r2 (Register-to-Register Move) ==========
+                    -- Decode instruction to get SSS and DDD fields
+                    -- T4: Read source register (SSS) and load into temp_b
+                    --   - φ₁/φ₂₁: Read source register to internal_data_bus
+                    --   - φ₁₂: Load temp_b from internal_data_bus
+                    elsif (instr(7 downto 6) = "11" and
+                           instr(5 downto 3) /= "111" and
+                           instr(2 downto 0) /= "111") then
+
+                        if sub_phase = 0 then
+                            -- T4 φ₁₁/φ₂₁: Read source register to internal_data_bus
+                            -- Register read happens at T4 φ₂₁ (phi2_sub=0)
+                            return (
+                                next_state => T5,                -- Target state (will stay in T4 for now)
+                                advance_state => false,          -- Stay in T4 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => true,                -- Read source register
+                                reg_target => instr(2 downto 0), -- SSS field = source register
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- T4 φ₁₂/φ₂₂: Load temp_b from internal_data_bus
+                            -- temp_b loads at φ₁₂, capturing value from register read
+                            return (
+                                next_state => T5,                -- Advance to T5
+                                advance_state => true,           -- Advance to T5 after this sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => true,             -- Load temp_b from internal_data_bus
+                                temp_a_source => "00",
+                                temp_b_source => "10",           -- temp_b = internal_data_bus
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
                     -- ========== ADD MORE INSTRUCTIONS HERE ==========
                     -- Template for instruction ending at T4:
                     -- elsif (instr matches pattern) then
                     --     return (
                     --         next_state => T1,  -- Will be overridden by interrupt logic
+                    --         advance_state => true,
                     --         instruction_complete => true/false,
                     --         ... other control signals ...
                     --     );
-                    
+
                     -- Template for instruction continuing to T5:
                     -- elsif (instr matches pattern) then
                     --     return (
                     --         next_state => T5,
+                    --         advance_state => true,
                     --         instruction_complete => false,
                     --         ... other control signals ...
                     --     );
-                        
+
                     else
                         -- Should not reach here - only instructions that need T4 should get here
                         return DEFAULT_UCODE;
@@ -749,6 +989,7 @@ architecture rtl of v8008 is
                         -- RST T5: Load PC low, instruction complete
                         return (
                             next_state => T1,               -- Will be overridden by interrupt logic
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => true,    -- RST is complete
                             load_ir => false,
@@ -767,16 +1008,75 @@ architecture rtl of v8008 is
                             reg_source => "00",
                             next_cycle_type => CYCLE_PCI
                         );
-                        
+
+                    -- ========== MOV r1, r2 (Register-to-Register Move) ==========
+                    -- T5: Write temp_b (loaded at T4) to destination register (DDD)
+                    --   - φ₁₁: Setup (temp_b already loaded from T4)
+                    --   - φ₁₂: Trigger register write (actual write at φ₂₂)
+                    elsif decoded.is_mov and
+                          not decoded.is_memory_source and
+                          not decoded.is_memory_dest then
+
+                        if sub_phase = 0 then
+                            -- T5 φ₁₁/φ₂₁: Setup phase (temp_b already contains source value from T4)
+                            -- No operations needed, just stay in T5 for second sub-phase
+                            return (
+                                next_state => T1,                -- Target state after completion
+                                advance_state => false,          -- Stay in T5 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,   -- Not complete yet
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- T5 φ₁₂/φ₂₂: Write temp_b to destination register
+                            -- reg_write triggers write at T5 φ₂₂ (phi2_sub=1)
+                            return (
+                                next_state => T1,                -- Will be overridden by interrupt logic
+                                advance_state => true,           -- Instruction complete, advance
+                                new_cycle => false,
+                                instruction_complete => true,    -- MOV is complete
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,               -- Write to destination register
+                                reg_read => false,
+                                reg_target => decoded.ddd_field, -- DDD field = destination register
+                                reg_source => "11",              -- reg_source = temp_b
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
                     -- ========== ADD MORE INSTRUCTIONS HERE ==========
                     -- Template for any instruction reaching T5:
                     -- elsif (instr matches pattern) then
                     --     return (
                     --         next_state => T1,  -- Will be overridden by interrupt logic
+                    --         advance_state => true,
                     --         instruction_complete => true/false,  -- Usually true at T5
                     --         ... other control signals ...
                     --     );
-                        
+
                     else
                         -- Should not reach here - only instructions that need T5 should get here
                         return DEFAULT_UCODE;
@@ -801,6 +1101,7 @@ architecture rtl of v8008 is
                         -- MVI: Increment PC to point to immediate byte (moved from cycle 0 T3)
                         return (
                             next_state => T2,
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => false,
                             load_ir => false,
@@ -823,6 +1124,7 @@ architecture rtl of v8008 is
                         -- ALU M: Output L register (HL address low byte)
                         return (
                             next_state => T2,
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => false,
                             load_ir => false,
@@ -845,6 +1147,7 @@ architecture rtl of v8008 is
                         -- Default: PCL OUT for immediate/address fetch
                         return (
                             next_state => T2,
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => false,
                             load_ir => false,
@@ -874,6 +1177,7 @@ architecture rtl of v8008 is
                         -- ALU M: Output H register (HL address high byte)
                         return (
                             next_state => T3,
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => false,
                             load_ir => false,
@@ -896,6 +1200,7 @@ architecture rtl of v8008 is
                         -- Default: PCH OUT for immediate/address fetch
                         return (
                             next_state => T3,
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => false,
                             load_ir => false,
@@ -926,6 +1231,7 @@ architecture rtl of v8008 is
                         -- NOTE: PC increment moved to cycle 2 T1 to avoid ROM race condition
                         return (
                             next_state => T1,               -- Will be overridden if needed
+                        advance_state => (sub_phase = 1),
                             new_cycle => true,              -- Start cycle 2 for memory write
                             instruction_complete => false,  -- Not done yet
                             load_ir => false,
@@ -949,6 +1255,7 @@ architecture rtl of v8008 is
                         -- Cycle 1 T3: Read data from I/O port into temp_b
                         return (
                             next_state => T4,               -- Continue to T4 for flag output
+                        advance_state => (sub_phase = 1),
                             new_cycle => false,
                             instruction_complete => false,  -- Not done yet
                             load_ir => false,
@@ -972,6 +1279,7 @@ architecture rtl of v8008 is
                         -- Cycle 1 T3: Read memory data from [HL] into temp_b
                         return (
                             next_state => T5,               -- Skip T4, go directly to T5
+                        advance_state => (sub_phase = 1),
                             new_cycle => false,
                             instruction_complete => false,  -- Not done yet
                             load_ir => false,
@@ -1007,6 +1315,7 @@ architecture rtl of v8008 is
                         -- Data bus output handled in data_bus_output process
                         return (
                             next_state => T5,               -- Continue to T5
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => false,  -- Not done yet
                             load_ir => false,
@@ -1038,6 +1347,7 @@ architecture rtl of v8008 is
                         -- Cycle 1 T5: Transfer I/O data from temp_b to accumulator
                         return (
                             next_state => T1,               -- Will be overridden by interrupt logic
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => true,   -- INP instruction complete!
                             load_ir => false,
@@ -1066,6 +1376,7 @@ architecture rtl of v8008 is
                             -- CMP: Update flags only, don't write to accumulator
                             return (
                                 next_state => T1,               -- Will be overridden by interrupt logic
+                        advance_state => true,
                                 new_cycle => false,
                                 instruction_complete => true,   -- ALU M instruction complete!
                                 load_ir => false,
@@ -1088,6 +1399,7 @@ architecture rtl of v8008 is
                             -- Other ALU operations: Write result to accumulator
                             return (
                                 next_state => T1,               -- Will be overridden by interrupt logic
+                        advance_state => true,
                                 new_cycle => false,
                                 instruction_complete => true,   -- ALU M instruction complete!
                                 load_ir => false,
@@ -1131,6 +1443,7 @@ architecture rtl of v8008 is
                         -- Increment PC to point to next instruction
                         return (
                             next_state => T1,               -- Will be overridden by interrupt logic
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => true,   -- MVI register complete!
                             load_ir => false,
@@ -1153,6 +1466,7 @@ architecture rtl of v8008 is
                         -- MVI M or other: Continue to T2 for memory write cycle
                         return (
                             next_state => T2,
+                        advance_state => true,
                             new_cycle => false,
                             instruction_complete => false,
                             load_ir => false,
@@ -1178,6 +1492,7 @@ architecture rtl of v8008 is
                     -- For MVI M, output H register contents
                     return (
                         next_state => T3,
+                        advance_state => true,
                         new_cycle => false,
                         instruction_complete => false,
                         load_ir => false,
@@ -1207,6 +1522,7 @@ architecture rtl of v8008 is
                         -- Data output will be handled by bus control logic
                         return (
                             next_state => T1,               -- Will be overridden by interrupt logic
+                        advance_state => (sub_phase = 1),
                             new_cycle => false,
                             instruction_complete => true,   -- MVI M complete!
                             load_ir => false,
@@ -1344,34 +1660,48 @@ begin
         variable ucode : microcode_entry;
     begin
         if rising_edge(phi1) then
-            report "State machine: Running, timing_state=" & timing_state_t'image(timing_state);
-            -- Store previous state
-            timing_state_prev <= timing_state;
+            report "State machine: Running, timing_state=" & timing_state_t'image(timing_state) &
+                   ", phi1_sub=" & integer'image(phi1_sub);
 
-            -- Clear register control signals at start of each cycle
-            reg_write_enable <= false;
-            reg_read_enable <= false;
+            -- Store previous state (only on first sub-phase)
+            if phi1_sub = 0 then
+                timing_state_prev <= timing_state;
+
+                -- Clear register control signals at start of each timing state
+                reg_write_enable <= false;
+                reg_read_enable <= false;
+            end if;
 
             -- Default to current state
             next_state := timing_state;
-            
+
             -- Special handling for STOPPED state (8008 has no reset, stays STOPPED until INT)
             if timing_state = STOPPED then
-                if int_pending = '1' then
-                    next_state := T1I;
+                if int_pending = '1' and phi1_sub = 0 then
+                    -- Transition to T1I interrupt acknowledge (only on first sub-phase)
+                    timing_state <= T1I;
                     in_int_ack_cycle <= '1';  -- Start interrupt acknowledge cycle
+                    phi1_sub <= 0;  -- Keep sub-phase at 0 for T1I
                     report "Microcode: STOPPED -> T1I (interrupt), setting in_int_ack_cycle";
                     -- Don't execute microcode on transition from STOPPED to T1I
-                else
-                    -- Stay in STOPPED
+                elsif int_pending = '1' and phi1_sub = 1 then
+                    -- Second sub-phase while waiting for interrupt - reset to first sub-phase
+                    phi1_sub <= 0;
+                elsif int_pending = '0' and phi1_sub = 1 then
+                    -- Toggle sub-phase even when staying in STOPPED (for consistency)
+                    phi1_sub <= 0;
+                elsif int_pending = '0' and phi1_sub = 0 then
+                    -- First sub-phase, no interrupt - advance to second sub-phase
+                    phi1_sub <= 1;
                     report "Microcode: Staying in STOPPED, int_pending=" & std_logic'image(int_pending);
                 end if;
             -- Normal operation: fetch and execute microcode for current state
-            else
+            elsif timing_state /= STOPPED then
                 report "State machine: Fetching microcode for state " & timing_state_t'image(timing_state) &
                        ", cycle=" & integer'image(current_cycle) &
+                       ", sub_phase=" & integer'image(phi1_sub) &
                        ", instr=0x" & to_hstring(instruction_reg);
-                ucode := get_microcode(instruction_reg, current_cycle, timing_state, in_int_ack_cycle, data_bus_in);
+                ucode := get_microcode(instruction_reg, current_cycle, timing_state, phi1_sub, in_int_ack_cycle, data_bus_in);
             
                 -- Execute microcode commands
             
@@ -1384,21 +1714,30 @@ begin
             -- Temporary register loading
             if ucode.load_temp_a then
                 case ucode.temp_a_source is
-                    when "00" => temp_a <= X"00";  -- Load zero
-                    when "01" => temp_a <= data_bus_in;  -- From data bus
+                    when "00" =>
+                        temp_a <= X"00";  -- Load zero
+                        report "Microcode: Loading temp_a with 0x00";
+                    when "01" =>
+                        temp_a <= data_bus_in;  -- From data bus
+                        report "Microcode: Loading temp_a from data_bus_in=0x" & to_hstring(unsigned(data_bus_in));
+                    when "10" =>
+                        temp_a <= internal_data_bus;  -- From internal data bus (register read)
+                        report "Microcode: Loading temp_a from internal_data_bus=0x" & to_hstring(unsigned(internal_data_bus));
                     when others => null;
                 end case;
-                report "Microcode: Loading temp_a";
             end if;
             
             if ucode.load_temp_b then
                 case ucode.temp_b_source is
-                    when "00" => 
+                    when "00" =>
                         temp_b <= X"00";  -- Load zero
                         report "Microcode: Loading temp_b with 0x00";
-                    when "01" => 
+                    when "01" =>
                         temp_b <= data_bus_in;  -- From data bus (instruction)
                         report "Microcode: Loading temp_b from data_bus_in=0x" & to_hstring(unsigned(data_bus_in));
+                    when "10" =>
+                        temp_b <= internal_data_bus;  -- From internal data bus (register read)
+                        report "Microcode: Loading temp_b from internal_data_bus=0x" & to_hstring(unsigned(internal_data_bus));
                     when others => null;
                 end case;
             end if;
@@ -1480,46 +1819,86 @@ begin
             -- - External hardware provides RST instruction
             -- - RST executes, jumping to interrupt vector
             
+            -- ===========================================
+            -- SUB-PHASE CONTROL & STATE ADVANCEMENT
+            -- ===========================================
+            -- Each timing state has TWO phi1 cycles (φ₁₁ and φ₁₂)
+            -- Only advance to next state after BOTH sub-phases complete
+            -- (when phi1_sub=1 AND advance_state=true)
+
             -- Get base next state from microcode
             next_state := ucode.next_state;
-            
-            -- Update instruction complete flag
-            instruction_complete <= ucode.instruction_complete;
-            
-            -- Check for cycle management
-            if ucode.new_cycle then
-                current_cycle <= current_cycle + 1;
-                cycle_type <= ucode.next_cycle_type;
-            elsif ucode.instruction_complete then
-                current_cycle <= 0;
-                cycle_type <= ucode.next_cycle_type;  -- Reset to next cycle type (usually PCI)
+
+            -- Update instruction complete flag (only on second sub-phase)
+            if phi1_sub = 1 then
+                instruction_complete <= ucode.instruction_complete;
             end if;
-            
+
+            -- Check for cycle management (only on second sub-phase)
+            if phi1_sub = 1 then
+                if ucode.new_cycle then
+                    current_cycle <= current_cycle + 1;
+                    cycle_type <= ucode.next_cycle_type;
+                elsif ucode.instruction_complete then
+                    current_cycle <= 0;
+                    cycle_type <= ucode.next_cycle_type;  -- Reset to next cycle type (usually PCI)
+                end if;
+            end if;
+
             -- Override next_state for interrupt handling
             -- Only check at instruction boundaries (when instruction_complete = true)
-            if ucode.instruction_complete and int_pending = '1' and timing_state /= STOPPED then
+            -- Check on second sub-phase only
+            if phi1_sub = 1 and ucode.instruction_complete and int_pending = '1' and timing_state /= STOPPED then
                 -- Instruction just completed and interrupt is pending
                 next_state := T1I;  -- Start interrupt acknowledge cycle
                 in_int_ack_cycle <= '1';  -- Mark start of interrupt ack cycle
                 report "Interrupt: Instruction complete, starting interrupt acknowledge";
-            elsif ucode.instruction_complete and in_int_ack_cycle = '1' then
+            elsif phi1_sub = 1 and ucode.instruction_complete and in_int_ack_cycle = '1' then
                 -- Interrupt acknowledge cycle complete, clear flag
                 in_int_ack_cycle <= '0';
                 report "Interrupt: Int ack instruction complete, clearing in_int_ack_cycle";
             end if;
-            
-            -- Handle WAIT states
-            if next_state = T2 and READY = '0' then
-                next_state := TWAIT;
-            elsif next_state = TWAIT and READY = '1' then
-                next_state := T3;
+
+            -- Handle WAIT states (only on second sub-phase)
+            if phi1_sub = 1 then
+                if next_state = T2 and READY = '0' then
+                    next_state := TWAIT;
+                elsif next_state = TWAIT and READY = '1' then
+                    next_state := T3;
+                end if;
             end if;
-                
+
             end if;  -- End of STOPPED/normal operation check
-            
-            -- Update timing state for next cycle
-            timing_state <= next_state;
-            report "State machine: timing_state <= " & timing_state_t'image(next_state);
+
+            -- ===========================================
+            -- STATE ADVANCEMENT LOGIC
+            -- ===========================================
+            -- Advance state only when:
+            --   1. advance_state flag is true, AND
+            --   2. We're at second sub-phase (phi1_sub=1)
+            -- Otherwise, stay in current state and toggle sub-phase
+            -- NOTE: STOPPED state handles its own phi1_sub and timing_state updates above
+
+            if timing_state /= STOPPED then
+                if phi1_sub = 0 then
+                    -- First sub-phase (φ₁₁): Stay in current state, advance to second sub-phase
+                    phi1_sub <= 1;
+                    timing_state <= timing_state;  -- Stay in same state
+                    report "State machine: phi1_sub 0->1, staying in state " & timing_state_t'image(timing_state);
+                elsif phi1_sub = 1 and ucode.advance_state then
+                    -- Second sub-phase (φ₁₂) with advance_state=true: Advance to next state, reset sub-phase
+                    phi1_sub <= 0;
+                    timing_state <= next_state;
+                    report "State machine: phi1_sub 1->0, advancing to state " & timing_state_t'image(next_state);
+                elsif phi1_sub = 1 and not ucode.advance_state then
+                    -- Second sub-phase (φ₁₂) with advance_state=false: Stay in state, reset sub-phase
+                    -- This allows instructions to use both sub-phases of a single timing state
+                    phi1_sub <= 0;
+                    timing_state <= timing_state;  -- Stay in same state
+                    report "State machine: phi1_sub 1->0, staying in state (advance_state=false) " &
+                           timing_state_t'image(timing_state);
+                end if;
+            end if;
         end if;
     end process state_machine;
     
@@ -1532,25 +1911,44 @@ begin
         variable write_data : std_logic_vector(7 downto 0);
     begin
         if rising_edge(phi2) then
+            report "Register Control: phi2_sub=" & integer'image(phi2_sub);
+
+            -- Toggle phi2_sub: 0->1->0
+            if phi2_sub = 0 then
+                phi2_sub <= 1;
+            else
+                phi2_sub <= 0;
+            end if;
+
             -- H:L address combination (H provides high 6 bits, L provides low 8 bits)
             -- Bits 7-6 of H are ignored (don't cares) for 14-bit addressing
+            -- Update on both sub-phases (always needed)
             hl_address <= registers(REG_H_DATA)(5 downto 0) & registers(REG_L_DATA);
 
             -- Check if accessing memory through M register
+            -- Update on both sub-phases (always needed)
             memory_reference <= (reg_select = REG_M);
 
             -- ALU operations: put temp_b (memory/register operand) on internal_data_bus FIRST
             -- This must happen BEFORE register write logic so ALU sees correct operand
             -- (works for both reg_write=true and CMP with reg_write=false)
-            if instruction_reg(7 downto 6) = "10" and reg_data_source = "10" then
+            -- Do this early (phi2_sub=0) so ALU has operand ready
+            if phi2_sub = 0 and instruction_reg(7 downto 6) = "10" and reg_data_source = "10" then
                 -- ALU M operation: temp_b contains the memory operand
                 internal_data_bus <= temp_b;
                 report "Register Control (phi2): Putting temp_b (0x" & to_hstring(temp_b) &
                        ") on internal_data_bus for ALU operation";
             end if;
 
-            -- Register write operation
-            if reg_write_enable and not memory_reference then
+            -- ===========================================
+            -- REGISTER WRITE (φ₂₂ - second sub-phase)
+            -- ===========================================
+            -- Per Intel 8008 timing: register writes happen at φ₂₂
+            -- After toggle above: when phi2_sub WAS 0 and became 1, that's φ₂₁
+            -- When phi2_sub WAS 1 and becomes 0, that's φ₂₂ (next phi2 rising edge)
+            -- So writes happen when phi2_sub=1 BEFORE toggle (check current value at start of process)
+
+            if phi2_sub = 1 and reg_write_enable and not memory_reference then
                 -- Select data source based on reg_data_source
                 -- Use a variable to avoid delta-cycle issues
                 case reg_data_source is
@@ -1580,12 +1978,25 @@ begin
                         registers(REG_A_DATA) <= write_data;
                         report "Register Control (phi2): Writing 0x" & to_hstring(write_data) & " to accumulator (source=" &
                                integer'image(to_integer(unsigned(reg_data_source))) & ", temp_b=0x" & to_hstring(temp_b) & ")";
-                    when REG_B => registers(REG_B_DATA) <= write_data;
-                    when REG_C => registers(REG_C_DATA) <= write_data;
-                    when REG_D => registers(REG_D_DATA) <= write_data;
-                    when REG_E => registers(REG_E_DATA) <= write_data;
-                    when REG_H => registers(REG_H_DATA) <= write_data;
-                    when REG_L => registers(REG_L_DATA) <= write_data;
+                    when REG_B =>
+                        registers(REG_B_DATA) <= write_data;
+                        report "Register Control (phi2): Writing 0x" & to_hstring(write_data) & " to REG_B (source=" &
+                               integer'image(to_integer(unsigned(reg_data_source))) & ", temp_b=0x" & to_hstring(temp_b) & ")";
+                    when REG_C =>
+                        registers(REG_C_DATA) <= write_data;
+                        report "Register Control (phi2): Writing 0x" & to_hstring(write_data) & " to REG_C";
+                    when REG_D =>
+                        registers(REG_D_DATA) <= write_data;
+                        report "Register Control (phi2): Writing 0x" & to_hstring(write_data) & " to REG_D";
+                    when REG_E =>
+                        registers(REG_E_DATA) <= write_data;
+                        report "Register Control (phi2): Writing 0x" & to_hstring(write_data) & " to REG_E";
+                    when REG_H =>
+                        registers(REG_H_DATA) <= write_data;
+                        report "Register Control (phi2): Writing 0x" & to_hstring(write_data) & " to REG_H";
+                    when REG_L =>
+                        registers(REG_L_DATA) <= write_data;
+                        report "Register Control (phi2): Writing 0x" & to_hstring(write_data) & " to REG_L";
                     when others => null;  -- REG_M handled separately
                 end case;
 
@@ -1593,17 +2004,35 @@ begin
                 internal_data_bus <= write_data;
             end if;
 
-            -- Register read operation
-            if reg_read_enable and not memory_reference then
+            -- ===========================================
+            -- REGISTER READ (φ₂₁ - first sub-phase)
+            -- ===========================================
+            -- Per Intel 8008 timing: register reads happen at φ₂₁
+            -- This puts register value on internal_data_bus for use in next sub-phase
+            if phi2_sub = 0 and reg_read_enable and not memory_reference then
                 -- Direct register read
                 case reg_select is
-                    when REG_A => internal_data_bus <= registers(REG_A_DATA);
-                    when REG_B => internal_data_bus <= registers(REG_B_DATA);
-                    when REG_C => internal_data_bus <= registers(REG_C_DATA);
-                    when REG_D => internal_data_bus <= registers(REG_D_DATA);
-                    when REG_E => internal_data_bus <= registers(REG_E_DATA);
-                    when REG_H => internal_data_bus <= registers(REG_H_DATA);
-                    when REG_L => internal_data_bus <= registers(REG_L_DATA);
+                    when REG_A =>
+                        internal_data_bus <= registers(REG_A_DATA);
+                        report "Register Control (phi2_sub=0): Read reg A = 0x" & to_hstring(registers(REG_A_DATA));
+                    when REG_B =>
+                        internal_data_bus <= registers(REG_B_DATA);
+                        report "Register Control (phi2_sub=0): Read reg B = 0x" & to_hstring(registers(REG_B_DATA));
+                    when REG_C =>
+                        internal_data_bus <= registers(REG_C_DATA);
+                        report "Register Control (phi2_sub=0): Read reg C = 0x" & to_hstring(registers(REG_C_DATA));
+                    when REG_D =>
+                        internal_data_bus <= registers(REG_D_DATA);
+                        report "Register Control (phi2_sub=0): Read reg D = 0x" & to_hstring(registers(REG_D_DATA));
+                    when REG_E =>
+                        internal_data_bus <= registers(REG_E_DATA);
+                        report "Register Control (phi2_sub=0): Read reg E = 0x" & to_hstring(registers(REG_E_DATA));
+                    when REG_H =>
+                        internal_data_bus <= registers(REG_H_DATA);
+                        report "Register Control (phi2_sub=0): Read reg H = 0x" & to_hstring(registers(REG_H_DATA));
+                    when REG_L =>
+                        internal_data_bus <= registers(REG_L_DATA);
+                        report "Register Control (phi2_sub=0): Read reg L = 0x" & to_hstring(registers(REG_L_DATA));
                     when others => null;  -- REG_M handled separately
                 end case;
             end if;
