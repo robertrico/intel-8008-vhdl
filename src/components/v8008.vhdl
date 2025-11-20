@@ -1489,8 +1489,10 @@ begin
             -- Check for cycle management
             if ucode.new_cycle then
                 current_cycle <= current_cycle + 1;
+                cycle_type <= ucode.next_cycle_type;
             elsif ucode.instruction_complete then
                 current_cycle <= 0;
+                cycle_type <= ucode.next_cycle_type;  -- Reset to next cycle type (usually PCI)
             end if;
             
             -- Override next_state for interrupt handling
@@ -1522,40 +1524,6 @@ begin
     end process state_machine;
     
     --===========================================
-    -- Address Stack Management
-    --===========================================
-    -- NOTE: Stack management is now handled by microcode in state_machine process
-    -- This process is disabled to avoid signal conflicts
-    
-    -- stack_control: process(phi1)
-    -- begin
-    --     if rising_edge(phi1) then
-    --         -- Always keep current stack location synchronized with PC
-    --         address_stack(to_integer(stack_pointer)) <= pc;
-    --         
-    --         if push_stack then
-    --             -- CALL instruction: save PC+3 and increment pointer
-    --             -- PC+3 accounts for 3-byte CALL instruction
-    --             address_stack(to_integer(stack_pointer)) <= pc + 3;
-    --             stack_pointer <= stack_pointer + 1;  -- Wraps at 8
-    --             push_stack <= false;
-    --             
-    --         elsif pop_stack then
-    --             -- RETURN instruction: decrement pointer and restore PC
-    --             stack_pointer <= stack_pointer - 1;  -- Wraps at 0
-    --             -- PC will be loaded from stack on next cycle
-    --             pop_stack <= false;
-    --         end if;
-    --         
-    --         -- Load PC from current stack position
-    --         -- This happens after stack_pointer changes
-    --         if pop_stack = false and push_stack = false then
-    --             pc <= address_stack(to_integer(stack_pointer));
-    --         end if;
-    --     end if;
-    -- end process stack_control;
-    
-    --===========================================
     -- Register File Access and H:L Addressing
     --===========================================
     -- Handles register read/write operations and H:L indirect addressing
@@ -1570,6 +1538,16 @@ begin
 
             -- Check if accessing memory through M register
             memory_reference <= (reg_select = REG_M);
+
+            -- ALU operations: put temp_b (memory/register operand) on internal_data_bus FIRST
+            -- This must happen BEFORE register write logic so ALU sees correct operand
+            -- (works for both reg_write=true and CMP with reg_write=false)
+            if instruction_reg(7 downto 6) = "10" and reg_data_source = "10" then
+                -- ALU M operation: temp_b contains the memory operand
+                internal_data_bus <= temp_b;
+                report "Register Control (phi2): Putting temp_b (0x" & to_hstring(temp_b) &
+                       ") on internal_data_bus for ALU operation";
+            end if;
 
             -- Register write operation
             if reg_write_enable and not memory_reference then
@@ -1630,16 +1608,9 @@ begin
                 end case;
             end if;
 
-            -- ALU operations: put temp_b (memory/register operand) on internal_data_bus
-            -- and update flags (works for both reg_write=true and CMP with reg_write=false)
+            -- ALU flag updates (for ALU operations after operand setup above)
+            -- Note: CMP (PPP=111) also updates flags but doesn't write result
             if instruction_reg(7 downto 6) = "10" and reg_data_source = "10" then
-                -- ALU M operation: temp_b contains the memory operand
-                internal_data_bus <= temp_b;
-                report "Register Control (phi2): Putting temp_b (0x" & to_hstring(temp_b) &
-                       ") on internal_data_bus for ALU operation";
-
-                -- Update flags for ALU operations
-                -- Note: CMP (PPP=111) also updates flags but doesn't write result
                 flags(3) <= alu_result(8);  -- Carry flag
                 flags(2) <= '1' when alu_result(7 downto 0) = x"00" else '0';  -- Zero flag
                 flags(1) <= alu_result(7);  -- Sign flag
@@ -1805,7 +1776,9 @@ begin
 
     -- ALU inputs
     -- alu_data_0 is set in register_control process (always accumulator)
-    alu_data_1  <= internal_data_bus;  -- Second operand from selected register or memory
+    -- alu_data_1: For ALU operations, directly use temp_b to avoid timing issues
+    alu_data_1  <= temp_b when (instruction_reg(7 downto 6) = "10" and reg_data_source = "10")
+                   else internal_data_bus;  -- Second operand from selected register or memory
     alu_command <= instruction_reg(5 downto 3);  -- PPP field: ALU operation code
     flag_carry  <= flag_c;             -- Current carry flag state
 
