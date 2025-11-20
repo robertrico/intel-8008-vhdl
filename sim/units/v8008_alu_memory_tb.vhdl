@@ -19,6 +19,10 @@ use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 use STD.TEXTIO.ALL;
 
+-- Include testbench utilities for standardized data bus multiplexing
+library work;
+use work.v8008_tb_utils.all;
+
 entity v8008_alu_memory_tb is
 end v8008_alu_memory_tb;
 
@@ -259,55 +263,48 @@ begin
     --   PCR="01" - Memory read from HL -> use RAM
     --   PCC="10" - I/O operation -> not used in this test
     --   PCW="11" - Memory write to HL -> not used in this test
+    -- Standardized DBUS_MUX using v8008_tb_utils pattern
     DBUS_MUX: process(phi2)
         variable state_vec : std_logic_vector(2 downto 0);
+        variable prev_state_vec : std_logic_vector(2 downto 0) := "000";
+        variable prev_instruction : std_logic_vector(7 downto 0) := x"00";
+        variable cycle_in_instruction : integer := 0;
         variable in_int_ack : boolean := false;
         variable hl_addr : integer;
-        variable cycle_type_captured : std_logic_vector(1 downto 0) := "00";
     begin
         if falling_edge(phi2) then
+            state_vec := S2 & S1 & S0;
+            hl_addr := to_integer(unsigned(debug_hl_address));
 
-        state_vec := S2 & S1 & S0;
-        hl_addr := to_integer(unsigned(debug_hl_address));
+            -- Interrupt acknowledge detection
+            if state_vec = "110" then
+                in_int_ack := true;
+            elsif in_int_ack and state_vec = "101" then
+                in_int_ack := false;
+            end if;
 
-        -- Detect T1I state (S2S1S0 = 110) to enter interrupt ack
-        if state_vec = "110" then
-            in_int_ack := true;
-        end if;
+            -- Cycle tracking: reset on instruction change, increment on T1 entry
+            if debug_instruction /= prev_instruction then
+                cycle_in_instruction := 0;
+                prev_instruction := debug_instruction;
+            elsif state_vec = "010" and prev_state_vec /= "010" then
+                cycle_in_instruction := cycle_in_instruction + 1;
+            end if;
 
-        -- Reset cycle type to default (PCI) at start of T1 to ensure fresh capture each cycle
-        if state_vec = "010" then  -- T1: S2S1S0 = 010
-            cycle_type_captured := "00";  -- Default to PCI (instruction fetch)
-        end if;
-
-        -- Capture cycle type during T2 from CPU data bus output
-        if state_vec = "100" and data_bus_enable = '1' then  -- T2: S2S1S0 = 100
-            cycle_type_captured := data_bus_out(7 downto 6);
-        end if;
-
-        -- During T3 in interrupt ack, inject RST 0 instruction
-        if in_int_ack and state_vec = "001" then  -- T3: S2S1S0 = 001
-            data_bus_in <= x"05";  -- RST 0: opcode 0x05 (00 000 101)
-        -- During T3, use captured cycle type to select ROM or RAM
-        elsif state_vec = "001" then  -- T3: S2S1S0 = 001
-            if cycle_type_captured = "01" then  -- PCR: Memory read from HL
-                -- Use RAM for memory reads
+            -- Data bus multiplexing using utility function
+            if in_int_ack and state_vec = "001" then
+                -- Interrupt acknowledge: inject RST 0
+                data_bus_in <= x"05";
+            elsif should_use_ram(state_vec, cycle_in_instruction, debug_instruction) then
+                -- Memory read: provide RAM data
                 data_bus_in <= ram_data;
-            else  -- PCI: Instruction fetch from PC
-                -- Use ROM for instruction fetches
+            else
+                -- Default: provide ROM data (instruction fetch)
                 data_bus_in <= rom_data;
             end if;
-        else
-            -- Default to ROM for other states
-            data_bus_in <= rom_data;
-        end if;
 
-        -- Exit interrupt ack on T5 (S2S1S0 = 101)
-        if in_int_ack and state_vec = "101" then
-            in_int_ack := false;
+            prev_state_vec := state_vec;
         end if;
-
-        end if;  -- falling_edge(phi2)
     end process DBUS_MUX;
 
     -- Master clock generation
@@ -377,7 +374,8 @@ begin
         report "  HLT";
 
         -- Wait for all instructions to execute and HLT
-        wait for 400 us;
+        -- With sub-phase implementation, execution takes 2x longer
+        wait for 1200 us;
 
         -- Verify CPU is in STOPPED state
         test_phase <= "VERIFY              ";

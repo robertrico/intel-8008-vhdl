@@ -16,7 +16,8 @@ RTL_SOURCES = $(SRC_DIR)/components/i8008_alu.vhdl \
               $(SRC_DIR)/components/ram_1kx8.vhdl \
               $(SRC_DIR)/components/io_console.vhdl \
               $(SRC_DIR)/components/s8008.vhdl \
-              $(SRC_DIR)/components/v8008.vhdl
+              $(SRC_DIR)/components/v8008.vhdl \
+              $(SIM_DIR)/v8008_tb_utils.vhdl
 
 # Main comprehensive testbench
 TB_SOURCES = $(SIM_DIR)/s8008_tb.vhdl
