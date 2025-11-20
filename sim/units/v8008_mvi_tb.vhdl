@@ -269,7 +269,8 @@ begin
         report "Executing MVI test program...";
 
         -- Wait for all MVI instructions to execute and HLT
-        wait for 100000 ns;
+        -- With sub-phase implementation, execution takes 2x longer
+        wait for 300000 ns;
 
         -- Verify CPU is in STOPPED state
         test_phase <= "VERIFY              ";

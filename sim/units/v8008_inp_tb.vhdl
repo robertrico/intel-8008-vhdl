@@ -343,7 +343,8 @@ begin
 
             -- Wait for INP instruction to complete (~18us total)
             -- Interrupt ack (~7us) + INP execution (~11us)
-            wait for 20000 ns;
+            -- With sub-phase implementation, execution takes 2x longer
+            wait for 40000 ns;
 
             -- Verify accumulator received I/O data
             assert debug_reg_A = test_cases(i).io_data
@@ -354,6 +355,10 @@ begin
 
             report "Accumulator after INP: 0x" & to_hstring(debug_reg_A) & " (correct)";
             report "PASS: INP test " & integer'image(i + 1) & " successful";
+
+            -- Wait for HLT to execute and CPU to return to STOPPED
+            -- With sub-phase implementation, HLT takes ~4.4us
+            wait for 10000 ns;
         end loop;
 
         -- Wait for HLT at the end

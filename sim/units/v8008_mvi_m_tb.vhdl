@@ -182,6 +182,7 @@ begin
     -- Memory and instruction fetch process
     MEM_PROC: process
         variable state_vec : std_logic_vector(2 downto 0);
+        variable prev_state_vec : std_logic_vector(2 downto 0) := "000";
         variable cycle_count : integer := 0;
         variable is_mem_write : boolean := false;
         variable in_int_ack : boolean := false;
@@ -201,9 +202,13 @@ begin
 
         -- Track cycle count during instruction execution
         -- Increment at each T3 where CPU is reading (data_bus_enable='0')
-        if state_vec = "001" and data_bus_enable = '0' then  -- T3 state, reading
+        -- Only increment when transitioning INTO T3 state (not on every process evaluation)
+        if state_vec = "001" and prev_state_vec /= "001" and data_bus_enable = '0' then
             cycle_count := cycle_count + 1;
         end if;
+
+        -- Update previous state for next iteration
+        prev_state_vec := state_vec;
 
         -- Clear test_in_progress when MVI M write cycle completes (cycle 2 T3)
         -- cycle_count stays at 2 during write T3 (no increment when data_bus_enable='1')
@@ -337,7 +342,8 @@ begin
 
             -- Wait for MVI M instruction execution (3 cycles)
             -- Cycle 0: Interrupt ack (T1I-T2-T3), MVI M injected, PC stays at current value
-            wait for 7000 ns;  -- Allow time for interrupt ack cycle
+            -- With sub-phase implementation, execution takes 2x longer
+            wait for 14000 ns;  -- Allow time for interrupt ack cycle
             pc_after_opcode := debug_pc;
             report "PC after interrupt ack: 0x" & to_hstring(pc_after_opcode);
 
@@ -348,7 +354,8 @@ begin
                 severity error;
 
             -- Cycle 1: Fetch immediate data (T1-T2-T3), takes ~6.6us
-            wait for 7000 ns;  -- Allow time for immediate fetch cycle
+            -- With sub-phase implementation, execution takes 2x longer
+            wait for 14000 ns;  -- Allow time for immediate fetch cycle
             pc_after_data := debug_pc;
             report "PC after immediate fetch: 0x" & to_hstring(pc_after_data);
 
@@ -362,7 +369,8 @@ begin
             mem_write_reset <= true;
             wait for 10 ns;  -- Allow reset to take effect
             mem_write_reset <= false;
-            wait for 10000 ns;  -- Allow time for memory write
+            -- With sub-phase implementation, execution takes 2x longer
+            wait for 20000 ns;  -- Allow time for memory write
             
             -- Verify memory write occurred
             if mem_write_detected then
@@ -392,7 +400,8 @@ begin
             end if;
             
             -- Wait for HLT execution (next instruction)
-            wait for 10000 ns;
+            -- With sub-phase implementation, execution takes 2x longer
+            wait for 20000 ns;
             
             -- Verify CPU returns to STOPPED after HLT
             state_vec := S2 & S1 & S0;

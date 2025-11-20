@@ -871,28 +871,53 @@ architecture rtl of v8008 is
                     
                     -- ========== RST (RESTART) ==========
                     if (instr(7 downto 6) = "00" and instr(2 downto 0) = "101") then
-                        -- RST T4: Load PC high, continue to T5
-                        return (
-                            next_state => T5,               -- Continue to T5
-                        advance_state => true,
-                            new_cycle => false,
-                            instruction_complete => false,   -- Not complete yet
-                            load_ir => false,
-                            load_temp_a => false,
-                            load_temp_b => false,
-                            temp_a_source => "00",
-                            temp_b_source => "00",
-                            pc_inc => false,
-                            pc_load_high => true,      -- PC(13:8) = temp_a(5:0)
-                            pc_load_low => false,
-                            stack_push => false,
-                            stack_pop => false,
-                            reg_write => false,
-                            reg_read => false,
-                            reg_target => "000",
-                            reg_source => "00",
-                            next_cycle_type => CYCLE_PCI
-                        );
+                        if sub_phase = 0 then
+                            -- RST T4 φ₁₁/φ₂₁: Setup phase
+                            return (
+                                next_state => T5,
+                                advance_state => false,          -- Stay in T4 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- RST T4 φ₁₂/φ₂₂: Load PC high
+                            return (
+                                next_state => T5,
+                                advance_state => true,           -- Advance to T5
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => true,            -- PC(13:8) = temp_a(5:0) = 0x00
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
 
                     -- ========== MOV r1, r2 (Register-to-Register Move) ==========
                     -- Decode instruction to get SSS and DDD fields
@@ -986,28 +1011,53 @@ architecture rtl of v8008 is
 
                     -- ========== RST (RESTART) ==========
                     if decoded.is_rst then
-                        -- RST T5: Load PC low, instruction complete
-                        return (
-                            next_state => T1,               -- Will be overridden by interrupt logic
-                        advance_state => true,
-                            new_cycle => false,
-                            instruction_complete => true,    -- RST is complete
-                            load_ir => false,
-                            load_temp_a => false,
-                            load_temp_b => false,
-                            temp_a_source => "00",
-                            temp_b_source => "00",
-                            pc_inc => false,
-                            pc_load_high => false,
-                            pc_load_low => true,       -- PC(7:0) = RST vector
-                            stack_push => false,
-                            stack_pop => false,
-                            reg_write => false,
-                            reg_read => false,
-                            reg_target => "000",
-                            reg_source => "00",
-                            next_cycle_type => CYCLE_PCI
-                        );
+                        if sub_phase = 0 then
+                            -- RST T5 φ₁₁/φ₂₁: Setup phase
+                            return (
+                                next_state => T1,
+                                advance_state => false,          -- Stay in T5 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- RST T5 φ₁₂/φ₂₂: Load PC low, instruction complete
+                            return (
+                                next_state => T1,
+                                advance_state => true,           -- Instruction complete
+                                new_cycle => false,
+                                instruction_complete => true,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => true,             -- PC(7:0) = RST vector (AAA << 3)
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
 
                     -- ========== MOV r1, r2 (Register-to-Register Move) ==========
                     -- T5: Write temp_b (loaded at T4) to destination register (DDD)
@@ -1098,74 +1148,149 @@ architecture rtl of v8008 is
                     decoded := decode_instruction(instr);
 
                     if decoded.is_mvi then
-                        -- MVI: Increment PC to point to immediate byte (moved from cycle 0 T3)
-                        return (
-                            next_state => T2,
-                        advance_state => true,
-                            new_cycle => false,
-                            instruction_complete => false,
-                            load_ir => false,
-                            load_temp_a => false,
-                            load_temp_b => false,
-                            temp_a_source => "00",
-                            temp_b_source => "00",
-                            pc_inc => true,               -- Increment PC to immediate byte address
-                            pc_load_high => false,
-                            pc_load_low => false,
-                            stack_push => false,
-                            stack_pop => false,
-                            reg_write => false,
-                            reg_read => false,
-                            reg_target => "000",
-                            reg_source => "00",
-                            next_cycle_type => CYCLE_PCI  -- Fetching immediate from PC
-                        );
+                        if sub_phase = 0 then
+                            -- MVI Cycle 1 T1 φ₁₁/φ₂₁: Setup
+                            return (
+                                next_state => T2,
+                                advance_state => false,          -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- MVI Cycle 1 T1 φ₁₂/φ₂₂: Increment PC to immediate byte
+                            return (
+                                next_state => T2,
+                                advance_state => true,           -- Advance to T2
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                  -- Increment PC to immediate byte address
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI     -- Fetching immediate from PC
+                            );
+                        end if;
                     elsif decoded.is_alu_memory then
-                        -- ALU M: Output L register (HL address low byte)
-                        return (
-                            next_state => T2,
-                        advance_state => true,
-                            new_cycle => false,
-                            instruction_complete => false,
-                            load_ir => false,
-                            load_temp_a => false,
-                            load_temp_b => false,
-                            temp_a_source => "00",
-                            temp_b_source => "00",
-                            pc_inc => false,
-                            pc_load_high => false,
-                            pc_load_low => false,
-                            stack_push => false,
-                            stack_pop => false,
-                            reg_write => false,
-                            reg_read => false,
-                            reg_target => "000",
-                            reg_source => "00",
-                            next_cycle_type => CYCLE_PCR  -- Memory read from HL
-                        );
+                        if sub_phase = 0 then
+                            -- ALU M Cycle 1 T1 φ₁₁/φ₂₁: Setup
+                            return (
+                                next_state => T2,
+                                advance_state => false,          -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCR
+                            );
+                        else  -- sub_phase = 1
+                            -- ALU M Cycle 1 T1 φ₁₂/φ₂₂: Advance
+                            return (
+                                next_state => T2,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCR     -- Memory read from HL
+                            );
+                        end if;
                     else
-                        -- Default: PCL OUT for immediate/address fetch
-                        return (
-                            next_state => T2,
-                        advance_state => true,
-                            new_cycle => false,
-                            instruction_complete => false,
-                            load_ir => false,
-                            load_temp_a => false,
-                            load_temp_b => false,
-                            temp_a_source => "00",
-                            temp_b_source => "00",
-                            pc_inc => false,
-                            pc_load_high => false,
-                            pc_load_low => false,
-                            stack_push => false,
-                            stack_pop => false,
-                            reg_write => false,
-                            reg_read => false,
-                            reg_target => "000",
-                            reg_source => "00",
-                            next_cycle_type => CYCLE_PCI  -- Still fetching from PC
-                        );
+                        if sub_phase = 0 then
+                            -- Default Cycle 1 T1 φ₁₁/φ₂₁: Setup
+                            return (
+                                next_state => T2,
+                                advance_state => false,          -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- Default Cycle 1 T1 φ₁₂/φ₂₂: Advance
+                            return (
+                                next_state => T2,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCI     -- Still fetching from PC
+                            );
+                        end if;
                     end if;
                     
                 when T2 =>
@@ -1345,27 +1470,53 @@ architecture rtl of v8008 is
 
                     if decoded.is_inp then  -- INP instruction
                         -- Cycle 1 T5: Transfer I/O data from temp_b to accumulator
-                        return (
-                            next_state => T1,               -- Will be overridden by interrupt logic
-                        advance_state => true,
-                            new_cycle => false,
-                            instruction_complete => true,   -- INP instruction complete!
-                            load_ir => false,
-                            load_temp_a => false,
-                            load_temp_b => false,
-                            temp_a_source => "00",
-                            temp_b_source => "00",
-                            pc_inc => false,                -- PC already incremented in cycle 0
-                            pc_load_high => false,
-                            pc_load_low => false,
-                            stack_push => false,
-                            stack_pop => false,
-                            reg_write => true,              -- Write to accumulator
-                            reg_read => false,
-                            reg_target => REG_A,            -- Target: Accumulator
-                            reg_source => "11",             -- Source: temp_b (I/O data)
-                            next_cycle_type => CYCLE_PCI    -- Next instruction fetch
-                        );
+                        if sub_phase = 0 then
+                            -- INP Cycle 1 T5 φ₁₁/φ₂₁: Setup accumulator write
+                            return (
+                                next_state => T1,
+                                advance_state => false,         -- Stay in T5 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,              -- Setup register write
+                                reg_read => false,
+                                reg_target => REG_A,
+                                reg_source => "11",             -- Source: temp_b (I/O data)
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- INP Cycle 1 T5 φ₁₂/φ₂₂: Complete accumulator write
+                            return (
+                                next_state => T1,
+                                advance_state => true,          -- Advance (instruction complete)
+                                new_cycle => false,
+                                instruction_complete => true,   -- INP instruction complete!
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,                -- PC already incremented in cycle 0
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,              -- Complete register write
+                                reg_read => false,
+                                reg_target => REG_A,
+                                reg_source => "11",             -- Source: temp_b (I/O data)
+                                next_cycle_type => CYCLE_PCI    -- Next instruction fetch
+                            );
+                        end if;
 
                     elsif decoded.is_alu_memory then  -- ALU M instructions
                         -- Cycle 1 T5: Execute ALU operation, update accumulator and flags
@@ -1374,50 +1525,102 @@ architecture rtl of v8008 is
                         -- Check if this is CMP (PPP = 111)
                         if decoded.fff_field = "111" then
                             -- CMP: Update flags only, don't write to accumulator
-                            return (
-                                next_state => T1,               -- Will be overridden by interrupt logic
-                        advance_state => true,
-                                new_cycle => false,
-                                instruction_complete => true,   -- ALU M instruction complete!
-                                load_ir => false,
-                                load_temp_a => false,
-                                load_temp_b => false,
-                                temp_a_source => "00",
-                                temp_b_source => "00",
-                                pc_inc => false,                -- PC already incremented in cycle 0
-                                pc_load_high => false,
-                                pc_load_low => false,
-                                stack_push => false,
-                                stack_pop => false,
-                                reg_write => false,             -- CMP: Don't write result!
-                                reg_read => false,
-                                reg_target => REG_A,
-                                reg_source => "10",             -- Still need to trigger flag update
-                                next_cycle_type => CYCLE_PCI    -- Next instruction fetch
-                            );
+                            if sub_phase = 0 then
+                                -- CMP Cycle 1 T5 φ₁₁/φ₂₁: Setup flag update
+                                return (
+                                    next_state => T1,
+                                    advance_state => false,
+                                    new_cycle => false,
+                                    instruction_complete => false,
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => false,
+                                    reg_read => false,
+                                    reg_target => REG_A,
+                                    reg_source => "10",
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            else  -- sub_phase = 1
+                                -- CMP Cycle 1 T5 φ₁₂/φ₂₂: Complete flag update
+                                return (
+                                    next_state => T1,
+                                    advance_state => true,
+                                    new_cycle => false,
+                                    instruction_complete => true,
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => false,
+                                    reg_read => false,
+                                    reg_target => REG_A,
+                                    reg_source => "10",
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            end if;
                         else
                             -- Other ALU operations: Write result to accumulator
-                            return (
-                                next_state => T1,               -- Will be overridden by interrupt logic
-                        advance_state => true,
-                                new_cycle => false,
-                                instruction_complete => true,   -- ALU M instruction complete!
-                                load_ir => false,
-                                load_temp_a => false,
-                                load_temp_b => false,
-                                temp_a_source => "00",
-                                temp_b_source => "00",
-                                pc_inc => false,                -- PC already incremented in cycle 0
-                                pc_load_high => false,
-                                pc_load_low => false,
-                                stack_push => false,
-                                stack_pop => false,
-                                reg_write => true,              -- Write ALU result to accumulator
-                                reg_read => false,
-                                reg_target => REG_A,            -- Target: Accumulator
-                                reg_source => "10",             -- Source: ALU result
-                                next_cycle_type => CYCLE_PCI    -- Next instruction fetch
-                            );
+                            if sub_phase = 0 then
+                                -- ALU M Cycle 1 T5 φ₁₁/φ₂₁: Setup accumulator write
+                                return (
+                                    next_state => T1,
+                                    advance_state => false,
+                                    new_cycle => false,
+                                    instruction_complete => false,
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => true,
+                                    reg_read => false,
+                                    reg_target => REG_A,
+                                    reg_source => "10",
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            else  -- sub_phase = 1
+                                -- ALU M Cycle 1 T5 φ₁₂/φ₂₂: Complete accumulator write
+                                return (
+                                    next_state => T1,
+                                    advance_state => true,
+                                    new_cycle => false,
+                                    instruction_complete => true,
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => true,
+                                    reg_read => false,
+                                    reg_target => REG_A,
+                                    reg_source => "10",
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            end if;
                         end if;
 
                     else
@@ -1441,27 +1644,53 @@ architecture rtl of v8008 is
                     if decoded.is_mvi and not decoded.is_memory_dest then
                         -- MVI to register (A, B, C, D, E, H, L): Write temp_a to destination register
                         -- Increment PC to point to next instruction
-                        return (
-                            next_state => T1,               -- Will be overridden by interrupt logic
-                        advance_state => true,
-                            new_cycle => false,
-                            instruction_complete => true,   -- MVI register complete!
-                            load_ir => false,
-                            load_temp_a => false,
-                            load_temp_b => false,
-                            temp_a_source => "00",
-                            temp_b_source => "00",
-                            pc_inc => true,                 -- Increment PC to next instruction
-                            pc_load_high => false,
-                            pc_load_low => false,
-                            stack_push => false,
-                            stack_pop => false,
-                            reg_write => true,              -- Write to register
-                            reg_read => false,
-                            reg_target => decoded.ddd_field, -- Destination register (A, H, L, etc.)
-                            reg_source => "01",             -- Source: temp_a (immediate value)
-                            next_cycle_type => CYCLE_PCI    -- Next: fetch next instruction
-                        );
+                        if sub_phase = 0 then
+                            -- MVI reg Cycle 2 T1 φ₁₁/φ₂₁: Setup register write
+                            return (
+                                next_state => T1,               -- Will be overridden by interrupt logic
+                                advance_state => false,         -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,  -- Not complete until sub_phase=1
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,              -- Setup register write
+                                reg_read => false,
+                                reg_target => decoded.ddd_field,
+                                reg_source => "10",             -- Source: temp_a
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- MVI reg Cycle 2 T1 φ₁₂/φ₂₂: Complete register write, increment PC
+                            return (
+                                next_state => T1,               -- Will be overridden by interrupt logic
+                                advance_state => true,          -- Advance (instruction complete)
+                                new_cycle => false,
+                                instruction_complete => true,   -- MVI register complete!
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                 -- Increment PC to next instruction
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,              -- Complete register write (at phi2_sub=1)
+                                reg_read => false,
+                                reg_target => decoded.ddd_field,
+                                reg_source => "10",             -- Source: temp_a
+                                next_cycle_type => CYCLE_PCI    -- Next: fetch next instruction
+                            );
+                        end if;
                     else
                         -- MVI M or other: Continue to T2 for memory write cycle
                         return (
@@ -1804,12 +2033,6 @@ begin
                 report "Microcode: Reading from register " & integer'image(to_integer(unsigned(ucode.reg_target)));
             end if;
 
-            -- Cycle management
-            if ucode.new_cycle then
-                current_cycle <= current_cycle + 1;
-                cycle_type <= ucode.next_cycle_type;
-            end if;
-            
             -- ===========================================
             -- INTERRUPT ACKNOWLEDGE CYCLE
             -- ===========================================

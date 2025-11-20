@@ -294,7 +294,8 @@ begin
             INT <= '0';
             
             -- Wait for RST execution (T1I->T2->T3->T4->T5->T1)
-            wait for 15000 ns;
+            -- With sub-phase implementation, each state takes 2x longer
+            wait for 30000 ns;
             
             -- Check PC jumped to correct vector
             assert debug_pc = expected_pc
