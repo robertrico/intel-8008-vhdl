@@ -46,11 +46,11 @@ package body v8008_tb_utils is
         return (instr = x"3E");
     end function;
 
-    -- INP instruction: 01 00M MM1 (bit 0 = 1, bits 7-6 = 01, bits 4-3 = 00)
+    -- INP instruction: 01 00M MM1 (bit 0 = 1, bits 7-6 = 01, bits 5-4 = 00)
     -- Opcodes: 0x41, 0x43, 0x45, 0x47, 0x49, 0x4B, 0x4D, 0x4F
     function is_inp_instr(instr : std_logic_vector(7 downto 0)) return boolean is
     begin
-        return (instr(7 downto 6) = "01" and instr(4 downto 3) = "00" and instr(0) = '1');
+        return (instr(7 downto 6) = "01" and instr(5 downto 4) = "00" and instr(0) = '1');
     end function;
 
     -- Memory read instructions: need RAM data during cycle 1 T3

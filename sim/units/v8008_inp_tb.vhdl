@@ -15,6 +15,9 @@ use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 use STD.TEXTIO.ALL;
 
+library work;
+use work.v8008_tb_utils.all;
+
 entity v8008_inp_tb is
 end v8008_inp_tb;
 
@@ -217,7 +220,6 @@ begin
     MEM_IO_PROC: process
         variable state_vec : std_logic_vector(2 downto 0);
         variable decoded_port : integer range 0 to 7;
-        variable is_inp_instruction : boolean;
         variable in_int_ack : boolean := false;
     begin
         wait on S0, S1, S2, data_bus_out, data_bus_enable, cpu_cycle, debug_instruction;
@@ -228,11 +230,6 @@ begin
         if state_vec = "110" then  -- T1I state
             in_int_ack := true;
         end if;
-
-        -- Check if current instruction is INP
-        is_inp_instruction := (debug_instruction(7 downto 6) = "01" and
-                              debug_instruction(5 downto 4) = "00" and
-                              debug_instruction(0) = '1');
 
         -- Handle operations based on state
         case state_vec is
@@ -250,7 +247,7 @@ begin
                         in_int_ack := false;  -- Clear flag after injection
 
                     -- Check if we're in cycle 1 of an INP instruction (I/O read)
-                    elsif cpu_cycle = 1 and is_inp_instruction then
+                    elsif cpu_cycle = 1 and is_inp_instr(debug_instruction) then
                         -- I/O read - decode port from instruction and provide corresponding data
                         decoded_port := to_integer(unsigned(debug_instruction(3 downto 1)));
                         data_bus_in <= test_cases(decoded_port).io_data;

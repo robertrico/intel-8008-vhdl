@@ -13,6 +13,9 @@ use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 use STD.TEXTIO.ALL;
 
+library work;
+use work.v8008_tb_utils.all;
+
 entity v8008_mvi_m_tb is
 end v8008_mvi_m_tb;
 
@@ -212,7 +215,7 @@ begin
 
         -- Clear test_in_progress when MVI M write cycle completes (cycle 2 T3)
         -- cycle_count stays at 2 during write T3 (no increment when data_bus_enable='1')
-        if debug_instruction = MVI_M_OPCODE and cycle_count = 2 and state_vec = "001" and data_bus_enable = '1' then
+        if is_mvi_m_instr(debug_instruction) and cycle_count = 2 and state_vec = "001" and data_bus_enable = '1' then
             test_in_progress := false;  -- MVI M write cycle complete
         end if;
 
