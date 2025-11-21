@@ -73,6 +73,7 @@ STOP_TIME_v8008_mvi_m_tb = 1500us
 STOP_TIME_v8008_inp_tb = 1500us
 STOP_TIME_v8008_alu_memory_tb = 1500us
 STOP_TIME_v8008_mov_rr_tb = 3000us
+STOP_TIME_v8008_lrm_tb = 3000us
 
 # Get stop time for active test, or use default
 SIM_STOP_TIME ?= $(or $(STOP_TIME_$(ACTIVE_TB_ENTITY)),1ms)
@@ -246,11 +247,11 @@ test-v8008-alu-memory:
 test-v8008-mov-rr:
 	@$(MAKE) sim TEST=v8008_mov_rr_tb
 
-# Alias for convenience
-test-mov-rr: test-v8008-mov-rr
+test-v8008-LrM:
+	@$(MAKE) sim TEST=v8008_lrm_tb
 
 # Run all v8008 tests
-test-v8008: test-v8008-minimal test-v8008-registers test-v8008-instruction test-v8008-stack test-v8008-scratchpad test-v8008-interrupt test-v8008-hlt test-v8008-rst test-v8008-mvi test-v8008-mvi-m test-v8008-inp test-v8008-alu-memory test-v8008-mov-rr
+test-v8008: test-v8008-minimal test-v8008-registers test-v8008-instruction test-v8008-stack test-v8008-scratchpad test-v8008-interrupt test-v8008-hlt test-v8008-rst test-v8008-mvi test-v8008-mvi-m test-v8008-inp test-v8008-alu-memory test-v8008-mov-rr v8008_lrm_tb
 	@echo "=========================================="
 	@echo "All v8008 tests completed successfully!"
 	@echo "==========================================="

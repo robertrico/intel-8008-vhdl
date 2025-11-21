@@ -16,6 +16,7 @@ package v8008_tb_utils is
 
     function is_alu_m_instr(instr : std_logic_vector(7 downto 0)) return boolean;
     function is_mvi_m_instr(instr : std_logic_vector(7 downto 0)) return boolean;
+    function is_lrm_instr(instr : std_logic_vector(7 downto 0)) return boolean;
     function is_memory_read_instr(instr : std_logic_vector(7 downto 0)) return boolean;
     function is_memory_write_instr(instr : std_logic_vector(7 downto 0)) return boolean;
     function is_inp_instr(instr : std_logic_vector(7 downto 0)) return boolean;
@@ -46,6 +47,13 @@ package body v8008_tb_utils is
         return (instr = x"3E");
     end function;
 
+    -- LrM instruction (MOV r,M): 11 DDD 111 (bits 7-6 = 11, bits 2-0 = 111)
+    -- Opcodes: 0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7
+    function is_lrm_instr(instr : std_logic_vector(7 downto 0)) return boolean is
+    begin
+        return (instr(7 downto 6) = "11" and instr(2 downto 0) = "111");
+    end function;
+
     -- INP instruction: 01 00M MM1 (bit 0 = 1, bits 7-6 = 01, bits 5-4 = 00)
     -- Opcodes: 0x41, 0x43, 0x45, 0x47, 0x49, 0x4B, 0x4D, 0x4F
     function is_inp_instr(instr : std_logic_vector(7 downto 0)) return boolean is
@@ -56,7 +64,7 @@ package body v8008_tb_utils is
     -- Memory read instructions: need RAM data during cycle 1 T3
     function is_memory_read_instr(instr : std_logic_vector(7 downto 0)) return boolean is
     begin
-        return is_alu_m_instr(instr);  -- ALU M reads from memory
+        return is_alu_m_instr(instr) or is_lrm_instr(instr);  -- ALU M and LrM read from memory
         -- Note: MVI M fetches immediate in cycle 1, writes in cycle 2
     end function;
 

@@ -607,6 +607,7 @@ architecture rtl of v8008 is
                                 next_cycle_type => CYCLE_PCI
                             );
                         elsif decoded.is_mov and not decoded.is_memory_source and not decoded.is_memory_dest then
+                            -- MOV r,r: Register-to-register (5-state, 1-cycle)
                             return (
                                 next_state => T4,
                                 advance_state => true,
@@ -627,6 +628,34 @@ architecture rtl of v8008 is
                                 reg_target => "000",
                                 reg_source => "00",
                                 next_cycle_type => CYCLE_PCI
+                            );
+                        elsif decoded.is_mov and decoded.is_memory_source and not decoded.is_memory_dest then
+                            -- MOV r,M (LrM): Load from memory [HL] to register (2-cycle)
+                            -- Cycle 0 T3: Instruction → IR and Reg.b (temp_b) per datasheet
+                            -- Per 8008 datasheet: T4 and T5 are skipped in cycle 0
+                            -- NOTE: PC does NOT increment during LrM execution. The PC increment
+                            --       happens during the NEXT instruction's fetch cycle (Cycle 0 T3).
+                            --       This is correct: LrM is a pure load operation that doesn't modify PC.
+                            return (
+                                next_state => T1,                -- Start cycle 1
+                                advance_state => (sub_phase = 1),
+                                new_cycle => true,               -- Advance to cycle 1
+                                instruction_complete => false,   -- Not done yet
+                                load_ir => true,                 -- Load instruction register
+                                load_temp_a => false,
+                                load_temp_b => true,             -- Save instruction to Reg.b per datasheet
+                                temp_a_source => "00",
+                                temp_b_source => "01",           -- temp_b = data_bus (instruction per datasheet)
+                                pc_inc => false,                 -- PC increments during next instruction fetch
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCR     -- Next cycle is memory read from HL
                             );
                         else
                             -- Default: single-cycle instruction
@@ -1243,6 +1272,55 @@ architecture rtl of v8008 is
                                 next_cycle_type => CYCLE_PCR     -- Memory read from HL
                             );
                         end if;
+                    elsif decoded.is_mov and decoded.is_memory_source then
+                        -- LrM (MOV r,M): Cycle 1 T1 - Output L register (address low)
+                        if sub_phase = 0 then
+                            -- LrM Cycle 1 T1 φ₁₁/φ₂₁: Setup
+                            return (
+                                next_state => T2,
+                                advance_state => false,          -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCR
+                            );
+                        else  -- sub_phase = 1
+                            -- LrM Cycle 1 T1 φ₁₂/φ₂₂: Advance to T2
+                            return (
+                                next_state => T2,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,                 -- PC already incremented at Cycle 0 T3
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                next_cycle_type => CYCLE_PCR     -- Memory read from HL
+                            );
+                        end if;
                     else
                         if sub_phase = 0 then
                             -- Default Cycle 1 T1 φ₁₁/φ₂₁: Setup
@@ -1298,8 +1376,8 @@ architecture rtl of v8008 is
                     -- Decode instruction to determine address source
                     decoded := decode_instruction(instr);
 
-                    if decoded.is_alu_memory then
-                        -- ALU M: Output H register (HL address high byte)
+                    if decoded.is_alu_memory or (decoded.is_mov and decoded.is_memory_source) then
+                        -- ALU M or LrM: Output H register (HL address high byte)
                         return (
                             next_state => T3,
                         advance_state => true,
@@ -1424,6 +1502,30 @@ architecture rtl of v8008 is
                             next_cycle_type => CYCLE_PCR    -- Memory read from HL
                         );
 
+                    elsif decoded.is_mov and decoded.is_memory_source then  -- LrM (MOV r,M)
+                        -- Cycle 1 T3: Read memory data from [HL] into temp_b
+                        return (
+                            next_state => T4,               -- Continue to T4 (IDLE state per spec)
+                        advance_state => (sub_phase = 1),
+                            new_cycle => false,
+                            instruction_complete => false,  -- Not done yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => true,            -- Save memory data to temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",          -- temp_b = data_bus_in (memory data)
+                            pc_inc => false,                -- PC already incremented in cycle 0
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            next_cycle_type => CYCLE_PCR    -- Memory read from HL
+                        );
+
                     else
                         -- Default for unknown instructions in cycle 1
                         return DEFAULT_UCODE;
@@ -1458,6 +1560,29 @@ architecture rtl of v8008 is
                             reg_target => "000",
                             reg_source => "00",
                             next_cycle_type => CYCLE_PCC    -- Still in I/O cycle
+                        );
+                    elsif decoded.is_mov and decoded.is_memory_source then  -- LrM (MOV r,M)
+                        -- Cycle 1 T4: IDLE state - no operation, just advance to T5
+                        return (
+                            next_state => T5,               -- Continue to T5
+                        advance_state => true,
+                            new_cycle => false,
+                            instruction_complete => false,  -- Not done yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            next_cycle_type => CYCLE_PCR    -- Memory read from HL
                         );
                     else
                         return DEFAULT_UCODE;
@@ -1621,6 +1746,57 @@ architecture rtl of v8008 is
                                     next_cycle_type => CYCLE_PCI
                                 );
                             end if;
+                        end if;
+
+                    elsif decoded.is_mov and decoded.is_memory_source then  -- LrM (MOV r,M)
+                        -- Cycle 1 T5: Write memory data from temp_b to destination register (DDD)
+                        -- Use instr(5:3) for DDD field from instruction register
+                        if sub_phase = 0 then
+                            -- LrM Cycle 1 T5 φ₁₁/φ₂₁: Setup register write
+                            return (
+                                next_state => T1,
+                                advance_state => false,         -- Stay in T5 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,              -- Setup register write
+                                reg_read => false,
+                                reg_target => instr(5 downto 3),  -- DDD from instruction register
+                                reg_source => "11",             -- Source: temp_b (memory data)
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- LrM Cycle 1 T5 φ₁₂/φ₂₂: Complete register write
+                            return (
+                                next_state => T1,
+                                advance_state => true,          -- Advance (instruction complete)
+                                new_cycle => false,
+                                instruction_complete => true,   -- LrM instruction complete!
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,                -- PC already incremented in cycle 0
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,              -- Complete register write
+                                reg_read => false,
+                                reg_target => instr(5 downto 3),  -- DDD from instruction register
+                                reg_source => "11",             -- Source: temp_b (memory data)
+                                next_cycle_type => CYCLE_PCI    -- Next instruction fetch
+                            );
                         end if;
 
                     else
