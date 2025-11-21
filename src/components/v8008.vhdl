@@ -318,12 +318,12 @@ architecture rtl of v8008 is
     --   111 = JTP/CTP/RTP - Jump/Call/Return if Parity = 1
     function evaluate_condition(
         ccc : std_logic_vector(2 downto 0);
-        flags : std_logic_vector(3 downto 0)
+        flag_vector : std_logic_vector(3 downto 0)
     ) return boolean is
-        variable flag_c : std_logic := flags(3);  -- Carry flag
-        variable flag_z : std_logic := flags(2);  -- Zero flag
-        variable flag_s : std_logic := flags(1);  -- Sign flag
-        variable flag_p : std_logic := flags(0);  -- Parity flag
+        variable v_flag_c : std_logic := flag_vector(3);  -- Carry flag
+        variable v_flag_z : std_logic := flag_vector(2);  -- Zero flag
+        variable v_flag_s : std_logic := flag_vector(1);  -- Sign flag
+        variable v_flag_p : std_logic := flag_vector(0);  -- Parity flag
         variable test_true : boolean;  -- Bit 5: 0=False, 1=True
         variable flag_value : std_logic;
     begin
@@ -335,10 +335,10 @@ architecture rtl of v8008 is
 
         -- Select flag based on bits 4-3 of opcode (bits 1-0 of ccc)
         case ccc(1 downto 0) is
-            when "00" => flag_value := flag_c;  -- Carry
-            when "01" => flag_value := flag_z;  -- Zero
-            when "10" => flag_value := flag_s;  -- Sign
-            when "11" => flag_value := flag_p;  -- Parity
+            when "00" => flag_value := v_flag_c;  -- Carry
+            when "01" => flag_value := v_flag_z;  -- Zero
+            when "10" => flag_value := v_flag_s;  -- Sign
+            when "11" => flag_value := v_flag_p;  -- Parity
             when others => flag_value := '0';
         end case;
 
@@ -660,7 +660,33 @@ architecture rtl of v8008 is
                                 flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
-                        elsif decoded.is_mvi or decoded.is_inp or decoded.is_alu_memory or decoded.is_alu_imm or decoded.is_jmp or decoded.is_jmp_conditional then
+                        elsif decoded.is_alu_memory then
+                            -- ALU M: ALU operation with memory operand (5-state, 2-cycle)
+                            -- Opcode: 10 PPP 111 (bits [7:6] = 10, PPP = operation, 111 = memory reference)
+                            -- Cycle 0 T3: Fetch instruction and start cycle 1
+                            return (
+                                next_state => T1,
+                                advance_state => true,
+                                new_cycle => true,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                  -- Increment PC to next instruction
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        elsif decoded.is_mvi or decoded.is_inp or decoded.is_alu_imm or decoded.is_jmp or decoded.is_jmp_conditional then
                             return (
                                 next_state => T1,
                                 advance_state => true,
