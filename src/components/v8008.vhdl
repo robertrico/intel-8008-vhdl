@@ -791,22 +791,20 @@ architecture rtl of v8008 is
                             );
                         elsif decoded.is_mov and decoded.is_memory_source and not decoded.is_memory_dest then
                             -- MOV r,M (LrM): Load from memory [HL] to register (2-cycle)
-                            -- Cycle 0 T3: Instruction → IR and Reg.b (temp_b) per datasheet
+                            -- Cycle 0 T3 sub_phase=1: Increment PC and advance to Cycle 1
+                            -- (IR and temp_b already loaded in sub_phase=0)
                             -- Per 8008 datasheet: T4 and T5 are skipped in cycle 0
-                            -- NOTE: PC does NOT increment during LrM execution. The PC increment
-                            --       happens during the NEXT instruction's fetch cycle (Cycle 0 T3).
-                            --       This is correct: LrM is a pure load operation that doesn't modify PC.
                             return (
                                 next_state => T1,                -- Start cycle 1
-                                advance_state => (sub_phase = 1),
+                                advance_state => true,           -- sub_phase=1 always advances
                                 new_cycle => true,               -- Advance to cycle 1
                                 instruction_complete => false,   -- Not done yet
-                                load_ir => true,                 -- Load instruction register
+                                load_ir => false,                -- Already loaded in sub_phase=0
                                 load_temp_a => false,
-                                load_temp_b => true,             -- Save instruction to Reg.b per datasheet
+                                load_temp_b => false,            -- Already loaded in sub_phase=0
                                 temp_a_source => "00",
-                                temp_b_source => "01",           -- temp_b = data_bus (instruction per datasheet)
-                                pc_inc => false,                 -- PC increments during next instruction fetch
+                                temp_b_source => "00",
+                                pc_inc => true,                  -- Increment PC to next instruction
                                 pc_load_high => false,
                                 pc_load_low => false,
                                 stack_push => false,
@@ -1074,6 +1072,34 @@ architecture rtl of v8008 is
                             temp_a_source => "00",
                             temp_b_source => "01",           -- temp_b = data_bus (instruction)
                             pc_inc => true,                  -- Increment PC to next instruction
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCR     -- Next cycle is memory read from HL
+                        );
+
+                    -- ========== LrM (MOV r,M - Load from Memory) ==========
+                    -- LrM: 11 DDD 111 (load from memory [HL] to register)
+                    -- 2-cycle instruction: fetch opcode, read memory from [HL]
+                    elsif decoded.is_mov and decoded.is_memory_source and not decoded.is_memory_dest then
+                        -- Start memory read cycle from HL address
+                        return (
+                            next_state => T1,                -- Start cycle 1
+                        advance_state => (sub_phase = 1),
+                            new_cycle => true,               -- Start cycle 1 for memory read
+                            instruction_complete => false,   -- Not complete yet (need cycle 1)
+                            load_ir => true,                 -- Load instruction register
+                            load_temp_a => false,
+                            load_temp_b => true,             -- Save instruction in temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",           -- temp_b = data_bus (instruction)
+                            pc_inc => false,                 -- PC does NOT increment for LrM
                             pc_load_high => false,
                             pc_load_low => false,
                             stack_push => false,
@@ -3529,6 +3555,12 @@ begin
                 elsif current_cycle = 2 and instruction_reg = "00111110" then
                     -- Output L register (low byte of HL address)
                     data_bus_out <= registers(REG_L_DATA);
+                -- Check if this is a memory read cycle for LrM (MOV r,M)
+                elsif current_cycle = 1 and cycle_type = CYCLE_PCR and
+                   instruction_reg(7 downto 6) = "11" and
+                   instruction_reg(2 downto 0) = "111" then  -- LrM: 11 DDD 111
+                    -- Output L register (low byte of HL address)
+                    data_bus_out <= registers(REG_L_DATA);
                 else
                     -- Normal PC output
                     data_bus_out <= std_logic_vector(pc(7 downto 0));
@@ -3557,6 +3589,12 @@ begin
                 elsif current_cycle = 2 and instruction_reg = "00111110" then
                     -- Output cycle type PCW and H register (high byte of HL address)
                     data_bus_out <= CYCLE_PCW & registers(REG_H_DATA)(5 downto 0);
+                -- Check if this is a memory read cycle for LrM (MOV r,M)
+                elsif current_cycle = 1 and cycle_type = CYCLE_PCR and
+                   instruction_reg(7 downto 6) = "11" and
+                   instruction_reg(2 downto 0) = "111" then  -- LrM: 11 DDD 111
+                    -- Output cycle type PCR and H register (high byte of HL address)
+                    data_bus_out <= CYCLE_PCR & registers(REG_H_DATA)(5 downto 0);
                 else
                     -- Normal PC output with cycle type
                     data_bus_out <= cycle_type & std_logic_vector(pc(13 downto 8));
