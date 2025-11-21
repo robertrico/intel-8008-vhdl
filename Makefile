@@ -47,6 +47,7 @@ STOP_TIME_s8008_alu_or_tb = 15000us
 STOP_TIME_s8008_io_tb = 600us
 STOP_TIME_s8008_rotate_tb = 4000us
 STOP_TIME_s8008_stack_tb = 200us
+STOP_TIME_v8008_jmp_tb = 3000us
 STOP_TIME_s8008_inc_dec_tb = 2000us
 STOP_TIME_s8008_rst_tb = 800us
 STOP_TIME_s8008_search_tb = 25000us

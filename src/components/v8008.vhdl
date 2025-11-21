@@ -225,6 +225,9 @@ architecture rtl of v8008 is
         reg_target          : std_logic_vector(2 downto 0); -- Which register (A/B/C/D/E/H/L)
         reg_source          : std_logic_vector(1 downto 0); -- 00=zero, 01=data_bus_in, 10=temp_a, 11=temp_b
 
+        -- Flag control
+        flags_update        : boolean;           -- Update flags from ALU result
+
         -- Next cycle type (for T2 output)
         next_cycle_type     : std_logic_vector(1 downto 0);
     end record;
@@ -249,6 +252,7 @@ architecture rtl of v8008 is
         reg_read => false,
         reg_target => "000",
         reg_source => "00",
+        flags_update => false,
         next_cycle_type => CYCLE_PCI
     );
     
@@ -293,9 +297,58 @@ architecture rtl of v8008 is
         is_alu_register : boolean;  -- ALU with register operand (10 PPP SSS, SSS ≠ 111)
         is_alu_memory   : boolean;  -- ALU with memory operand (10 PPP 111)
         is_alu_imm      : boolean;  -- ALU with immediate operand (00 PPP 100)
+        is_jmp : boolean;   -- JMP unconditional (01 XXX 100)
+        is_jmp_conditional : boolean;  -- Conditional JMP (01 CCC 000)
     end record;
 
     -- Current microcode being executed (moved to process as variable)
+
+    --===========================================
+    -- Condition Evaluation Function
+    --===========================================
+    -- Evaluates conditional jump/call/return conditions based on CCC field and flags
+    -- CCC field (bits 5:3 of conditional instruction):
+    --   000 = JFC/CFC/RFC - Jump/Call/Return if Carry = 0
+    --   001 = JFZ/CFZ/RFZ - Jump/Call/Return if Zero = 0
+    --   010 = JFS/CFS/RFS - Jump/Call/Return if Sign = 0
+    --   011 = JFP/CFP/RFP - Jump/Call/Return if Parity = 0
+    --   100 = JTC/CTC/RTC - Jump/Call/Return if Carry = 1
+    --   101 = JTZ/CTZ/RTZ - Jump/Call/Return if Zero = 1
+    --   110 = JTS/CTS/RTS - Jump/Call/Return if Sign = 1
+    --   111 = JTP/CTP/RTP - Jump/Call/Return if Parity = 1
+    function evaluate_condition(
+        ccc : std_logic_vector(2 downto 0);
+        flags : std_logic_vector(3 downto 0)
+    ) return boolean is
+        variable flag_c : std_logic := flags(3);  -- Carry flag
+        variable flag_z : std_logic := flags(2);  -- Zero flag
+        variable flag_s : std_logic := flags(1);  -- Sign flag
+        variable flag_p : std_logic := flags(0);  -- Parity flag
+        variable test_true : boolean;  -- Bit 5: 0=False, 1=True
+        variable flag_value : std_logic;
+    begin
+        -- CCC encoding: bit 2 = T/F, bits 1-0 = flag selector
+        -- JFc (Jump if False): 01 0CC 000, JTc (Jump if True): 01 1CC 000
+        -- CC: 00=carry, 01=zero, 10=sign, 11=parity
+
+        test_true := (ccc(2) = '1');  -- Bit 5 of opcode
+
+        -- Select flag based on bits 4-3 of opcode (bits 1-0 of ccc)
+        case ccc(1 downto 0) is
+            when "00" => flag_value := flag_c;  -- Carry
+            when "01" => flag_value := flag_z;  -- Zero
+            when "10" => flag_value := flag_s;  -- Sign
+            when "11" => flag_value := flag_p;  -- Parity
+            when others => flag_value := '0';
+        end case;
+
+        -- Return true if: (test_true and flag=1) or (test_false and flag=0)
+        if test_true then
+            return (flag_value = '1');  -- JTx: jump if flag is true
+        else
+            return (flag_value = '0');  -- JFx: jump if flag is false
+        end if;
+    end function;
 
     --===========================================
     -- Instruction Decoder Function
@@ -331,6 +384,8 @@ architecture rtl of v8008 is
         result.is_alu_register := false;
         result.is_alu_memory := false;
         result.is_alu_imm := false;
+        result.is_jmp := false;
+        result.is_jmp_conditional := false;
         result.iclass := CLASS_UNKNOWN;
 
         -- Special case: HLT has multiple encodings across different classes
@@ -362,10 +417,12 @@ architecture rtl of v8008 is
                 elsif opcode(2 downto 0) = "110" then
                     result.is_mvi := true;
                     result.is_immediate := true;
+                    report "Decoder: Recognized MVI for opcode 0x" & to_hstring(opcode);
 
                 -- ALU immediate: 00 FFF 100 (ADI, ACI, SUI, SBI, ANI, XRI, ORI, CPI)
                 elsif opcode(2 downto 0) = "100" then
                     result.is_alu := true;
+                    result.is_alu_imm := true;
                     result.is_immediate := true;
 
                 -- More CLASS_00 instructions can be added here:
@@ -383,13 +440,23 @@ architecture rtl of v8008 is
                 if opcode(5 downto 4) = "00" and opcode(0) = '1' then
                     result.is_inp := true;
 
-                -- OUT: 01 RRM MM0 (RR ≠ 00, distinguishes from INP)
-                elsif opcode(0) = '0' and opcode(5 downto 4) /= "00" then
+                -- OUT: 01 RRM MM0 (RR ≠ 00, and not 000 which is conditional jump)
+                elsif opcode(2 downto 0) /= "000" and opcode(0) = '0' and opcode(5 downto 4) /= "00" then
                     result.is_out := true;
 
+                -- JMP unconditional: 01 XXX 100
+                elsif opcode(2 downto 0) = "100" then
+                    result.is_jmp := true;
+                    result.is_immediate := true;  -- 3-byte instruction (opcode + 2 address bytes)
+
+                -- JMP conditional: 01 CCC 000
+                elsif opcode(2 downto 0) = "000" then
+                    result.is_jmp_conditional := true;
+                    result.is_jmp := true;  -- Also set is_jmp for combined checks
+                    result.is_immediate := true;  -- 3-byte instruction
+                    report "Decoder: Recognized conditional JMP for opcode 0x" & to_hstring(opcode) & ", CCC=" & to_string(opcode(5 downto 3));
+
                 -- More CLASS_01 instructions can be added here:
-                -- JMP: 01 XXX 100
-                -- Conditional JMP: 01 CCC 000
                 -- CALL: 01 XXX 110
                 -- Conditional CALL: 01 CCC 010
 
@@ -433,7 +500,8 @@ architecture rtl of v8008 is
         state : timing_state_t;
         sub_phase : integer;  -- 0=φ₁₁/φ₂₁ (first half), 1=φ₁₂/φ₂₂ (second half)
         int_ack : std_logic;
-        data_in : std_logic_vector(7 downto 0)  -- For T3 instruction fetch
+        data_in : std_logic_vector(7 downto 0);  -- For T3 instruction fetch
+        cpu_flags : std_logic_vector(3 downto 0)  -- CPU flags for conditional instructions
     ) return microcode_entry is
         variable decoded : decoded_instruction_t;  -- Decoded instruction info
     begin
@@ -468,6 +536,7 @@ architecture rtl of v8008 is
                         reg_read => false,
                         reg_target => "000",
                         reg_source => "00",
+                        flags_update => false,
                         next_cycle_type => CYCLE_PCI
                     );
                     
@@ -492,6 +561,7 @@ architecture rtl of v8008 is
                         reg_read => false,
                         reg_target => "000",
                         reg_source => "00",
+                        flags_update => false,
                         next_cycle_type => CYCLE_PCI
                     );
                     
@@ -517,6 +587,7 @@ architecture rtl of v8008 is
                         reg_read => false,
                         reg_target => "000",
                         reg_source => "00",
+                        flags_update => false,
                         next_cycle_type => CYCLE_PCI
                     );
                     
@@ -538,6 +609,9 @@ architecture rtl of v8008 is
                     -- Decode from instr (which is instruction_reg, already loaded at sub_phase=0)
                     if sub_phase = 1 then
                         decoded := decode_instruction(instr);
+                        report "T3 decode: instr=0x" & to_hstring(instr) &
+                               ", is_mvi=" & boolean'image(decoded.is_mvi) &
+                               ", is_alu_imm=" & boolean'image(decoded.is_alu_imm);
 
                         -- Determine next_state and return minimal microcode
                         if decoded.is_hlt then
@@ -560,6 +634,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         elsif decoded.is_rst then
@@ -582,9 +657,10 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
-                        elsif decoded.is_mvi or decoded.is_inp or decoded.is_alu_memory then
+                        elsif decoded.is_mvi or decoded.is_inp or decoded.is_alu_memory or decoded.is_alu_imm or decoded.is_jmp or decoded.is_jmp_conditional then
                             return (
                                 next_state => T1,
                                 advance_state => true,
@@ -604,6 +680,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         elsif decoded.is_mov and not decoded.is_memory_source and not decoded.is_memory_dest then
@@ -627,6 +704,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         elsif decoded.is_mov and decoded.is_memory_source and not decoded.is_memory_dest then
@@ -655,6 +733,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCR     -- Next cycle is memory read from HL
                             );
                         else
@@ -678,6 +757,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
@@ -714,6 +794,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCI
                         );
 
@@ -740,6 +821,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCI
                         );
                         
@@ -750,6 +832,7 @@ architecture rtl of v8008 is
                     elsif decoded.is_mvi then
                         -- Start multi-cycle instruction
                         -- NOTE: PC increment moved to cycle 1 T1 to avoid ROM race condition
+                        report "T3: MVI handler, sub_phase=" & integer'image(sub_phase) & ", returning pc_inc=false";
                         return (
                             next_state => T1,                -- Will be overridden by interrupt logic
                         advance_state => (sub_phase = 1),
@@ -769,7 +852,68 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCI     -- Next cycle fetches immediate data
+                        );
+
+                    -- ========== ALU Immediate (ADI, ACI, SUI, SBI, ANI, XRI, ORI, CPI) ==========
+                    -- ALU IMM: 00 FFF 100 + immediate byte
+                    -- 2-cycle instruction: fetch opcode, fetch immediate, execute ALU op
+                    elsif decoded.is_alu_imm then
+                        -- Start multi-cycle instruction
+                        -- NOTE: PC increment moved to cycle 1 T1 to avoid ROM race condition
+                        report "ALU IMM handler in Cycle 0 T3, sub_phase=" & integer'image(sub_phase) & ", returning new_cycle=true, advance_state=" & boolean'image(sub_phase = 1);
+                        return (
+                            next_state => T1,                -- Will be overridden by interrupt logic
+                        advance_state => (sub_phase = 1),
+                            new_cycle => true,               -- Start new cycle for immediate fetch
+                            instruction_complete => false,   -- Not complete yet (need cycle 1)
+                            load_ir => true,                 -- Load instruction register
+                            load_temp_a => false,
+                            load_temp_b => true,             -- Save instruction in temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",           -- temp_b = data_bus (instruction)
+                            pc_inc => false,                 -- Don't increment yet (moved to cycle 1 T1)
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI     -- Next cycle fetches immediate data
+                        );
+
+                    -- ========== JMP (Jump) ==========
+                    -- JMP unconditional: 01 XXX 100
+                    -- JMP conditional:   01 CCC 000
+                    -- 3-cycle instruction (opcode + low addr + high addr)
+                    -- Loads PC with 14-bit address from bytes 2-3
+                    elsif decoded.is_jmp or decoded.is_jmp_conditional then
+                        -- Start multi-cycle jump instruction
+                        return (
+                            next_state => T1,
+                            advance_state => (sub_phase = 1),
+                            new_cycle => true,               -- Start cycle 1 to fetch low address byte
+                            instruction_complete => false,   -- Not complete (need 2 more cycles)
+                            load_ir => true,                 -- Load instruction register
+                            load_temp_a => false,
+                            load_temp_b => true,             -- Save instruction to temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",           -- temp_b = instruction
+                            pc_inc => false,                 -- Don't increment yet
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI     -- Next cycle fetches low address byte
                         );
 
                     -- ========== INP (Input from Port) ==========
@@ -797,6 +941,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCC     -- Next cycle is I/O (PCC)
                         );
 
@@ -824,6 +969,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCR     -- Next cycle is memory read from HL
                         );
 
@@ -854,6 +1000,7 @@ architecture rtl of v8008 is
                             reg_read => false,               -- Don't read yet
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCI
                         );
 
@@ -890,6 +1037,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCI
                         );
                     end if;
@@ -921,6 +1069,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
@@ -944,6 +1093,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
@@ -979,6 +1129,7 @@ architecture rtl of v8008 is
                                 reg_read => true,                -- Read source register
                                 reg_target => instr(2 downto 0), -- SSS field = source register
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
@@ -1003,6 +1154,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
@@ -1061,6 +1213,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
@@ -1084,6 +1237,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
@@ -1118,6 +1272,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
@@ -1142,6 +1297,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => decoded.ddd_field, -- DDD field = destination register
                                 reg_source => "11",              -- reg_source = temp_b
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
@@ -1198,6 +1354,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
@@ -1221,6 +1378,58 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI     -- Fetching immediate from PC
+                            );
+                        end if;
+                    elsif decoded.is_alu_imm then
+                        -- ALU IMM: Cycle 1 T1 - Increment PC to immediate byte
+                        if sub_phase = 0 then
+                            -- ALU IMM Cycle 1 T1 φ₁₁/φ₂₁: Setup
+                            return (
+                                next_state => T2,
+                                advance_state => false,          -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- ALU IMM Cycle 1 T1 φ₁₂/φ₂₂: Increment PC to immediate byte
+                            return (
+                                next_state => T2,
+                                advance_state => true,           -- Advance to T2
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                  -- Increment PC from opcode to immediate
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI     -- Fetching immediate from PC
                             );
                         end if;
@@ -1246,6 +1455,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCR
                             );
                         else  -- sub_phase = 1
@@ -1269,6 +1479,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCR     -- Memory read from HL
                             );
                         end if;
@@ -1295,6 +1506,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCR
                             );
                         else  -- sub_phase = 1
@@ -1318,7 +1530,59 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCR     -- Memory read from HL
+                            );
+                        end if;
+                    elsif decoded.is_jmp or decoded.is_jmp_conditional then
+                        -- JMP: Cycle 1 T1 - Increment PC to low address byte
+                        if sub_phase = 0 then
+                            -- JMP Cycle 1 T1 φ₁₁/φ₂₁: Setup
+                            return (
+                                next_state => T2,
+                                advance_state => false,          -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- JMP Cycle 1 T1 φ₁₂/φ₂₂: Increment PC to low address byte
+                            return (
+                                next_state => T2,
+                                advance_state => true,           -- Advance to T2
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                  -- Increment PC to low address byte
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI     -- Fetching low address byte from PC
                             );
                         end if;
                     else
@@ -1343,6 +1607,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
@@ -1366,6 +1631,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => "000",
                                 reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI     -- Still fetching from PC
                             );
                         end if;
@@ -1397,6 +1663,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCR  -- Memory read from HL
                         );
                     else
@@ -1420,6 +1687,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCI
                         );
                     end if;
@@ -1451,6 +1719,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCW    -- Next cycle is memory write
                         );
 
@@ -1475,7 +1744,34 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCC    -- Still in I/O cycle
+                        );
+
+                    elsif decoded.is_alu_imm then  -- ALU Immediate instructions
+                        -- Cycle 1 T3: Fetch immediate data to temp_b
+                        -- ALU operation will execute in T4, result written in T5
+                        return (
+                            next_state => T4,               -- Continue to T4 for ALU operation
+                            advance_state => (sub_phase = 1),
+                            new_cycle => false,
+                            instruction_complete => false,  -- Not done yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => true,            -- Load immediate data
+                            temp_a_source => "00",
+                            temp_b_source => "01",          -- temp_b = data_bus_in (immediate)
+                            pc_inc => false,                -- Don't increment yet (happens in T5)
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI
                         );
 
                     elsif decoded.is_alu_memory then  -- ALU M instructions
@@ -1499,6 +1795,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCR    -- Memory read from HL
                         );
 
@@ -1523,7 +1820,35 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCR    -- Memory read from HL
+                        );
+
+                    elsif decoded.is_jmp or decoded.is_jmp_conditional then  -- JMP instructions
+                        -- Cycle 1 T3: Fetch low address byte
+                        -- Both unconditional and conditional JMP proceed to cycle 2
+                        -- Condition evaluation happens in Cycle 2 T3
+                        return (
+                            next_state => T1,
+                            advance_state => (sub_phase = 1),
+                            new_cycle => true,              -- Start cycle 2 to fetch high address byte
+                            instruction_complete => false,  -- Not done yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => true,            -- Save low address byte to temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",          -- temp_b = low address byte
+                            pc_inc => false,                -- Don't increment yet
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI    -- Next cycle fetches high address byte
                         );
 
                     else
@@ -1559,7 +1884,34 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCC    -- Still in I/O cycle
+                        );
+                    elsif decoded.is_alu_imm then  -- ALU Immediate instructions
+                        -- Cycle 1 T4: IDLE state - ALU operation in progress
+                        -- Full 4.4μs state, no bus activity
+                        -- ALU is computing A op temp_b combinatorially
+                        return (
+                            next_state => T5,               -- Continue to T5 for result write
+                            advance_state => true,
+                            new_cycle => false,
+                            instruction_complete => false,  -- Not done yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI
                         );
                     elsif decoded.is_mov and decoded.is_memory_source then  -- LrM (MOV r,M)
                         -- Cycle 1 T4: IDLE state - no operation, just advance to T5
@@ -1582,6 +1934,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCR    -- Memory read from HL
                         );
                     else
@@ -1616,6 +1969,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => REG_A,
                                 reg_source => "11",             -- Source: temp_b (I/O data)
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
@@ -1639,8 +1993,116 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => REG_A,
                                 reg_source => "11",             -- Source: temp_b (I/O data)
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI    -- Next instruction fetch
                             );
+                        end if;
+
+                    elsif decoded.is_alu_imm then  -- ALU Immediate instructions
+                        -- Cycle 1 T5: Write ALU result to accumulator, update flags, increment PC
+                        -- Note: CPI (FFF=111) only updates flags, doesn't write to accumulator
+                        if decoded.fff_field = "111" then
+                            -- CPI: Update flags only, don't write to accumulator
+                            if sub_phase = 0 then
+                                -- CPI Cycle 1 T5 φ₁₁/φ₂₁: Setup flag update
+                                return (
+                                    next_state => T1,
+                                    advance_state => false,         -- Stay in T5 for second sub-phase
+                                    new_cycle => false,
+                                    instruction_complete => false,
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => false,             -- No accumulator write for CPI
+                                    reg_read => false,
+                                    reg_target => REG_A,
+                                    reg_source => "10",             -- ALU result (for flags only)
+                                    flags_update => true,           -- Update flags from ALU result
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            else  -- sub_phase = 1
+                                -- CPI Cycle 1 T5 φ₁₂/φ₂₂: Complete flag update, increment PC
+                                return (
+                                    next_state => T1,
+                                    advance_state => true,
+                                    new_cycle => false,
+                                    instruction_complete => true,   -- Instruction complete!
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => true,                 -- Move PC to next instruction
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => false,             -- No accumulator write for CPI
+                                    reg_read => false,
+                                    reg_target => REG_A,
+                                    reg_source => "10",             -- ALU result (for flags only)
+                                    flags_update => false,          -- Flags already updated in sub_phase=0
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            end if;
+                        else
+                            -- Normal ALU immediate: Write result to accumulator
+                            if sub_phase = 0 then
+                                -- ALU IMM Cycle 1 T5 φ₁₁/φ₂₁: Setup accumulator write
+                                return (
+                                    next_state => T1,
+                                    advance_state => false,         -- Stay in T5 for second sub-phase
+                                    new_cycle => false,
+                                    instruction_complete => false,
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => true,              -- Write ALU result to accumulator
+                                    reg_read => false,
+                                    reg_target => REG_A,
+                                    reg_source => "10",             -- Source: ALU result
+                                    flags_update => true,           -- Update flags from ALU result
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            else  -- sub_phase = 1
+                                -- ALU IMM Cycle 1 T5 φ₁₂/φ₂₂: Complete accumulator write, increment PC
+                                return (
+                                    next_state => T1,
+                                    advance_state => true,
+                                    new_cycle => false,
+                                    instruction_complete => true,   -- Instruction complete!
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => true,                 -- Move PC to next instruction
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => true,              -- Write ALU result to accumulator
+                                    reg_read => false,
+                                    reg_target => REG_A,
+                                    reg_source => "10",             -- Source: ALU result
+                                    flags_update => false,          -- Flags already updated in sub_phase=0
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            end if;
                         end if;
 
                     elsif decoded.is_alu_memory then  -- ALU M instructions
@@ -1671,6 +2133,7 @@ architecture rtl of v8008 is
                                     reg_read => false,
                                     reg_target => REG_A,
                                     reg_source => "10",
+                                    flags_update => false,
                                     next_cycle_type => CYCLE_PCI
                                 );
                             else  -- sub_phase = 1
@@ -1694,6 +2157,7 @@ architecture rtl of v8008 is
                                     reg_read => false,
                                     reg_target => REG_A,
                                     reg_source => "10",
+                                    flags_update => false,
                                     next_cycle_type => CYCLE_PCI
                                 );
                             end if;
@@ -1720,6 +2184,7 @@ architecture rtl of v8008 is
                                     reg_read => false,
                                     reg_target => REG_A,
                                     reg_source => "10",
+                                    flags_update => false,
                                     next_cycle_type => CYCLE_PCI
                                 );
                             else  -- sub_phase = 1
@@ -1743,6 +2208,7 @@ architecture rtl of v8008 is
                                     reg_read => false,
                                     reg_target => REG_A,
                                     reg_source => "10",
+                                    flags_update => false,
                                     next_cycle_type => CYCLE_PCI
                                 );
                             end if;
@@ -1772,6 +2238,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => instr(5 downto 3),  -- DDD from instruction register
                                 reg_source => "11",             -- Source: temp_b (memory data)
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
@@ -1795,6 +2262,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => instr(5 downto 3),  -- DDD from instruction register
                                 reg_source => "11",             -- Source: temp_b (memory data)
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI    -- Next instruction fetch
                             );
                         end if;
@@ -1841,6 +2309,7 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => decoded.ddd_field,
                                 reg_source => "10",             -- Source: temp_a
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
@@ -1864,7 +2333,59 @@ architecture rtl of v8008 is
                                 reg_read => false,
                                 reg_target => decoded.ddd_field,
                                 reg_source => "10",             -- Source: temp_a
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI    -- Next: fetch next instruction
+                            );
+                        end if;
+                    elsif decoded.is_jmp or decoded.is_jmp_conditional then
+                        -- JMP: Cycle 2 T1 - Increment PC to high address byte
+                        if sub_phase = 0 then
+                            -- JMP Cycle 2 T1 φ₁₁/φ₂₁: Setup
+                            return (
+                                next_state => T2,
+                                advance_state => false,          -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- JMP Cycle 2 T1 φ₁₂/φ₂₂: Increment PC to high address byte
+                            return (
+                                next_state => T2,
+                                advance_state => true,           -- Advance to T2
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                  -- Increment PC to high address byte
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI     -- Fetching high address byte from PC
                             );
                         end if;
                     else
@@ -1888,6 +2409,7 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCW  -- Memory write cycle
                         );
                     end if;
@@ -1914,6 +2436,7 @@ architecture rtl of v8008 is
                         reg_read => false,
                         reg_target => "000",
                         reg_source => "00",
+                        flags_update => false,
                         next_cycle_type => CYCLE_PCW
                     );
                     
@@ -1944,8 +2467,67 @@ architecture rtl of v8008 is
                             reg_read => false,
                             reg_target => "000",
                             reg_source => "00",
+                            flags_update => false,
                             next_cycle_type => CYCLE_PCI    -- Next cycle will fetch next instruction
                         );
+                    elsif decoded.is_jmp or decoded.is_jmp_conditional then  -- JMP instructions
+                        -- Cycle 2 T3: Fetch higher address byte and evaluate condition (if conditional)
+                        -- For conditional JMP: evaluate condition
+                        --   - If TRUE: proceed to T4/T5 to load PC
+                        --   - If FALSE: skip T4/T5, increment PC to next instruction
+                        -- For unconditional JMP: always proceed to T4/T5
+
+                        if decoded.is_jmp_conditional and not evaluate_condition(decoded.ccc_field, cpu_flags) then
+                            -- Condition FALSE: Skip T4/T5, increment PC to next instruction
+                            report "Conditional JMP: Condition FALSE, skipping jump. CCC=" & to_string(decoded.ccc_field) & ", flags=" & to_string(cpu_flags);
+                            return (
+                                next_state => T1,               -- Skip to next instruction
+                                advance_state => (sub_phase = 1),
+                                new_cycle => false,
+                                instruction_complete => true,   -- Instruction complete (jump not taken)
+                                load_ir => false,
+                                load_temp_a => false,           -- Don't load high address byte
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                 -- Increment PC to next instruction
+                                pc_load_high => false,          -- Don't load PC (jump not taken)
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else
+                            -- Condition TRUE or unconditional: Proceed to T4/T5
+                            report "Conditional JMP: Condition TRUE, taking jump. CCC=" & to_string(decoded.ccc_field) & ", flags=" & to_string(cpu_flags) & ", is_conditional=" & boolean'image(decoded.is_jmp_conditional);
+                            return (
+                                next_state => T4,               -- Continue to T4 for PC loading
+                                advance_state => (sub_phase = 1),
+                                new_cycle => false,
+                                instruction_complete => false,  -- Not done yet, need T4 & T5
+                                load_ir => false,
+                                load_temp_a => true,            -- Load high address byte to temp_a (Reg.a)
+                                load_temp_b => false,           -- temp_b already has low address byte
+                                temp_a_source => "01",          -- temp_a = data_bus (high address byte)
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,          -- PC load happens in T4 & T5
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
                     else
                         -- Default for unknown instructions in cycle 2
                         return DEFAULT_UCODE;
@@ -1953,11 +2535,69 @@ architecture rtl of v8008 is
 
                 when T4 =>
                     -- Cycle 2 T4 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement for other instructions
-                    
+                    decoded := decode_instruction(instr);
+
+                    if decoded.is_jmp or decoded.is_jmp_conditional then  -- JMP instructions
+                        -- Cycle 2 T4: Reg.a (temp_a) to PCH
+                        -- Load PC high byte from temp_a[5:0] (14-bit addressing)
+                        return (
+                            next_state => T5,
+                            advance_state => true,
+                            new_cycle => false,
+                            instruction_complete => false,  -- Not done yet, need T5
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => true,           -- Load PC[13:8] from temp_a[5:0]
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI
+                        );
+                    else
+                        return DEFAULT_UCODE;  -- TODO: implement for other instructions
+                    end if;
+
                 when T5 =>
                     -- Cycle 2 T5 - instruction specific
-                    return DEFAULT_UCODE;  -- TODO: implement for other instructions
+                    decoded := decode_instruction(instr);
+
+                    if decoded.is_jmp or decoded.is_jmp_conditional then  -- JMP instructions
+                        -- Cycle 2 T5: Reg.b (temp_b) to PCL
+                        -- Load PC low byte from temp_b[7:0]
+                        return (
+                            next_state => T1,               -- Will be overridden by interrupt logic
+                            advance_state => true,
+                            new_cycle => false,
+                            instruction_complete => true,   -- JMP complete!
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => false,          -- Already loaded in T4
+                            pc_load_low => true,            -- Load PC[7:0] from temp_b[7:0]
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI    -- Next cycle fetches from new PC address
+                        );
+                    else
+                        return DEFAULT_UCODE;  -- TODO: implement for other instructions
+                    end if;
                     
                 when others =>
                     return DEFAULT_UCODE;
@@ -1984,7 +2624,8 @@ architecture rtl of v8008 is
     signal reg_read_enable : boolean := false;
     signal reg_select : std_logic_vector(2 downto 0) := "000";  -- Which register to access
     signal reg_data_source : std_logic_vector(1 downto 0) := "00";  -- Source selector for cross-clock-domain
-    
+    signal flags_update_enable : boolean := false;  -- Enable flag updates from ALU
+
     -- H:L indirect addressing
     -- Combines H (high 6 bits) and L (low 8 bits) for 14-bit memory address
     signal hl_address : std_logic_vector(13 downto 0) := (others => '0');
@@ -2106,7 +2747,7 @@ begin
                        ", cycle=" & integer'image(current_cycle) &
                        ", sub_phase=" & integer'image(phi1_sub) &
                        ", instr=0x" & to_hstring(instruction_reg);
-                ucode := get_microcode(instruction_reg, current_cycle, timing_state, phi1_sub, in_int_ack_cycle, data_bus_in);
+                ucode := get_microcode(instruction_reg, current_cycle, timing_state, phi1_sub, in_int_ack_cycle, data_bus_in, flags);
             
                 -- Execute microcode commands
             
@@ -2152,6 +2793,11 @@ begin
             -- PC should only increment during normal fetches or subsequent cycles of injected instruction
             if ucode.pc_inc and not (in_int_ack_cycle = '1' and current_cycle = 0) then
                 pc <= pc + 1;
+                report "Microcode: PC INCREMENT from 0x" & to_hstring(pc) & " to 0x" & to_hstring(pc + 1) &
+                       ", instr=0x" & to_hstring(instruction_reg) &
+                       ", cycle=" & integer'image(current_cycle) &
+                       ", state=" & timing_state_t'image(timing_state) &
+                       ", sub_phase=" & integer'image(phi1_sub);
             end if;
             
             if ucode.pc_load_high then
@@ -2161,19 +2807,23 @@ begin
             end if;
             
             if ucode.pc_load_low then
-                -- For RST, extract vector from temp_b (instruction)
-                -- RST instruction format: 00 AAA 101
-                -- Vector address = 00 AAA 000 (AAA field shifted left by 3)
-                -- RST 0 (0x05): AAA=000 -> 0x0000
-                -- RST 1 (0x0D): AAA=001 -> 0x0008
-                -- RST 2 (0x15): AAA=010 -> 0x0010, etc.
-                pc(7 downto 6) <= "00";
-                pc(5 downto 3) <= unsigned(temp_b(5 downto 3));  -- AAA field
-                pc(2 downto 0) <= "000";
-                report "Microcode: Loading PC low for RST, temp_b=0x" & to_hstring(temp_b) &
-                       ", AAA bits: " & 
-                       std_logic'image(temp_b(5)) & std_logic'image(temp_b(4)) & std_logic'image(temp_b(3)) &
-                       ", vector address: 0x00" & to_hstring(unsigned(temp_b(5 downto 3)) & "000");
+                -- Check instruction type to determine how to load PC low byte
+                if instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "101" then
+                    -- RST instruction: extract vector from temp_b (instruction)
+                    -- RST instruction format: 00 AAA 101
+                    -- Vector address = 00 AAA 000 (AAA field shifted left by 3)
+                    pc(7 downto 6) <= "00";
+                    pc(5 downto 3) <= unsigned(temp_b(5 downto 3));  -- AAA field
+                    pc(2 downto 0) <= "000";
+                    report "Microcode: Loading PC low for RST, temp_b=0x" & to_hstring(temp_b) &
+                           ", AAA bits: " &
+                           std_logic'image(temp_b(5)) & std_logic'image(temp_b(4)) & std_logic'image(temp_b(3)) &
+                           ", vector address: 0x00" & to_hstring(unsigned(temp_b(5 downto 3)) & "000");
+                else
+                    -- JMP/CAL/RET: load full 8-bit low address from temp_b
+                    pc(7 downto 0) <= unsigned(temp_b);
+                    report "Microcode: Loading PC low from temp_b: 0x" & to_hstring(temp_b);
+                end if;
             end if;
             
             -- Stack control
@@ -2201,6 +2851,9 @@ begin
                 report "Microcode: Writing to register " & integer'image(to_integer(unsigned(ucode.reg_target))) &
                        " from source " & integer'image(to_integer(unsigned(ucode.reg_source)));
             end if;
+
+            -- Flag update control (independent of register write)
+            flags_update_enable <= ucode.flags_update;
 
             if ucode.reg_read then
                 -- Read from register file to internal_data_bus
@@ -2235,9 +2888,11 @@ begin
 
             -- Check for cycle management (only on second sub-phase)
             if phi1_sub = 1 then
+                report "Cycle management check: phi1_sub=1, new_cycle=" & boolean'image(ucode.new_cycle) & ", instr_complete=" & boolean'image(ucode.instruction_complete);
                 if ucode.new_cycle then
                     current_cycle <= current_cycle + 1;
                     cycle_type <= ucode.next_cycle_type;
+                    report "Cycle advance: " & integer'image(current_cycle) & " -> " & integer'image(current_cycle + 1) & ", instr=0x" & to_hstring(instruction_reg);
                 elsif ucode.instruction_complete then
                     current_cycle <= 0;
                     cycle_type <= ucode.next_cycle_type;  -- Reset to next cycle type (usually PCI)
@@ -2332,8 +2987,10 @@ begin
             -- This must happen BEFORE register write logic so ALU sees correct operand
             -- (works for both reg_write=true and CMP with reg_write=false)
             -- Do this early (phi2_sub=0) so ALU has operand ready
-            if phi2_sub = 0 and instruction_reg(7 downto 6) = "10" and reg_data_source = "10" then
-                -- ALU M operation: temp_b contains the memory operand
+            if phi2_sub = 0 and ((instruction_reg(7 downto 6) = "10") or
+                                 (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "100"))
+                             and reg_data_source = "10" then
+                -- ALU operation (register/memory or immediate): temp_b contains the operand
                 internal_data_bus <= temp_b;
                 report "Register Control (phi2): Putting temp_b (0x" & to_hstring(temp_b) &
                        ") on internal_data_bus for ALU operation";
@@ -2356,8 +3013,11 @@ begin
                     when "01" =>  -- data_bus_in
                         write_data := data_bus_in;
                     when "10" =>  -- temp_a OR ALU result (for ALU operations)
-                        -- Check if this is an ALU operation (CLASS_10: 10 PPP SSS)
-                        if instruction_reg(7 downto 6) = "10" then
+                        -- Check if this is an ALU operation
+                        -- CLASS_10: 10 PPP SSS (ALU register/memory)
+                        -- CLASS_00: 00 FFF 100 (ALU immediate)
+                        if (instruction_reg(7 downto 6) = "10") or
+                           (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "100") then
                             -- ALU operation: use ALU result (bits 7:0, bit 8 is carry)
                             write_data := alu_result(7 downto 0);
                             report "Register Control (phi2): Using ALU result 0x" & to_hstring(alu_result(7 downto 0));
@@ -2436,9 +3096,10 @@ begin
                 end case;
             end if;
 
-            -- ALU flag updates (for ALU operations after operand setup above)
-            -- Note: CMP (PPP=111) also updates flags but doesn't write result
-            if instruction_reg(7 downto 6) = "10" and reg_data_source = "10" then
+            -- ALU flag updates (only when microcode explicitly signals)
+            -- Flags should only be updated in Cycle 1 T5 for ALU immediate ops
+            -- and in T5 for ALU register/memory ops
+            if flags_update_enable then
                 flags(3) <= alu_result(8);  -- Carry flag
                 flags(2) <= '1' when alu_result(7 downto 0) = x"00" else '0';  -- Zero flag
                 flags(1) <= alu_result(7);  -- Sign flag
@@ -2605,9 +3266,12 @@ begin
     -- ALU inputs
     -- alu_data_0 is set in register_control process (always accumulator)
     -- alu_data_1: For ALU operations, directly use temp_b to avoid timing issues
-    alu_data_1  <= temp_b when (instruction_reg(7 downto 6) = "10" and reg_data_source = "10")
+    --   Class 10 (ALU register/memory): temp_b contains register or memory operand
+    --   Class 00 with x100 (ALU immediate): temp_b contains immediate operand
+    alu_data_1  <= temp_b when ((instruction_reg(7 downto 6) = "10" and reg_data_source = "10") or
+                                (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "100" and reg_data_source = "10"))
                    else internal_data_bus;  -- Second operand from selected register or memory
-    alu_command <= instruction_reg(5 downto 3);  -- PPP field: ALU operation code
+    alu_command <= instruction_reg(5 downto 3);  -- FFF/PPP field: ALU operation code
     flag_carry  <= flag_c;             -- Current carry flag state
 
 end rtl;
