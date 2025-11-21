@@ -301,6 +301,7 @@ architecture rtl of v8008 is
         is_jmp_conditional : boolean;  -- Conditional JMP (01 CCC 000)
         is_inr : boolean;   -- INR instruction (00 DDD 000, DDD ≠ 000)
         is_dcr : boolean;   -- DCR instruction (00 DDD 001, DDD ≠ 000)
+        is_rotate : boolean;  -- Rotate instruction (00 FFF 010, FFF = 000-011)
     end record;
 
     -- Current microcode being executed (moved to process as variable)
@@ -390,6 +391,7 @@ architecture rtl of v8008 is
         result.is_jmp_conditional := false;
         result.is_inr := false;
         result.is_dcr := false;
+        result.is_rotate := false;
         result.iclass := CLASS_UNKNOWN;
 
         -- Special case: HLT has multiple encodings across different classes
@@ -437,8 +439,11 @@ architecture rtl of v8008 is
                 elsif opcode(2 downto 0) = "001" and opcode(5 downto 3) /= "000" then
                     result.is_dcr := true;
 
+                -- Rotate: 00 FFF 010 (RLC, RRC, RAL, RAR where FFF = 000-011)
+                elsif opcode(2 downto 0) = "010" and opcode(5) = '0' then
+                    result.is_rotate := true;
+
                 -- More CLASS_00 instructions can be added here:
-                -- Rotate: 00 FFF 010 (RLC, RRC, RAL, RAR)
                 -- RET: 00 XXX 111, 00 CCC 011
 
                 end if;
@@ -799,10 +804,11 @@ architecture rtl of v8008 is
                                 flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
-                        elsif decoded.is_inr or decoded.is_dcr then
-                            -- INR/DCR: Increment/Decrement register (5-state, 1-cycle)
-                            -- Opcode: 00 DDD 000 (INR) or 00 DDD 001 (DCR), where DDD ≠ 000
-                            -- T3: Fetch instruction, T4: IDLE, T5: Inc/Dec operation and flag update
+                        elsif decoded.is_inr or decoded.is_dcr or decoded.is_rotate then
+                            -- INR/DCR/ROTATE: Single-cycle 5-state instructions
+                            -- INR: 00 DDD 000 (DDD ≠ 000), DCR: 00 DDD 001 (DDD ≠ 000)
+                            -- ROTATE: 00 FFF 010 (FFF = 000-011: RLC, RRC, RAL, RAR)
+                            -- T3: Fetch instruction, T4: IDLE, T5: Execute operation and update flags
                             return (
                                 next_state => T4,
                                 advance_state => true,
@@ -1713,59 +1719,115 @@ architecture rtl of v8008 is
                     -- T5: Perform ALU operation and update flags
                     --   - φ₁₁: Setup (temp_b contains source value from T4)
                     --   - φ₁₂: Write ALU result to accumulator and update flags
+                    --   - Note: CMP (PPP=111) only updates flags, doesn't write to accumulator
                     elsif decoded.is_alu_register then
 
-                        if sub_phase = 0 then
-                            -- T5 φ₁₁/φ₂₁: Setup phase (temp_b already contains source value from T4)
-                            -- No operations needed, just stay in T5 for second sub-phase
-                            return (
-                                next_state => T1,                -- Target state after completion
-                                advance_state => false,          -- Stay in T5 for second sub-phase
-                                new_cycle => false,
-                                instruction_complete => false,   -- Not complete yet
-                                load_ir => false,
-                                load_temp_a => false,
-                                load_temp_b => false,
-                                temp_a_source => "00",
-                                temp_b_source => "00",
-                                pc_inc => false,
-                                pc_load_high => false,
-                                pc_load_low => false,
-                                stack_push => false,
-                                stack_pop => false,
-                                reg_write => false,
-                                reg_read => false,
-                                reg_target => "000",
-                                reg_source => "00",
-                                flags_update => false,
-                                next_cycle_type => CYCLE_PCI
-                            );
-                        else  -- sub_phase = 1
-                            -- T5 φ₁₂/φ₂₂: Write ALU result to accumulator and update flags
-                            -- reg_write triggers write at T5 φ₂₂ (phi2_sub=1)
-                            -- flags_update triggers flag update at T5 φ₂₂
-                            return (
-                                next_state => T1,                -- Will be overridden by interrupt logic
-                                advance_state => true,           -- Instruction complete, advance
-                                new_cycle => false,
-                                instruction_complete => true,    -- ALU operation is complete
-                                load_ir => false,
-                                load_temp_a => false,
-                                load_temp_b => false,
-                                temp_a_source => "00",
-                                temp_b_source => "00",
-                                pc_inc => false,
-                                pc_load_high => false,
-                                pc_load_low => false,
-                                stack_push => false,
-                                stack_pop => false,
-                                reg_write => true,               -- Write ALU result to accumulator
-                                reg_read => false,
-                                reg_target => "000",             -- Target = register A (accumulator)
-                                reg_source => "10",              -- reg_source = ALU result
-                                flags_update => true,            -- Update flags from ALU result
-                                next_cycle_type => CYCLE_PCI
-                            );
+                        -- Check if this is CMP (PPP = 111)
+                        if decoded.fff_field = "111" then
+                            -- CMP r: Update flags only, don't write to accumulator
+                            if sub_phase = 0 then
+                                -- CMP T5 φ₁₁/φ₂₁: Setup phase
+                                return (
+                                    next_state => T1,
+                                    advance_state => false,
+                                    new_cycle => false,
+                                    instruction_complete => false,
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => false,              -- No accumulator write for CMP
+                                    reg_read => false,
+                                    reg_target => "000",
+                                    reg_source => "10",              -- ALU result (for flags only)
+                                    flags_update => true,            -- Update flags from ALU result
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            else  -- sub_phase = 1
+                                -- CMP T5 φ₁₂/φ₂₂: Complete flag update
+                                return (
+                                    next_state => T1,
+                                    advance_state => true,
+                                    new_cycle => false,
+                                    instruction_complete => true,
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => false,              -- No accumulator write for CMP
+                                    reg_read => false,
+                                    reg_target => "000",
+                                    reg_source => "10",              -- ALU result (for flags only)
+                                    flags_update => false,           -- Flags already updated in sub_phase=0
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            end if;
+                        else
+                            -- Normal ALU register: Write result to accumulator
+                            if sub_phase = 0 then
+                                -- T5 φ₁₁/φ₂₁: Setup phase (temp_b already contains source value from T4)
+                                -- No operations needed, just stay in T5 for second sub-phase
+                                return (
+                                    next_state => T1,                -- Target state after completion
+                                    advance_state => false,          -- Stay in T5 for second sub-phase
+                                    new_cycle => false,
+                                    instruction_complete => false,   -- Not complete yet
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => false,
+                                    reg_read => false,
+                                    reg_target => "000",
+                                    reg_source => "00",
+                                    flags_update => false,
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            else  -- sub_phase = 1
+                                -- T5 φ₁₂/φ₂₂: Write ALU result to accumulator and update flags
+                                -- reg_write triggers write at T5 φ₂₂ (phi2_sub=1)
+                                -- flags_update triggers flag update at T5 φ₂₂
+                                return (
+                                    next_state => T1,                -- Will be overridden by interrupt logic
+                                    advance_state => true,           -- Instruction complete, advance
+                                    new_cycle => false,
+                                    instruction_complete => true,    -- ALU operation is complete
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => false,
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => true,               -- Write ALU result to accumulator
+                                    reg_read => false,
+                                    reg_target => "000",             -- Target = register A (accumulator)
+                                    reg_source => "10",              -- reg_source = ALU result
+                                    flags_update => true,            -- Update flags from ALU result
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            end if;
                         end if;
 
                     -- ========== INR/DCR (Increment/Decrement Register) ==========
@@ -1823,6 +1885,67 @@ architecture rtl of v8008 is
                                 reg_target => instr(5 downto 3), -- DDD field
                                 reg_source => "10",              -- reg_source = ALU result (inc/dec uses ALU)
                                 flags_update => true,            -- Update flags (S, Z, P - not C)
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
+                    -- ========== ROTATE (RLC, RRC, RAL, RAR) ==========
+                    -- T5: Perform rotate and update carry flag
+                    --   - φ₁₁: Read accumulator
+                    --   - φ₁₂: Write rotated value and update carry
+                    elsif decoded.is_rotate then
+
+                        if sub_phase = 0 then
+                            -- ROTATE T5 φ₁₁/φ₂₁: Read accumulator
+                            return (
+                                next_state => T1,                -- Target state after completion
+                                advance_state => false,          -- Stay in T5 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,   -- Not complete yet
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => true,                -- Read accumulator
+                                reg_target => "000",             -- Register A (accumulator)
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- ROTATE T5 φ₁₂/φ₂₂: Write rotated value and update carry
+                            -- Rotation is performed by the ALU based on FFF field:
+                            --   FFF=000: RLC (rotate left circular)
+                            --   FFF=001: RRC (rotate right circular)
+                            --   FFF=010: RAL (rotate left through carry)
+                            --   FFF=011: RAR (rotate right through carry)
+                            return (
+                                next_state => T1,                -- Will be overridden by interrupt logic
+                                advance_state => true,           -- Instruction complete, advance
+                                new_cycle => false,
+                                instruction_complete => true,    -- Rotate is complete
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,               -- Write result back to accumulator
+                                reg_read => false,
+                                reg_target => "000",             -- Register A (accumulator)
+                                reg_source => "10",              -- reg_source = ALU result (rotate uses ALU)
+                                flags_update => true,            -- Update carry flag only
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
@@ -3722,18 +3845,39 @@ begin
                     when "01" =>  -- data_bus_in
                         write_data := data_bus_in;
                     when "10" =>  -- temp_a OR ALU result (for ALU operations)
-                        -- Check if this is an ALU operation
+                        -- Check if this is an ALU operation or rotate
                         -- CLASS_10: 10 PPP SSS (ALU register/memory)
                         -- CLASS_00: 00 FFF 100 (ALU immediate)
                         -- CLASS_00: 00 DDD 000 (INR - increment register, DDD ≠ 000)
                         -- CLASS_00: 00 DDD 001 (DCR - decrement register, DDD ≠ 000)
+                        -- CLASS_00: 00 FFF 010 (ROTATE - RLC, RRC, RAL, RAR, FFF = 000-011)
                         if (instruction_reg(7 downto 6) = "10") or
                            (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "100") or
                            (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "000" and instruction_reg(5 downto 3) /= "000") or
-                           (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "001" and instruction_reg(5 downto 3) /= "000") then
-                            -- ALU operation: use ALU result (bits 7:0, bit 8 is carry)
-                            write_data := alu_result(7 downto 0);
-                            report "Register Control (phi2): Using ALU result 0x" & to_hstring(alu_result(7 downto 0));
+                           (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "001" and instruction_reg(5 downto 3) /= "000") or
+                           (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "010" and instruction_reg(5 downto 4) = "00") then
+                            -- ALU/Rotate operation: use ALU result (bits 7:0, bit 8 is carry)
+                            -- For rotate instructions, compute result here based on FFF field
+                            if instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "010" and instruction_reg(5 downto 4) = "00" then
+                                -- Rotate instruction: compute rotation
+                                case instruction_reg(4 downto 3) is
+                                    when "00" =>  -- RLC: Rotate left circular
+                                        write_data := internal_data_bus(6 downto 0) & internal_data_bus(7);
+                                    when "01" =>  -- RRC: Rotate right circular
+                                        write_data := internal_data_bus(0) & internal_data_bus(7 downto 1);
+                                    when "10" =>  -- RAL: Rotate left through carry
+                                        write_data := internal_data_bus(6 downto 0) & flag_carry;
+                                    when "11" =>  -- RAR: Rotate right through carry
+                                        write_data := flag_carry & internal_data_bus(7 downto 1);
+                                    when others =>
+                                        write_data := internal_data_bus;
+                                end case;
+                                report "Register Control (phi2): Using rotate result 0x" & to_hstring(write_data);
+                            else
+                                -- ALU operation: use ALU result (bits 7:0, bit 8 is carry)
+                                write_data := alu_result(7 downto 0);
+                                report "Register Control (phi2): Using ALU result 0x" & to_hstring(alu_result(7 downto 0));
+                            end if;
                         else
                             -- Non-ALU operation: use temp_a
                             write_data := temp_a;
@@ -3813,22 +3957,42 @@ begin
             -- Flags should only be updated in Cycle 1 T5 for ALU immediate ops
             -- and in T5 for ALU register/memory ops
             -- INR/DCR: Update S, Z, P but NOT C (carry preserved)
+            -- ROTATE: Update C only, preserve S, Z, P
             if flags_update_enable then
-                -- Carry flag: Update for normal ALU ops, preserve for INR/DCR
-                if not ((instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "000" and instruction_reg(5 downto 3) /= "000") or
-                        (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "001" and instruction_reg(5 downto 3) /= "000")) then
-                    flags(3) <= alu_result(8);  -- Carry flag (normal ALU ops)
+                -- Check if this is a rotate instruction
+                if instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "010" and instruction_reg(5) = '0' then
+                    -- ROTATE: Only update carry flag based on which bit rotated out
+                    case instruction_reg(4 downto 3) is
+                        when "00" =>  -- RLC: Bit 7 rotated out
+                            flags(3) <= internal_data_bus(7);
+                        when "01" =>  -- RRC: Bit 0 rotated out
+                            flags(3) <= internal_data_bus(0);
+                        when "10" =>  -- RAL: Bit 7 rotated out
+                            flags(3) <= internal_data_bus(7);
+                        when "11" =>  -- RAR: Bit 0 rotated out
+                            flags(3) <= internal_data_bus(0);
+                        when others =>
+                            null;
+                    end case;
+                    report "Register Control (phi2): Updated ROTATE carry flag - C=" & std_logic'image(flags(3)) &
+                           " from internal_data_bus=0x" & to_hstring(internal_data_bus);
+                else
+                    -- Carry flag: Update for normal ALU ops, preserve for INR/DCR
+                    if not ((instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "000" and instruction_reg(5 downto 3) /= "000") or
+                            (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "001" and instruction_reg(5 downto 3) /= "000")) then
+                        flags(3) <= alu_result(8);  -- Carry flag (normal ALU ops)
+                    end if;
+                    -- Zero, Sign, Parity: Always update
+                    flags(2) <= '1' when alu_result(7 downto 0) = x"00" else '0';  -- Zero flag
+                    flags(1) <= alu_result(7);  -- Sign flag
+                    -- Parity: even parity (1 if even number of 1 bits)
+                    flags(0) <= not (alu_result(0) xor alu_result(1) xor alu_result(2) xor alu_result(3) xor
+                                     alu_result(4) xor alu_result(5) xor alu_result(6) xor alu_result(7));
+                    report "Register Control (phi2): Updated flags - C=" & std_logic'image(flags(3)) &
+                           ", Z=" & std_logic'image(flags(2)) &
+                           ", S=" & std_logic'image(alu_result(7)) &
+                           ", P=" & std_logic'image(flags(0));
                 end if;
-                -- Zero, Sign, Parity: Always update
-                flags(2) <= '1' when alu_result(7 downto 0) = x"00" else '0';  -- Zero flag
-                flags(1) <= alu_result(7);  -- Sign flag
-                -- Parity: even parity (1 if even number of 1 bits)
-                flags(0) <= not (alu_result(0) xor alu_result(1) xor alu_result(2) xor alu_result(3) xor
-                                 alu_result(4) xor alu_result(5) xor alu_result(6) xor alu_result(7));
-                report "Register Control (phi2): Updated flags - C=" & std_logic'image(flags(3)) &
-                       ", Z=" & std_logic'image(flags(2)) &
-                       ", S=" & std_logic'image(alu_result(7)) &
-                       ", P=" & std_logic'image(flags(0));
             end if;
 
             -- Memory reference through H:L requires external memory access
