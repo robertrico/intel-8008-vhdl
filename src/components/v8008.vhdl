@@ -299,6 +299,8 @@ architecture rtl of v8008 is
         is_alu_imm      : boolean;  -- ALU with immediate operand (00 PPP 100)
         is_jmp : boolean;   -- JMP unconditional (01 XXX 100)
         is_jmp_conditional : boolean;  -- Conditional JMP (01 CCC 000)
+        is_inr : boolean;   -- INR instruction (00 DDD 000, DDD ≠ 000)
+        is_dcr : boolean;   -- DCR instruction (00 DDD 001, DDD ≠ 000)
     end record;
 
     -- Current microcode being executed (moved to process as variable)
@@ -386,6 +388,8 @@ architecture rtl of v8008 is
         result.is_alu_imm := false;
         result.is_jmp := false;
         result.is_jmp_conditional := false;
+        result.is_inr := false;
+        result.is_dcr := false;
         result.iclass := CLASS_UNKNOWN;
 
         -- Special case: HLT has multiple encodings across different classes
@@ -425,9 +429,15 @@ architecture rtl of v8008 is
                     result.is_alu_imm := true;
                     result.is_immediate := true;
 
-                -- More CLASS_00 instructions can be added here:
                 -- INR: 00 DDD 000 (DDD ≠ 000)
+                elsif opcode(2 downto 0) = "000" and opcode(5 downto 3) /= "000" then
+                    result.is_inr := true;
+
                 -- DCR: 00 DDD 001 (DDD ≠ 000)
+                elsif opcode(2 downto 0) = "001" and opcode(5 downto 3) /= "000" then
+                    result.is_dcr := true;
+
+                -- More CLASS_00 instructions can be added here:
                 -- Rotate: 00 FFF 010 (RLC, RRC, RAL, RAR)
                 -- RET: 00 XXX 111, 00 CCC 011
 
@@ -789,6 +799,32 @@ architecture rtl of v8008 is
                                 flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
+                        elsif decoded.is_inr or decoded.is_dcr then
+                            -- INR/DCR: Increment/Decrement register (5-state, 1-cycle)
+                            -- Opcode: 00 DDD 000 (INR) or 00 DDD 001 (DCR), where DDD ≠ 000
+                            -- T3: Fetch instruction, T4: IDLE, T5: Inc/Dec operation and flag update
+                            return (
+                                next_state => T4,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                  -- Increment PC to next instruction
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
                         elsif decoded.is_mov and decoded.is_memory_source and not decoded.is_memory_dest then
                             -- MOV r,M (LrM): Load from memory [HL] to register (2-cycle)
                             -- Cycle 0 T3 sub_phase=1: Increment PC and advance to Cycle 1
@@ -815,6 +851,32 @@ architecture rtl of v8008 is
                                 reg_source => "00",
                                 flags_update => false,
                                 next_cycle_type => CYCLE_PCR     -- Next cycle is memory read from HL
+                            );
+                        elsif decoded.is_mov and decoded.is_memory_dest and not decoded.is_memory_source then
+                            -- MOV M,r (LMr): Write register to memory [HL] (2-cycle)
+                            -- Cycle 0 T3: Fetch instruction to IR and temp_b, advance to T4
+                            -- Per datasheet: T4 will load SSS register into temp_b
+                            return (
+                                next_state => T4,                -- Continue to T4 (not T1!)
+                                advance_state => (sub_phase = 1),
+                                new_cycle => false,              -- Stay in cycle 0
+                                instruction_complete => false,   -- Not done yet
+                                load_ir => true,                 -- Load instruction register
+                                load_temp_a => false,
+                                load_temp_b => true,             -- Save instruction in temp_b
+                                temp_a_source => "00",
+                                temp_b_source => "01",           -- temp_b = data_bus (instruction)
+                                pc_inc => true,                  -- Increment PC to next instruction
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
                             );
                         else
                             -- Default: single-cycle instruction
@@ -1298,6 +1360,66 @@ architecture rtl of v8008 is
                             );
                         end if;
 
+                    -- ========== LMr (MOV M,r) - Cycle 0 T4 ==========
+                    -- MOV M,r: Store register to memory [HL]
+                    -- Opcode: 11 111 SSS (SSS = source register 000-110)
+                    -- Cycle 0 T4: Read source register (SSS) into temp_b
+                    --   - φ₁₁/φ₂₁: Read source register to internal_data_bus
+                    --   - φ₁₂: Load temp_b from internal_data_bus
+                    elsif cycle = 0 and
+                          instr(7 downto 6) = "11" and
+                          instr(5 downto 3) = "111" then
+
+                        if sub_phase = 0 then
+                            -- LMr Cycle 0 T4 φ₁₁/φ₂₁: Read source register to internal_data_bus
+                            return (
+                                next_state => T5,
+                                advance_state => false,          -- Stay in T4 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,            -- Don't load yet
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => true,                -- Read source register (SSS)
+                                reg_target => instr(2 downto 0), -- SSS = source register
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- LMr Cycle 0 T4 φ₁₂/φ₂₂: Load temp_b from internal_data_bus
+                            return (
+                                next_state => T5,
+                                advance_state => true,           -- Advance to T5
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => true,             -- Load register value into temp_b
+                                temp_a_source => "00",
+                                temp_b_source => "10",           -- temp_b = internal_data_bus
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
                     -- ========== ALU Register (ADD r, ADC r, SUB r, etc.) ==========
                     -- Decode instruction: 10 PPP SSS (PPP = operation, SSS = source register ≠ 111)
                     -- T4: Read source register (SSS) and load into temp_b
@@ -1377,6 +1499,63 @@ architecture rtl of v8008 is
                     --         ... other control signals ...
                     --     );
 
+                    -- ========== INR/DCR (Increment/Decrement Register) ==========
+                    -- Opcode: 00 DDD 000 (INR) or 00 DDD 001 (DCR), where DDD ≠ 000
+                    -- T4: IDLE state (4.4μs wait)
+                    elsif (instr(7 downto 6) = "00" and
+                           (instr(2 downto 0) = "000" or instr(2 downto 0) = "001") and
+                           instr(5 downto 3) /= "000") then
+
+                        if sub_phase = 0 then
+                            -- INR/DCR T4 φ₁₁/φ₂₁: IDLE phase (no operation)
+                            return (
+                                next_state => T5,
+                                advance_state => false,          -- Stay in T4 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- INR/DCR T4 φ₁₂/φ₂₂: Continue IDLE, advance to T5
+                            return (
+                                next_state => T5,
+                                advance_state => true,           -- Advance to T5
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
                     else
                         -- Should not reach here - only instructions that need T4 should get here
                         return DEFAULT_UCODE;
@@ -1389,8 +1568,37 @@ architecture rtl of v8008 is
                     -- Decode instruction to eliminate hardcoded checks
                     decoded := decode_instruction(instr);
 
+                    -- ========== LMr (MOV M,r) - Cycle 0 T5 ==========
+                    -- Per datasheet: Cycle 0 T5 is skipped, advance to Cycle 1
+                    if cycle = 0 and
+                       instr(7 downto 6) = "11" and
+                       instr(5 downto 3) = "111" then
+                        -- T5: Skip (advance to Cycle 1)
+                        return (
+                            next_state => T1,                -- Start Cycle 1
+                            advance_state => (sub_phase = 1),
+                            new_cycle => true,               -- Advance to Cycle 1
+                            instruction_complete => false,   -- Not done yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCW     -- Next cycle is memory write
+                        );
+
                     -- ========== RST (RESTART) ==========
-                    if decoded.is_rst then
+                    elsif decoded.is_rst then
                         if sub_phase = 0 then
                             -- RST T5 φ₁₁/φ₂₁: Setup phase
                             return (
@@ -1556,6 +1764,65 @@ architecture rtl of v8008 is
                                 reg_target => "000",             -- Target = register A (accumulator)
                                 reg_source => "10",              -- reg_source = ALU result
                                 flags_update => true,            -- Update flags from ALU result
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
+                    -- ========== INR/DCR (Increment/Decrement Register) ==========
+                    -- T5: Perform increment/decrement and update flags (except carry)
+                    --   - φ₁₁: Read source register
+                    --   - φ₁₂: Write incremented/decremented value and update flags
+                    elsif decoded.is_inr or decoded.is_dcr then
+
+                        if sub_phase = 0 then
+                            -- INR/DCR T5 φ₁₁/φ₂₁: Read target register
+                            return (
+                                next_state => T1,                -- Target state after completion
+                                advance_state => false,          -- Stay in T5 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,   -- Not complete yet
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => true,                -- Read target register
+                                reg_target => instr(5 downto 3), -- DDD field
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- INR/DCR T5 φ₁₂/φ₂₂: Write result and update flags
+                            -- For INR: result = reg + 1
+                            -- For DCR: result = reg - 1
+                            -- Flags updated: Sign, Zero, Parity (NOT Carry)
+                            return (
+                                next_state => T1,                -- Will be overridden by interrupt logic
+                                advance_state => true,           -- Instruction complete, advance
+                                new_cycle => false,
+                                instruction_complete => true,    -- INR/DCR is complete
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,               -- Write result back to target register
+                                reg_read => false,
+                                reg_target => instr(5 downto 3), -- DDD field
+                                reg_source => "10",              -- reg_source = ALU result (inc/dec uses ALU)
+                                flags_update => true,            -- Update flags (S, Z, P - not C)
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
@@ -1790,6 +2057,58 @@ architecture rtl of v8008 is
                                 reg_source => "00",
                                 flags_update => false,
                                 next_cycle_type => CYCLE_PCR     -- Memory read from HL
+                            );
+                        end if;
+                    elsif decoded.is_memory_dest then
+                        -- LMr (MOV M,r): Cycle 1 T1 - Output L register (address low)
+                        -- temp_b already contains register value from Cycle 0 T4
+                        if sub_phase = 0 then
+                            -- LMr Cycle 1 T1 φ₁₁/φ₂₁: Setup
+                            return (
+                                next_state => T2,
+                                advance_state => false,          -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCW     -- Memory write to HL
+                            );
+                        else  -- sub_phase = 1
+                            -- LMr Cycle 1 T1 φ₁₂/φ₂₂: Advance to T2
+                            return (
+                                next_state => T2,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,                 -- PC already incremented at Cycle 0 T3
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCW     -- Memory write to HL
                             );
                         end if;
                     elsif decoded.is_jmp or decoded.is_jmp_conditional then
@@ -2182,6 +2501,33 @@ architecture rtl of v8008 is
                             reg_source => "00",
                             flags_update => false,
                             next_cycle_type => CYCLE_PCR    -- Memory read from HL
+                        );
+
+                    elsif decoded.is_mov and decoded.is_memory_dest then  -- LMr (MOV M,r)
+                        -- Cycle 1 T3: Write register data to memory [HL]
+                        -- Register data is already on internal_data_bus from reg_read in Cycle 0 T3
+                        -- This write completes the instruction
+                        return (
+                            next_state => T1,               -- Next instruction
+                            advance_state => (sub_phase = 1),
+                            new_cycle => false,
+                            instruction_complete => true,   -- Instruction complete after T3
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,                -- PC already incremented in cycle 0
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,              -- Data already on bus from Cycle 0
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI    -- Next instruction
                         );
 
                     elsif decoded.is_jmp or decoded.is_jmp_conditional then  -- JMP instructions
@@ -3379,8 +3725,12 @@ begin
                         -- Check if this is an ALU operation
                         -- CLASS_10: 10 PPP SSS (ALU register/memory)
                         -- CLASS_00: 00 FFF 100 (ALU immediate)
+                        -- CLASS_00: 00 DDD 000 (INR - increment register, DDD ≠ 000)
+                        -- CLASS_00: 00 DDD 001 (DCR - decrement register, DDD ≠ 000)
                         if (instruction_reg(7 downto 6) = "10") or
-                           (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "100") then
+                           (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "100") or
+                           (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "000" and instruction_reg(5 downto 3) /= "000") or
+                           (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "001" and instruction_reg(5 downto 3) /= "000") then
                             -- ALU operation: use ALU result (bits 7:0, bit 8 is carry)
                             write_data := alu_result(7 downto 0);
                             report "Register Control (phi2): Using ALU result 0x" & to_hstring(alu_result(7 downto 0));
@@ -3462,14 +3812,20 @@ begin
             -- ALU flag updates (only when microcode explicitly signals)
             -- Flags should only be updated in Cycle 1 T5 for ALU immediate ops
             -- and in T5 for ALU register/memory ops
+            -- INR/DCR: Update S, Z, P but NOT C (carry preserved)
             if flags_update_enable then
-                flags(3) <= alu_result(8);  -- Carry flag
+                -- Carry flag: Update for normal ALU ops, preserve for INR/DCR
+                if not ((instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "000" and instruction_reg(5 downto 3) /= "000") or
+                        (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "001" and instruction_reg(5 downto 3) /= "000")) then
+                    flags(3) <= alu_result(8);  -- Carry flag (normal ALU ops)
+                end if;
+                -- Zero, Sign, Parity: Always update
                 flags(2) <= '1' when alu_result(7 downto 0) = x"00" else '0';  -- Zero flag
                 flags(1) <= alu_result(7);  -- Sign flag
                 -- Parity: even parity (1 if even number of 1 bits)
                 flags(0) <= not (alu_result(0) xor alu_result(1) xor alu_result(2) xor alu_result(3) xor
                                  alu_result(4) xor alu_result(5) xor alu_result(6) xor alu_result(7));
-                report "Register Control (phi2): Updated flags - C=" & std_logic'image(alu_result(8)) &
+                report "Register Control (phi2): Updated flags - C=" & std_logic'image(flags(3)) &
                        ", Z=" & std_logic'image(flags(2)) &
                        ", S=" & std_logic'image(alu_result(7)) &
                        ", P=" & std_logic'image(flags(0));
@@ -3480,8 +3836,10 @@ begin
         end if;
     end process register_control;
     
-    -- ALU always uses accumulator as one operand
-    alu_data_0 <= registers(REG_A_DATA);  -- Accumulator is always first ALU operand
+    -- ALU data_0: Accumulator for most operations, register value for INR/DCR
+    alu_data_0 <= internal_data_bus when ((instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "000" and instruction_reg(5 downto 3) /= "000") or
+                                          (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "001" and instruction_reg(5 downto 3) /= "000"))
+                  else registers(REG_A_DATA);  -- Accumulator is default first ALU operand
     
     --===========================================
     -- State Output Generation
@@ -3561,6 +3919,12 @@ begin
                    instruction_reg(2 downto 0) = "111" then  -- LrM: 11 DDD 111
                     -- Output L register (low byte of HL address)
                     data_bus_out <= registers(REG_L_DATA);
+                -- Check if this is a memory write cycle for LMr (MOV M,r)
+                elsif current_cycle = 1 and cycle_type = CYCLE_PCW and
+                   instruction_reg(7 downto 6) = "11" and
+                   instruction_reg(5 downto 3) = "111" then  -- LMr: 11 111 SSS
+                    -- Output L register (low byte of HL address)
+                    data_bus_out <= registers(REG_L_DATA);
                 else
                     -- Normal PC output
                     data_bus_out <= std_logic_vector(pc(7 downto 0));
@@ -3595,6 +3959,12 @@ begin
                    instruction_reg(2 downto 0) = "111" then  -- LrM: 11 DDD 111
                     -- Output cycle type PCR and H register (high byte of HL address)
                     data_bus_out <= CYCLE_PCR & registers(REG_H_DATA)(5 downto 0);
+                -- Check if this is a memory write cycle for LMr (MOV M,r)
+                elsif current_cycle = 1 and cycle_type = CYCLE_PCW and
+                   instruction_reg(7 downto 6) = "11" and
+                   instruction_reg(5 downto 3) = "111" then  -- LMr: 11 111 SSS
+                    -- Output cycle type PCW and H register (high byte of HL address)
+                    data_bus_out <= CYCLE_PCW & registers(REG_H_DATA)(5 downto 0);
                 else
                     -- Normal PC output with cycle type
                     data_bus_out <= cycle_type & std_logic_vector(pc(13 downto 8));
@@ -3614,6 +3984,11 @@ begin
                 elsif cycle_type = CYCLE_PCW and current_cycle = 2 and instruction_reg = "00111110" then
                     -- MVI M memory write - output immediate data from temp_a
                     data_bus_out <= temp_a;
+                    data_bus_enable <= '1';
+                elsif cycle_type = CYCLE_PCW and current_cycle = 1 and
+                      instruction_reg(7 downto 6) = "11" and instruction_reg(5 downto 3) = "111" then
+                    -- LMr (MOV M,r) memory write - output register data from temp_b
+                    data_bus_out <= temp_b;
                     data_bus_enable <= '1';
                 else
                     -- Default: don't drive
@@ -3664,14 +4039,24 @@ begin
     debug_hl_address <= hl_address;
 
     -- ALU inputs
-    -- alu_data_0 is set in register_control process (always accumulator)
+    -- alu_data_0 set above (accumulator or register value for INR/DCR)
     -- alu_data_1: For ALU operations, directly use temp_b to avoid timing issues
     --   Class 10 (ALU register/memory): temp_b contains register or memory operand
     --   Class 00 with x100 (ALU immediate): temp_b contains immediate operand
-    alu_data_1  <= temp_b when ((instruction_reg(7 downto 6) = "10" and reg_data_source = "10") or
-                                (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "100" and reg_data_source = "10"))
+    --   INR/DCR: constant 1
+    alu_data_1  <= x"01" when ((instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "000" and instruction_reg(5 downto 3) /= "000") or
+                               (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "001" and instruction_reg(5 downto 3) /= "000"))
+                   else temp_b when ((instruction_reg(7 downto 6) = "10" and reg_data_source = "10") or
+                                     (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "100" and reg_data_source = "10"))
                    else internal_data_bus;  -- Second operand from selected register or memory
-    alu_command <= instruction_reg(5 downto 3);  -- FFF/PPP field: ALU operation code
+
+    -- alu_command: FFF/PPP field for normal ALU ops, special for INR/DCR
+    --   INR (00 DDD 000): Use ADD operation (000)
+    --   DCR (00 DDD 001): Use SUB operation (010)
+    alu_command <= "000" when (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "000" and instruction_reg(5 downto 3) /= "000")  -- INR: ADD
+                   else "010" when (instruction_reg(7 downto 6) = "00" and instruction_reg(2 downto 0) = "001" and instruction_reg(5 downto 3) /= "000")  -- DCR: SUB
+                   else instruction_reg(5 downto 3);  -- Normal: FFF/PPP field
+
     flag_carry  <= flag_c;             -- Current carry flag state
 
 end rtl;
