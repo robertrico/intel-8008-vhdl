@@ -695,7 +695,33 @@ architecture rtl of v8008 is
                                 load_temp_b => false,
                                 temp_a_source => "00",
                                 temp_b_source => "00",
-                                pc_inc => false,
+                                pc_inc => true,                  -- Increment PC to next instruction
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        elsif decoded.is_alu_register then
+                            -- ALU register: ALU operation with register operand (5-state, 1-cycle)
+                            -- Opcode: 10 PPP SSS (bits [7:6] = 10, PPP = operation, SSS = source register)
+                            -- Similar to MOV r,r but updates flags and uses ALU
+                            return (
+                                next_state => T4,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                  -- Increment PC to next instruction
                                 pc_load_high => false,
                                 pc_load_low => false,
                                 stack_push => false,
@@ -1159,6 +1185,66 @@ architecture rtl of v8008 is
                             );
                         end if;
 
+                    -- ========== ALU Register (ADD r, ADC r, SUB r, etc.) ==========
+                    -- Decode instruction: 10 PPP SSS (PPP = operation, SSS = source register ≠ 111)
+                    -- T4: Read source register (SSS) and load into temp_b
+                    --   - φ₁/φ₂₁: Read source register to internal_data_bus
+                    --   - φ₁₂: Load temp_b from internal_data_bus
+                    elsif (instr(7 downto 6) = "10" and
+                           instr(2 downto 0) /= "111") then
+
+                        if sub_phase = 0 then
+                            -- T4 φ₁₁/φ₂₁: Read source register to internal_data_bus
+                            -- Register read happens at T4 φ₂₁ (phi2_sub=0)
+                            return (
+                                next_state => T5,                -- Target state (will stay in T4 for now)
+                                advance_state => false,          -- Stay in T4 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => true,                -- Read source register
+                                reg_target => instr(2 downto 0), -- SSS field = source register
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- T4 φ₁₂/φ₂₂: Load temp_b from internal_data_bus
+                            -- temp_b loads at φ₁₂, capturing value from register read
+                            return (
+                                next_state => T5,                -- Advance to T5
+                                advance_state => true,           -- Advance to T5 after this sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => true,             -- Load temp_b from internal_data_bus
+                                temp_a_source => "00",
+                                temp_b_source => "10",           -- temp_b = internal_data_bus
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
                     -- ========== ADD MORE INSTRUCTIONS HERE ==========
                     -- Template for instruction ending at T4:
                     -- elsif (instr matches pattern) then
@@ -1298,6 +1384,65 @@ architecture rtl of v8008 is
                                 reg_target => decoded.ddd_field, -- DDD field = destination register
                                 reg_source => "11",              -- reg_source = temp_b
                                 flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
+                    -- ========== ALU Register (ADD r, ADC r, SUB r, etc.) ==========
+                    -- T5: Perform ALU operation and update flags
+                    --   - φ₁₁: Setup (temp_b contains source value from T4)
+                    --   - φ₁₂: Write ALU result to accumulator and update flags
+                    elsif decoded.is_alu_register then
+
+                        if sub_phase = 0 then
+                            -- T5 φ₁₁/φ₂₁: Setup phase (temp_b already contains source value from T4)
+                            -- No operations needed, just stay in T5 for second sub-phase
+                            return (
+                                next_state => T1,                -- Target state after completion
+                                advance_state => false,          -- Stay in T5 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,   -- Not complete yet
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- T5 φ₁₂/φ₂₂: Write ALU result to accumulator and update flags
+                            -- reg_write triggers write at T5 φ₂₂ (phi2_sub=1)
+                            -- flags_update triggers flag update at T5 φ₂₂
+                            return (
+                                next_state => T1,                -- Will be overridden by interrupt logic
+                                advance_state => true,           -- Instruction complete, advance
+                                new_cycle => false,
+                                instruction_complete => true,    -- ALU operation is complete
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => true,               -- Write ALU result to accumulator
+                                reg_read => false,
+                                reg_target => "000",             -- Target = register A (accumulator)
+                                reg_source => "10",              -- reg_source = ALU result
+                                flags_update => true,            -- Update flags from ALU result
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
@@ -2791,7 +2936,8 @@ begin
             -- PC control
             -- Suppress PC increment during interrupt ack cycle 0 (instruction injection)
             -- PC should only increment during normal fetches or subsequent cycles of injected instruction
-            if ucode.pc_inc and not (in_int_ack_cycle = '1' and current_cycle = 0) then
+            -- IMPORTANT: Only increment when advance_state is true (typically sub_phase=1) to avoid double increments
+            if ucode.pc_inc and ucode.advance_state and not (in_int_ack_cycle = '1' and current_cycle = 0) then
                 pc <= pc + 1;
                 report "Microcode: PC INCREMENT from 0x" & to_hstring(pc) & " to 0x" & to_hstring(pc + 1) &
                        ", instr=0x" & to_hstring(instruction_reg) &
