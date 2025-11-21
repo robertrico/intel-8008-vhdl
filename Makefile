@@ -72,6 +72,7 @@ STOP_TIME_v8008_rst_tb = 1000us
 STOP_TIME_v8008_mvi_tb = 1500us
 STOP_TIME_v8008_mvi_m_tb = 1500us
 STOP_TIME_v8008_inp_tb = 1500us
+STOP_TIME_v8008_out_tb = 3000us
 STOP_TIME_v8008_alu_memory_tb = 1500us
 STOP_TIME_v8008_mov_rr_tb = 3000us
 STOP_TIME_v8008_lrm_tb = 3000us
@@ -242,6 +243,12 @@ test-v8008-mvi-m:
 test-v8008-inp:
 	@$(MAKE) sim TEST=v8008_inp_tb
 
+test-v8008-out:
+	@$(MAKE) sim TEST=v8008_out_tb
+
+test-v8008-jmp:
+	@$(MAKE) sim TEST=v8008_jmp_tb
+
 test-v8008-alu-memory:
 	@$(MAKE) sim TEST=v8008_alu_memory_tb
 
@@ -252,7 +259,7 @@ test-v8008-LrM:
 	@$(MAKE) sim TEST=v8008_lrm_tb
 
 # Run all v8008 tests
-test-v8008: test-v8008-minimal test-v8008-registers test-v8008-instruction test-v8008-stack test-v8008-scratchpad test-v8008-interrupt test-v8008-hlt test-v8008-rst test-v8008-mvi test-v8008-mvi-m test-v8008-inp test-v8008-alu-memory test-v8008-mov-rr v8008_lrm_tb
+test-v8008: test-v8008-minimal test-v8008-registers test-v8008-instruction test-v8008-stack test-v8008-scratchpad test-v8008-interrupt test-v8008-hlt test-v8008-rst test-v8008-mvi test-v8008-mvi-m test-v8008-inp test-v8008-out test-v8008-jmp test-v8008-alu-memory test-v8008-mov-rr test-v8008-LrM
 	@echo "=========================================="
 	@echo "All v8008 tests completed successfully!"
 	@echo "==========================================="

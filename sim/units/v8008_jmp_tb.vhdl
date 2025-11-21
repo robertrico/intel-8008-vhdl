@@ -161,25 +161,31 @@ architecture behavior of v8008_jmp_tb is
         119 => x"00",  -- High address = 0x00 -> Jump to 0x0080
         120 => x"FF",  -- HLT (should never reach)
 
-        -- Jump target at 0x0080: Set marker A=0x88 (overwrite previous)
+        -- Jump target at 0x0080: Set marker A=0x88, then jump to Test 9
         128 => x"06",  -- MVI A, 0x88
         129 => x"88",
+        130 => x"44",  -- JMP to Test 9 (to avoid A getting overwritten)
+        131 => x"86",  -- Low address = 0x86
+        132 => x"00",  -- High address = 0x00 -> Jump to 0x0086
 
-        -- Test 9: Test conditional NOT taken (JTC with carry=0)
-        130 => x"06",  -- MVI A, 0x01
-        131 => x"01",
-        132 => x"04",  -- ADI 0x01 (carry = 0)
-        133 => x"01",
-        134 => x"60",  -- JTC (should NOT jump, carry = 0)
-        135 => x"FF",  -- Low address (ignored)
-        136 => x"FF",  -- High address (ignored)
-        137 => x"0E",  -- MVI B, 0x99 (should reach here)
-        138 => x"99",
+        -- Padding (was part of Test 9 setup, now unused)
+        133 => x"FF",  -- (unused)
 
-        -- Test 10: Backward jump (0x008B -> 0x0095)
-        139 => x"44",  -- JMP (unconditional)
-        140 => x"95",  -- Low address = 0x95
-        141 => x"00",  -- High address = 0x00 -> Jump to 0x0095
+        -- Test 9: Test conditional NOT taken (JTC with carry=0) - NOW AT 0x0086
+        134 => x"06",  -- MVI A, 0x01  (offset 134 = 0x86)
+        135 => x"01",
+        136 => x"04",  -- ADI 0x01 (carry = 0)
+        137 => x"01",
+        138 => x"60",  -- JTC (should NOT jump, carry = 0)
+        139 => x"FF",  -- Low address (ignored)
+        140 => x"FF",  -- High address (ignored)
+        141 => x"0E",  -- MVI B, 0x99 (should reach here)
+        142 => x"99",
+
+        -- Test 10: Backward jump (0x008D -> 0x0095)
+        143 => x"44",  -- JMP (unconditional)  (offset 143 = 0x8F)
+        144 => x"95",  -- Low address = 0x95
+        145 => x"00",  -- High address = 0x00 -> Jump to 0x0095
 
         -- Jump target at 0x0095: Set marker C=0xAA, then HLT
         149 => x"16",  -- MVI C, 0xAA
@@ -270,7 +276,7 @@ begin
         -- Check all register values (markers from successful jumps)
         report "========================================";
         report "Final register values:";
-        report "  A = 0x" & to_hstring(debug_reg_A) & " (expected 0x88)";
+        report "  A = 0x" & to_hstring(debug_reg_A) & " (expected 0x02)";
         report "  B = 0x" & to_hstring(debug_reg_B) & " (expected 0x99)";
         report "  C = 0x" & to_hstring(debug_reg_C) & " (expected 0xAA)";
         report "  D = 0x" & to_hstring(debug_reg_D) & " (expected 0x44)";
@@ -281,12 +287,12 @@ begin
         report "========================================";
 
         -- Verify markers (each successful jump sets a unique marker)
-        if debug_reg_A /= x"88" then
-            report "ERROR: Test marker A failed - A = 0x" & to_hstring(debug_reg_A) & ", expected 0x88"
+        if debug_reg_A /= x"02" then
+            report "ERROR: Test marker A failed - A = 0x" & to_hstring(debug_reg_A) & ", expected 0x02"
                 severity error;
             errors := errors + 1;
         else
-            report "PASS: JMP/JFS tests - marker A correct";
+            report "PASS: JMP/JFS/Test 9 - marker A correct";
         end if;
 
         if debug_reg_B /= x"99" then

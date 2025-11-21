@@ -440,8 +440,8 @@ architecture rtl of v8008 is
                 if opcode(5 downto 4) = "00" and opcode(0) = '1' then
                     result.is_inp := true;
 
-                -- OUT: 01 RRM MM0 (RR ≠ 00, and not 000 which is conditional jump)
-                elsif opcode(2 downto 0) /= "000" and opcode(0) = '0' and opcode(5 downto 4) /= "00" then
+                -- OUT: 01 RRM MM1 (RR ≠ 00)
+                elsif opcode(0) = '1' and opcode(5 downto 4) /= "00" then
                     result.is_out := true;
 
                 -- JMP unconditional: 01 XXX 100
@@ -611,6 +611,8 @@ architecture rtl of v8008 is
                         decoded := decode_instruction(instr);
                         report "T3 decode: instr=0x" & to_hstring(instr) &
                                ", is_mvi=" & boolean'image(decoded.is_mvi) &
+                               ", is_inp=" & boolean'image(decoded.is_inp) &
+                               ", is_out=" & boolean'image(decoded.is_out) &
                                ", is_alu_imm=" & boolean'image(decoded.is_alu_imm);
 
                         -- Determine next_state and return minimal microcode
@@ -686,7 +688,35 @@ architecture rtl of v8008 is
                                 flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
-                        elsif decoded.is_mvi or decoded.is_inp or decoded.is_alu_imm or decoded.is_jmp or decoded.is_jmp_conditional then
+                        elsif decoded.is_inp or decoded.is_out then
+                            -- I/O instructions: INP and OUT
+                            -- Next cycle is I/O operation (CYCLE_PCC)
+                            -- PC increment happens here during Cycle 0 T3 sub_phase=1
+                            return (
+                                next_state => T1,
+                                advance_state => true,
+                                new_cycle => true,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCC
+                            );
+                        elsif decoded.is_mvi or decoded.is_alu_imm or decoded.is_jmp or decoded.is_jmp_conditional then
+                            -- Multi-byte instructions: MVI, ALU_IMM, JMP
+                            -- Next cycle fetches next byte (CYCLE_PCI)
                             return (
                                 next_state => T1,
                                 advance_state => true,
@@ -984,7 +1014,38 @@ architecture rtl of v8008 is
                             load_temp_b => true,             -- Save instruction in temp_b
                             temp_a_source => "00",
                             temp_b_source => "01",           -- temp_b = data_bus (instruction)
-                            pc_inc => true,                  -- Increment PC to next instruction
+                            pc_inc => false,                 -- PC increment happens in sub_phase=1 handler
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCC     -- Next cycle is I/O (PCC)
+                        );
+
+                    -- ========== OUT (Output to Port) ==========
+                    -- OUT: 01 RRM MM0 (RR ≠ 00)
+                    -- 2-cycle instruction: fetch opcode, perform I/O write
+                    -- RRMMM bits specify which of 24 output ports (0-23)
+                    -- Port address uses bits [5:1] with RR ≠ 00
+                    elsif decoded.is_out then
+                        -- Start I/O write cycle
+                        report "OUT handler executing! Setting next_cycle_type=CYCLE_PCC";
+                        return (
+                            next_state => T1,                -- Will be overridden by interrupt logic
+                        advance_state => (sub_phase = 1),
+                            new_cycle => true,               -- Start cycle 1 for I/O operation
+                            instruction_complete => false,   -- Not complete yet (need cycle 1)
+                            load_ir => true,                 -- Load instruction register
+                            load_temp_a => false,
+                            load_temp_b => true,             -- Save instruction in temp_b (port address)
+                            temp_a_source => "00",
+                            temp_b_source => "01",           -- temp_b = data_bus (instruction)
+                            pc_inc => false,                 -- PC increment happens in sub_phase=1 handler
                             pc_load_high => false,
                             pc_load_low => false,
                             stack_push => false,
@@ -1756,6 +1817,57 @@ architecture rtl of v8008 is
                                 next_cycle_type => CYCLE_PCI     -- Fetching low address byte from PC
                             );
                         end if;
+                    elsif decoded.is_out then
+                        -- OUT: Cycle 1 T1 - Output accumulator to data bus
+                        if sub_phase = 0 then
+                            -- OUT Cycle 1 T1 φ₁₁/φ₂₁: Setup
+                            return (
+                                next_state => T2,
+                                advance_state => false,          -- Stay in T1 for second sub-phase
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => true,                -- Read accumulator
+                                reg_target => "000",
+                                reg_source => "00",              -- Source = A (accumulator)
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCC     -- I/O cycle
+                            );
+                        else  -- sub_phase = 1
+                            -- OUT Cycle 1 T1 φ₁₂/φ₂₂: Advance to T2
+                            return (
+                                next_state => T2,
+                                advance_state => true,           -- Advance to T2
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,                 -- PC already incremented in Cycle 0 T3
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => true,                -- Continue reading accumulator for output
+                                reg_target => "000",
+                                reg_source => "00",              -- Source = A (accumulator)
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCC     -- I/O cycle
+                            );
+                        end if;
                     else
                         if sub_phase = 0 then
                             -- Default Cycle 1 T1 φ₁₁/φ₂₁: Setup
@@ -1813,7 +1925,32 @@ architecture rtl of v8008 is
                     -- Decode instruction to determine address source
                     decoded := decode_instruction(instr);
 
-                    if decoded.is_alu_memory or (decoded.is_mov and decoded.is_memory_source) then
+                    if decoded.is_out then
+                        -- OUT: Output port address from temp_b
+                        -- temp_b contains the OUT instruction opcode with RRMMM bits [5:1]
+                        return (
+                            next_state => T3,
+                        advance_state => true,
+                            new_cycle => false,
+                            instruction_complete => false,
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCC  -- I/O cycle
+                        );
+                    elsif decoded.is_alu_memory or (decoded.is_mov and decoded.is_memory_source) then
                         -- ALU M or LrM: Output H register (HL address high byte)
                         return (
                             next_state => T3,
@@ -1917,6 +2054,32 @@ architecture rtl of v8008 is
                             reg_source => "00",
                             flags_update => false,
                             next_cycle_type => CYCLE_PCC    -- Still in I/O cycle
+                        );
+
+                    elsif decoded.is_out then  -- OUT instruction
+                        -- Cycle 1 T3: IDLE state waiting for READY signal
+                        -- After READY, instruction is complete
+                        return (
+                            next_state => T1,               -- Return to T1 for next instruction
+                        advance_state => (sub_phase = 1),
+                            new_cycle => false,             -- Don't advance cycle (instruction complete)
+                            instruction_complete => true,   -- OUT instruction complete
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,                -- PC already incremented in cycle 0
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI    -- Next cycle is instruction fetch
                         );
 
                     elsif decoded.is_alu_imm then  -- ALU Immediate instructions
@@ -3064,7 +3227,9 @@ begin
                 if ucode.new_cycle then
                     current_cycle <= current_cycle + 1;
                     cycle_type <= ucode.next_cycle_type;
-                    report "Cycle advance: " & integer'image(current_cycle) & " -> " & integer'image(current_cycle + 1) & ", instr=0x" & to_hstring(instruction_reg);
+                    report "Cycle advance: " & integer'image(current_cycle) & " -> " & integer'image(current_cycle + 1) &
+                           ", instr=0x" & to_hstring(instruction_reg) &
+                           ", next_cycle_type=" & to_string(ucode.next_cycle_type);
                 elsif ucode.instruction_complete then
                     current_cycle <= 0;
                     cycle_type <= ucode.next_cycle_type;  -- Reset to next cycle type (usually PCI)
@@ -3334,15 +3499,31 @@ begin
     data_bus_output: process(timing_state, pc, cycle_type, current_cycle, instruction_reg,
                            hl_address, temp_a, temp_b, registers)
     begin
+        -- Debug: Log when we're in Cycle 1
+        if current_cycle = 1 and (timing_state = T1 or timing_state = T2) then
+            report "data_bus_output: cycle=" & integer'image(current_cycle) &
+                   ", cycle_type=" & to_string(cycle_type) &
+                   ", instr=" & to_hstring(instruction_reg);
+        end if;
+
         case timing_state is
             when T1 | T1I =>
                 -- T1/T1I: Output lower 8 bits of address
-                -- Special case: INP instruction Cycle 1 T1 outputs accumulator
+                -- Special case: INP/OUT instruction Cycle 1 T1 outputs accumulator
                 if current_cycle = 1 and cycle_type = CYCLE_PCC and
                    (instruction_reg(7 downto 6) = "01" and
                     instruction_reg(5 downto 4) = "00" and
                     instruction_reg(0) = '1') then  -- INP instruction
                     -- Output accumulator value for I/O cycle
+                    data_bus_out <= registers(REG_A_DATA);
+                elsif current_cycle = 1 and cycle_type = CYCLE_PCC and
+                   (instruction_reg(7 downto 6) = "01" and
+                    instruction_reg(0) = '1' and
+                    instruction_reg(5 downto 4) /= "00") then  -- OUT instruction
+                    -- Output accumulator value for I/O write cycle
+                    report "data_bus_output T1: OUT detected! cycle=" & integer'image(current_cycle) &
+                           ", cycle_type=" & to_string(cycle_type) & ", instr=" & to_hstring(instruction_reg) &
+                           ", A=" & to_hstring(registers(REG_A_DATA));
                     data_bus_out <= registers(REG_A_DATA);
                 -- Check if this is a memory write cycle for MVI M
                 elsif current_cycle = 2 and instruction_reg = "00111110" then
@@ -3356,12 +3537,21 @@ begin
                 
             when T2 =>
                 -- T2: Output cycle type (D7:D6) and upper address (D5:D0)
-                -- Special case: INP instruction Cycle 1 T2 outputs instruction (for I/O decode)
+                -- Special case: INP/OUT instruction Cycle 1 T2 outputs instruction (for I/O decode)
                 if current_cycle = 1 and cycle_type = CYCLE_PCC and
                    (instruction_reg(7 downto 6) = "01" and
                     instruction_reg(5 downto 4) = "00" and
                     instruction_reg(0) = '1') then  -- INP instruction
                     -- Output instruction from temp_b (contains INP opcode with MMM bits)
+                    data_bus_out <= temp_b;
+                elsif current_cycle = 1 and cycle_type = CYCLE_PCC and
+                   (instruction_reg(7 downto 6) = "01" and
+                    instruction_reg(0) = '1' and
+                    instruction_reg(5 downto 4) /= "00") then  -- OUT instruction
+                    -- Output instruction from temp_b (contains OUT opcode with RRMMM bits [5:1])
+                    report "data_bus_output T2: OUT detected! cycle=" & integer'image(current_cycle) &
+                           ", cycle_type=" & to_string(cycle_type) & ", instr=" & to_hstring(instruction_reg) &
+                           ", temp_b=" & to_hstring(temp_b);
                     data_bus_out <= temp_b;
                 -- Check if this is a memory write cycle for MVI M
                 elsif current_cycle = 2 and instruction_reg = "00111110" then
