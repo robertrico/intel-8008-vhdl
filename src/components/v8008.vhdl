@@ -299,6 +299,7 @@ architecture rtl of v8008 is
         is_alu_imm      : boolean;  -- ALU with immediate operand (00 PPP 100)
         is_jmp : boolean;   -- JMP unconditional (01 XXX 100)
         is_jmp_conditional : boolean;  -- Conditional JMP (01 CCC 000)
+        is_call : boolean;  -- CALL unconditional (01 XXX 110)
         is_inr : boolean;   -- INR instruction (00 DDD 000, DDD ≠ 000)
         is_dcr : boolean;   -- DCR instruction (00 DDD 001, DDD ≠ 000)
         is_rotate : boolean;  -- Rotate instruction (00 FFF 010, FFF = 000-011)
@@ -389,6 +390,7 @@ architecture rtl of v8008 is
         result.is_alu_imm := false;
         result.is_jmp := false;
         result.is_jmp_conditional := false;
+        result.is_call := false;
         result.is_inr := false;
         result.is_dcr := false;
         result.is_rotate := false;
@@ -471,8 +473,13 @@ architecture rtl of v8008 is
                     result.is_immediate := true;  -- 3-byte instruction
                     report "Decoder: Recognized conditional JMP for opcode 0x" & to_hstring(opcode) & ", CCC=" & to_string(opcode(5 downto 3));
 
+                -- CALL unconditional: 01 XXX 110
+                elsif opcode(2 downto 0) = "110" then
+                    result.is_call := true;
+                    result.is_immediate := true;  -- 3-byte instruction (opcode + 2 address bytes)
+                    report "Decoder: Recognized CALL for opcode 0x" & to_hstring(opcode);
+
                 -- More CLASS_01 instructions can be added here:
-                -- CALL: 01 XXX 110
                 -- Conditional CALL: 01 CCC 010
 
                 end if;
@@ -729,8 +736,8 @@ architecture rtl of v8008 is
                                 flags_update => false,
                                 next_cycle_type => CYCLE_PCC
                             );
-                        elsif decoded.is_mvi or decoded.is_alu_imm or decoded.is_jmp or decoded.is_jmp_conditional then
-                            -- Multi-byte instructions: MVI, ALU_IMM, JMP
+                        elsif decoded.is_mvi or decoded.is_alu_imm or decoded.is_jmp or decoded.is_jmp_conditional or decoded.is_call then
+                            -- Multi-byte instructions: MVI, ALU_IMM, JMP, CALL
                             -- Next cycle fetches next byte (CYCLE_PCI)
                             return (
                                 next_state => T1,
@@ -1052,6 +1059,37 @@ architecture rtl of v8008 is
                             temp_a_source => "00",
                             temp_b_source => "01",           -- temp_b = instruction
                             pc_inc => false,                 -- Don't increment yet
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI     -- Next cycle fetches low address byte
+                        );
+
+                    -- ========== CALL (Unconditional Call) ==========
+                    -- CALL: 01 XXX 110
+                    -- 3-cycle instruction (opcode + low addr + high addr)
+                    -- Cycle 0: T1-T3 (fetch opcode, skip T4/T5)
+                    -- Cycle 1: T1-T3 (fetch low addr, skip T4/T5)
+                    -- Cycle 2: T1-T5 (fetch high addr, push PC, load new PC)
+                    elsif decoded.is_call then
+                        -- Cycle 0: Fetch instruction, skip T4/T5, advance to Cycle 1
+                        return (
+                            next_state => T1,
+                            advance_state => (sub_phase = 1),
+                            new_cycle => true,               -- Start cycle 1 to fetch low address byte
+                            instruction_complete => false,   -- Not complete (need 2 more cycles)
+                            load_ir => true,                 -- Load instruction register
+                            load_temp_a => false,
+                            load_temp_b => true,             -- Save instruction to temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",           -- temp_b = instruction
+                            pc_inc => false,                 -- Don't increment yet (happens in sub_phase=1)
                             pc_load_high => false,
                             pc_load_low => false,
                             stack_push => false,
@@ -2234,10 +2272,10 @@ architecture rtl of v8008 is
                                 next_cycle_type => CYCLE_PCW     -- Memory write to HL
                             );
                         end if;
-                    elsif decoded.is_jmp or decoded.is_jmp_conditional then
-                        -- JMP: Cycle 1 T1 - Increment PC to low address byte
+                    elsif decoded.is_jmp or decoded.is_jmp_conditional or decoded.is_call then
+                        -- JMP/CALL: Cycle 1 T1 - Increment PC to low address byte
                         if sub_phase = 0 then
-                            -- JMP Cycle 1 T1 φ₁₁/φ₂₁: Setup
+                            -- JMP/CALL Cycle 1 T1 φ₁₁/φ₂₁: Setup
                             return (
                                 next_state => T2,
                                 advance_state => false,          -- Stay in T1 for second sub-phase
@@ -2261,7 +2299,7 @@ architecture rtl of v8008 is
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
-                            -- JMP Cycle 1 T1 φ₁₂/φ₂₂: Increment PC to low address byte
+                            -- JMP/CALL Cycle 1 T1 φ₁₂/φ₂₂: Increment PC to low address byte
                             return (
                                 next_state => T2,
                                 advance_state => true,           -- Advance to T2
@@ -2668,6 +2706,31 @@ architecture rtl of v8008 is
                             temp_a_source => "00",
                             temp_b_source => "01",          -- temp_b = low address byte
                             pc_inc => false,                -- Don't increment yet
+                            pc_load_high => false,
+                            pc_load_low => false,
+                            stack_push => false,
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI    -- Next cycle fetches high address byte
+                        );
+
+                    elsif decoded.is_call then  -- CALL instruction
+                        -- Cycle 1 T3: Fetch low address byte, skip T4/T5, advance to Cycle 2
+                        return (
+                            next_state => T1,
+                            advance_state => (sub_phase = 1),
+                            new_cycle => true,              -- Start cycle 2 to fetch high address byte
+                            instruction_complete => false,  -- Not done yet
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => true,            -- Save low address byte to temp_b
+                            temp_a_source => "00",
+                            temp_b_source => "01",          -- temp_b = low address byte
+                            pc_inc => false,                -- Don't increment yet (happens in sub_phase=1)
                             pc_load_high => false,
                             pc_load_low => false,
                             stack_push => false,
@@ -3166,10 +3229,10 @@ architecture rtl of v8008 is
                                 next_cycle_type => CYCLE_PCI    -- Next: fetch next instruction
                             );
                         end if;
-                    elsif decoded.is_jmp or decoded.is_jmp_conditional then
-                        -- JMP: Cycle 2 T1 - Increment PC to high address byte
+                    elsif decoded.is_jmp or decoded.is_jmp_conditional or decoded.is_call then
+                        -- JMP/CALL: Cycle 2 T1 - Increment PC to high address byte
                         if sub_phase = 0 then
-                            -- JMP Cycle 2 T1 φ₁₁/φ₂₁: Setup
+                            -- JMP/CALL Cycle 2 T1 φ₁₁/φ₂₁: Setup
                             return (
                                 next_state => T2,
                                 advance_state => false,          -- Stay in T1 for second sub-phase
@@ -3193,7 +3256,7 @@ architecture rtl of v8008 is
                                 next_cycle_type => CYCLE_PCI
                             );
                         else  -- sub_phase = 1
-                            -- JMP Cycle 2 T1 φ₁₂/φ₂₂: Increment PC to high address byte
+                            -- JMP/CALL Cycle 2 T1 φ₁₂/φ₂₂: Increment PC to high address byte
                             return (
                                 next_state => T2,
                                 advance_state => true,           -- Advance to T2
@@ -3357,6 +3420,32 @@ architecture rtl of v8008 is
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
+
+                    elsif decoded.is_call then  -- CALL instruction
+                        -- Cycle 2 T3: Fetch higher address byte, push PC to stack, proceed to T4/T5
+                        return (
+                            next_state => T4,               -- Continue to T4 for PC loading
+                            advance_state => (sub_phase = 1),
+                            new_cycle => false,
+                            instruction_complete => false,  -- Not done yet, need T4 & T5
+                            load_ir => false,
+                            load_temp_a => true,            -- Load high address byte to temp_a (Reg.a)
+                            load_temp_b => false,           -- temp_b already has low address byte
+                            temp_a_source => "01",          -- temp_a = data_bus (high address byte)
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => false,          -- PC load happens in T4 & T5
+                            pc_load_low => false,
+                            stack_push => true,             -- Push current PC to stack before we overwrite it
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI
+                        );
+
                     else
                         -- Default for unknown instructions in cycle 2
                         return DEFAULT_UCODE;
@@ -3391,6 +3480,33 @@ architecture rtl of v8008 is
                             flags_update => false,
                             next_cycle_type => CYCLE_PCI
                         );
+
+                    elsif decoded.is_call then  -- CALL instruction
+                        -- Cycle 2 T4: Reg.a (temp_a) to PCH
+                        -- Load PC high byte from temp_a[5:0] (14-bit addressing)
+                        return (
+                            next_state => T5,
+                            advance_state => true,
+                            new_cycle => false,
+                            instruction_complete => false,  -- Not done yet, need T5
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => true,           -- Load PC[13:8] from temp_a[5:0]
+                            pc_load_low => false,
+                            stack_push => false,            -- Stack already pushed in T3
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI
+                        );
+
                     else
                         return DEFAULT_UCODE;  -- TODO: implement for other instructions
                     end if;
@@ -3424,6 +3540,33 @@ architecture rtl of v8008 is
                             flags_update => false,
                             next_cycle_type => CYCLE_PCI    -- Next cycle fetches from new PC address
                         );
+
+                    elsif decoded.is_call then  -- CALL instruction
+                        -- Cycle 2 T5: Reg.b (temp_b) to PCL
+                        -- Load PC low byte from temp_b[7:0]
+                        return (
+                            next_state => T1,               -- Will be overridden by interrupt logic
+                            advance_state => true,
+                            new_cycle => false,
+                            instruction_complete => true,   -- CALL complete!
+                            load_ir => false,
+                            load_temp_a => false,
+                            load_temp_b => false,
+                            temp_a_source => "00",
+                            temp_b_source => "00",
+                            pc_inc => false,
+                            pc_load_high => false,          -- Already loaded in T4
+                            pc_load_low => true,            -- Load PC[7:0] from temp_b[7:0]
+                            stack_push => false,            -- Stack already pushed in T3
+                            stack_pop => false,
+                            reg_write => false,
+                            reg_read => false,
+                            reg_target => "000",
+                            reg_source => "00",
+                            flags_update => false,
+                            next_cycle_type => CYCLE_PCI    -- Next cycle fetches from new PC address
+                        );
+
                     else
                         return DEFAULT_UCODE;  -- TODO: implement for other instructions
                     end if;
@@ -3657,16 +3800,20 @@ begin
             end if;
             
             -- Stack control
-            if ucode.stack_push then
+            -- Only push/pop when advance_state is true to avoid double operations
+            if ucode.stack_push and ucode.advance_state then
                 -- Save current PC to stack and increment pointer
                 address_stack(to_integer(stack_pointer)) <= pc;
                 stack_pointer <= stack_pointer + 1;
-                report "Microcode: Pushing PC to stack";
+                report "Microcode: Pushing PC to stack, SP: " & integer'image(to_integer(stack_pointer)) &
+                       " -> " & integer'image(to_integer(stack_pointer + 1));
             end if;
             
-            if ucode.stack_pop then
+            if ucode.stack_pop and ucode.advance_state then
                 -- Decrement pointer and restore PC
                 stack_pointer <= stack_pointer - 1;
+                report "Microcode: Popping from stack, SP: " & integer'image(to_integer(stack_pointer)) &
+                       " -> " & integer'image(to_integer(stack_pointer - 1));
                 -- PC will be loaded from stack on next cycle
             end if;
 
