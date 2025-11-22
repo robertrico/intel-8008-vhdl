@@ -1,0 +1,146 @@
+# ECP5-5G Versa Development Kit Constraints
+# Board: LFE5UM5G-45F-VERSA-EVN
+# Device: LFE5UM5G-45F-8BG381C
+# Project: Intel 8008 v8008_test - search.asm Test Program
+
+# ====================================================================================
+# Clock Inputs
+# ====================================================================================
+
+# 100 MHz LVDS Oscillator (X1) - General Purpose Clock
+# Bank 6 - Connects to PCLKT6_0/PCLKC6_0
+LOCATE COMP "clk" SITE "P3";
+IOBUF PORT "clk" IO_TYPE=LVDS DIFFRESISTOR=100;
+FREQUENCY PORT "clk" 100 MHz;
+
+# Internal generated clocks (phi1 and phi2 from phase_clocks module)
+# These are generated clocks derived from the 100 MHz system clock
+# phi1/phi2 run at approximately 455 kHz (100MHz / 220)
+# CRITICAL: Mark these as clocks so synthesis routes them properly
+FREQUENCY NET "phi1" 455 kHz;
+FREQUENCY NET "phi2" 455 kHz;
+
+# ====================================================================================
+# Reset (using SW3-1 switch)
+# ====================================================================================
+
+# Using SW3-1 as reset
+# SW3 switches are active-low: logic 0 when ON (arrow up), logic 1 when OFF (down)
+# rst='0' (ON/up) = normal operation, rst='1' (OFF/down) = reset active
+# Bank 7 - 1.5V
+LOCATE COMP "rst" SITE "H2";
+IOBUF PORT "rst" IO_TYPE=LVCMOS15;
+
+# ====================================================================================
+# LED Outputs - Display Accumulator Value (Active Low)
+# ====================================================================================
+
+# LEDs show debug_reg_A (accumulator) value
+# All LEDs are active low: '0' = LED ON/lit, '1' = LED OFF/dark
+
+LOCATE COMP "led_E16" SITE "E16";   # Bit 0
+IOBUF PORT "led_E16" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_D17" SITE "D17";   # Bit 1
+IOBUF PORT "led_D17" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_D18" SITE "D18";   # Bit 2
+IOBUF PORT "led_D18" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_E18" SITE "E18";   # Bit 3
+IOBUF PORT "led_E18" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_D19" SITE "D19";   # Bit 4
+IOBUF PORT "led_D19" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_E19" SITE "E19";   # Bit 5
+IOBUF PORT "led_E19" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_A20" SITE "A20";   # Bit 6
+IOBUF PORT "led_A20" IO_TYPE=LVCMOS25;
+
+LOCATE COMP "led_B20" SITE "B20";   # Bit 7
+IOBUF PORT "led_B20" IO_TYPE=LVCMOS25;
+
+# ====================================================================================
+# CPU Debug Header - PMOD J39 (16 pins)
+# ====================================================================================
+
+# Data Bus (D0-D7) - 8 pins
+# Using 12mA drive strength for better signal integrity on logic analyzer
+LOCATE COMP "cpu_d[0]" SITE "A12";
+IOBUF PORT "cpu_d[0]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[1]" SITE "A13";
+IOBUF PORT "cpu_d[1]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[2]" SITE "B13";
+IOBUF PORT "cpu_d[2]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[3]" SITE "C13";
+IOBUF PORT "cpu_d[3]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[4]" SITE "D13";
+IOBUF PORT "cpu_d[4]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[5]" SITE "E13";
+IOBUF PORT "cpu_d[5]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[6]" SITE "A14";
+IOBUF PORT "cpu_d[6]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[7]" SITE "C14";
+IOBUF PORT "cpu_d[7]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# Control and Status Signals - 8 pins
+LOCATE COMP "cpu_phi1" SITE "D14";
+IOBUF PORT "cpu_phi1" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_phi2" SITE "E14";
+IOBUF PORT "cpu_phi2" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_sync" SITE "D11";
+IOBUF PORT "cpu_sync" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_s0" SITE "C10";
+IOBUF PORT "cpu_s0" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_s1" SITE "A9";
+IOBUF PORT "cpu_s1" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_s2" SITE "B10";
+IOBUF PORT "cpu_s2" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_int" SITE "D12";
+IOBUF PORT "cpu_int" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_ready" SITE "E12";
+IOBUF PORT "cpu_ready" IO_TYPE=LVCMOS33;
+
+# ====================================================================================
+# Configuration
+# ====================================================================================
+
+# These apply to the entire design
+SYSCONFIG CONFIG_IOVOLTAGE=3.3 COMPRESS_CONFIG=ON MCCLK_FREQ=62;
+
+# ====================================================================================
+# Notes
+# ====================================================================================
+#
+# This constraints file provides complete pin mappings for the v8008_test project.
+#
+# Expected Behavior:
+#   - LEDs display accumulator value (search character being checked)
+#   - When search.asm finds the period '.', it halts
+#   - Final accumulator value should be 0x2E (ASCII '.')
+#   - Debug header on J39 shows real-time CPU bus activity
+#
+# Debug Header Pin Map (PMOD J39):
+#   Pin 1-8:   Data bus D[0:7]
+#   Pin 9-10:  Phase clocks φ1, φ2
+#   Pin 11:    SYNC signal
+#   Pin 12-14: State outputs S0, S1, S2
+#   Pin 15:    INT signal
+#   Pin 16:    READY signal
+#

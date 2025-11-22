@@ -44,6 +44,7 @@ entity memory_controller is
         S2        : in  std_logic;
         S1        : in  std_logic;
         S0        : in  std_logic;
+        SYNC      : in  std_logic;
 
         -- Data bus input (for address capture and write data)
         data_bus_in : in std_logic_vector(7 downto 0);
@@ -79,6 +80,9 @@ architecture rtl of memory_controller is
     signal is_t3 : std_logic;
     signal is_t4 : std_logic;
     signal is_t5 : std_logic;
+
+    -- State tracking to capture only once per T-state
+    signal last_state : std_logic_vector(2 downto 0) := "000";  -- Track previous S2S1S0
 
     -- Memory region detection
     signal rom_selected : std_logic;
@@ -125,32 +129,65 @@ begin
     ram_cs_n <= not ram_selected;
     ram_rw_n <= ram_rw_n_int;
 
-    -- Memory data output selection
+    -- Memory data output - combinational (like unit tests)
+    -- Data is immediately available from ROM/RAM based on captured address
     mem_data_out <= rom_data when rom_selected = '1' else
                     ram_data_out when ram_selected = '1' else
-                    (others => 'Z');  -- Unmapped memory debug value
+                    (others => '0');
 
-    -- Memory drives bus only during T3 of read cycles
+    -- Memory drives bus during T3 of read cycles
     mem_data_enable <= '1' when (is_t3 = '1' and is_read_cycle = '1') else '0';
 
+    -- Debug process to monitor memory accesses
+    process(is_t3, is_read_cycle, mem_addr, rom_data, ram_data_out, rom_selected, ram_selected)
+    begin
+        if is_t3 = '1' and is_read_cycle = '1' then
+            report "MEM: T3 READ addr=0x" & to_hstring(unsigned(mem_addr)) &
+                   " rom_sel=" & std_logic'image(rom_selected)(2) &
+                   " ram_sel=" & std_logic'image(ram_selected)(2) &
+                   " rom_data=0x" & to_hstring(unsigned(rom_data)) &
+                   " ram_data=0x" & to_hstring(unsigned(ram_data_out)) &
+                   " output=0x" & to_hstring(unsigned(mem_data_out));
+        end if;
+    end process;
+
     -- Address capture process
-    addr_capture: process(phi1, reset_n)
+    -- PROPER 8008 BUS PROTOCOL:
+    -- External hardware watches SYNC transitions along with S0/S1/S2
+    -- Capture on state transitions (when S2S1S0 changes)
+    addr_capture: process(SYNC, reset_n)
+        variable current_state : std_logic_vector(2 downto 0);
     begin
         if reset_n = '0' then
             addr_low_capture <= (others => '0');
             addr_high_capture <= (others => '0');
             cycle_type_capture <= "00";  -- Default to PCI (instruction fetch)
+            last_state <= "000";
 
-        elsif rising_edge(phi1) then
-            -- T1 state: Capture low address byte
-            if is_t1 = '1' then
-                addr_low_capture <= data_bus_in;
-            end if;
+        elsif rising_edge(SYNC) then
+            -- Build current state from S signals
+            current_state := S2 & S1 & S0;
 
-            -- T2 state: Capture high address and cycle type
-            if is_t2 = '1' then
-                addr_high_capture <= data_bus_in(5 downto 0);
-                cycle_type_capture <= data_bus_in(7 downto 6);
+            -- Only capture when state has changed (entering new T-state)
+            if current_state /= last_state then
+                last_state <= current_state;
+
+                -- T1 state: Capture low address byte
+                -- Per datasheet: "PCL is sent out, then PC lower byte is incremented"
+                -- We capture PCL while it's stable on the bus during T1
+                if is_t1 = '1' then
+                    addr_low_capture <= data_bus_in;
+                    report "MEM_CTRL: SYNC rising, T1 CAPTURE addr_low=0x" & to_hstring(unsigned(data_bus_in));
+                end if;
+
+                -- T2 state: Capture high address and cycle type
+                -- Per datasheet: "PCH is sent out, then incremented if carry"
+                if is_t2 = '1' then
+                    addr_high_capture <= data_bus_in(5 downto 0);
+                    cycle_type_capture <= data_bus_in(7 downto 6);
+                    report "MEM_CTRL: SYNC rising, T2 CAPTURE addr_high=0x" & to_hstring(unsigned(data_bus_in(5 downto 0))) &
+                           " cycle_type=" & to_string(data_bus_in(7 downto 6));
+                end if;
             end if;
         end if;
     end process;

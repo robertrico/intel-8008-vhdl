@@ -122,6 +122,7 @@ begin
     end process;
 
     -- Drive bus during T1I or during T2 that follows T1I
+    -- Combinational for immediate response
     int_data_enable <= is_t1i or (is_t2 and in_int_ack);
 
 end architecture rtl;

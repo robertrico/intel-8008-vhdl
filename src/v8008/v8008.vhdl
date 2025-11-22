@@ -771,7 +771,7 @@ architecture rtl of v8008 is
                                 load_temp_b => false,
                                 temp_a_source => "00",
                                 temp_b_source => "00",
-                                pc_inc => false,
+                                pc_inc => true,
                                 pc_load_high => false,
                                 pc_load_low => false,
                                 stack_push => false,
@@ -4424,7 +4424,7 @@ begin
     --===========================================
     -- Output appropriate data based on state and cycle type
     data_bus_output: process(timing_state, pc, cycle_type, current_cycle, instruction_reg,
-                           hl_address, temp_a, temp_b, registers)
+                           hl_address, temp_a, temp_b, registers, in_int_ack_cycle)
     begin
         -- Debug: Log when we're in Cycle 1
         if current_cycle = 1 and (timing_state = T1 or timing_state = T2) then
@@ -4436,13 +4436,20 @@ begin
         case timing_state is
             when T1 | T1I =>
                 -- T1/T1I: Output lower 8 bits of address
+                -- IMPORTANT: During interrupt acknowledge (T1I), CPU must NOT drive bus
+                -- External interrupt controller provides RST instruction instead
+                if timing_state = T1I and in_int_ack_cycle = '1' then
+                    -- Interrupt acknowledge - don't drive bus
+                    data_bus_out <= (others => '0');
+                    data_bus_enable <= '0';
                 -- Special case: INP/OUT instruction Cycle 1 T1 outputs accumulator
-                if current_cycle = 1 and cycle_type = CYCLE_PCC and
+                elsif current_cycle = 1 and cycle_type = CYCLE_PCC and
                    (instruction_reg(7 downto 6) = "01" and
                     instruction_reg(5 downto 4) = "00" and
                     instruction_reg(0) = '1') then  -- INP instruction
                     -- Output accumulator value for I/O cycle
                     data_bus_out <= registers(REG_A_DATA);
+                    data_bus_enable <= '1';
                 elsif current_cycle = 1 and cycle_type = CYCLE_PCC and
                    (instruction_reg(7 downto 6) = "01" and
                     instruction_reg(0) = '1' and
@@ -4452,37 +4459,47 @@ begin
                            ", cycle_type=" & to_string(cycle_type) & ", instr=" & to_hstring(instruction_reg) &
                            ", A=" & to_hstring(registers(REG_A_DATA));
                     data_bus_out <= registers(REG_A_DATA);
+                    data_bus_enable <= '1';
                 -- Check if this is a memory write cycle for MVI M
                 elsif current_cycle = 2 and instruction_reg = "00111110" then
                     -- Output L register (low byte of HL address)
                     data_bus_out <= registers(REG_L_DATA);
+                    data_bus_enable <= '1';
                 -- Check if this is a memory read cycle for LrM (MOV r,M)
                 elsif current_cycle = 1 and cycle_type = CYCLE_PCR and
                    instruction_reg(7 downto 6) = "11" and
                    instruction_reg(2 downto 0) = "111" then  -- LrM: 11 DDD 111
                     -- Output L register (low byte of HL address)
                     data_bus_out <= registers(REG_L_DATA);
+                    data_bus_enable <= '1';
                 -- Check if this is a memory write cycle for LMr (MOV M,r)
                 elsif current_cycle = 1 and cycle_type = CYCLE_PCW and
                    instruction_reg(7 downto 6) = "11" and
                    instruction_reg(5 downto 3) = "111" then  -- LMr: 11 111 SSS
                     -- Output L register (low byte of HL address)
                     data_bus_out <= registers(REG_L_DATA);
+                    data_bus_enable <= '1';
                 else
                     -- Normal PC output
                     data_bus_out <= std_logic_vector(pc(7 downto 0));
+                    data_bus_enable <= '1';
                 end if;
-                data_bus_enable <= '1';
                 
             when T2 =>
                 -- T2: Output cycle type (D7:D6) and upper address (D5:D0)
+                -- IMPORTANT: During interrupt acknowledge, CPU must NOT drive bus
+                if in_int_ack_cycle = '1' then
+                    -- Interrupt acknowledge - don't drive bus
+                    data_bus_out <= (others => '0');
+                    data_bus_enable <= '0';
                 -- Special case: INP/OUT instruction Cycle 1 T2 outputs instruction (for I/O decode)
-                if current_cycle = 1 and cycle_type = CYCLE_PCC and
+                elsif current_cycle = 1 and cycle_type = CYCLE_PCC and
                    (instruction_reg(7 downto 6) = "01" and
                     instruction_reg(5 downto 4) = "00" and
                     instruction_reg(0) = '1') then  -- INP instruction
                     -- Output instruction from temp_b (contains INP opcode with MMM bits)
                     data_bus_out <= temp_b;
+                    data_bus_enable <= '1';
                 elsif current_cycle = 1 and cycle_type = CYCLE_PCC and
                    (instruction_reg(7 downto 6) = "01" and
                     instruction_reg(0) = '1' and
@@ -4492,27 +4509,31 @@ begin
                            ", cycle_type=" & to_string(cycle_type) & ", instr=" & to_hstring(instruction_reg) &
                            ", temp_b=" & to_hstring(temp_b);
                     data_bus_out <= temp_b;
+                    data_bus_enable <= '1';
                 -- Check if this is a memory write cycle for MVI M
                 elsif current_cycle = 2 and instruction_reg = "00111110" then
                     -- Output cycle type PCW and H register (high byte of HL address)
                     data_bus_out <= CYCLE_PCW & registers(REG_H_DATA)(5 downto 0);
+                    data_bus_enable <= '1';
                 -- Check if this is a memory read cycle for LrM (MOV r,M)
                 elsif current_cycle = 1 and cycle_type = CYCLE_PCR and
                    instruction_reg(7 downto 6) = "11" and
                    instruction_reg(2 downto 0) = "111" then  -- LrM: 11 DDD 111
                     -- Output cycle type PCR and H register (high byte of HL address)
                     data_bus_out <= CYCLE_PCR & registers(REG_H_DATA)(5 downto 0);
+                    data_bus_enable <= '1';
                 -- Check if this is a memory write cycle for LMr (MOV M,r)
                 elsif current_cycle = 1 and cycle_type = CYCLE_PCW and
                    instruction_reg(7 downto 6) = "11" and
                    instruction_reg(5 downto 3) = "111" then  -- LMr: 11 111 SSS
                     -- Output cycle type PCW and H register (high byte of HL address)
                     data_bus_out <= CYCLE_PCW & registers(REG_H_DATA)(5 downto 0);
+                    data_bus_enable <= '1';
                 else
                     -- Normal PC output with cycle type
                     data_bus_out <= cycle_type & std_logic_vector(pc(13 downto 8));
+                    data_bus_enable <= '1';
                 end if;
-                data_bus_enable <= '1';
                 
             when T3 =>
                 -- T3: Data transfer

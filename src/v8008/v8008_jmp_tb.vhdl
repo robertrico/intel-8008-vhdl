@@ -198,6 +198,12 @@ architecture behavior of v8008_jmp_tb is
     signal rom_addr : std_logic_vector(7 downto 0);
     signal rom_data : std_logic_vector(7 downto 0);
 
+    -- External address capture (like real hardware would do)
+    signal addr_low_capture : std_logic_vector(7 downto 0) := (others => '0');
+    signal addr_high_capture : std_logic_vector(5 downto 0) := (others => '0');
+    signal last_state : std_logic_vector(2 downto 0) := "000";
+    signal is_t1, is_t2 : std_logic;
+
 begin
 
     READY <= '1';
@@ -208,8 +214,37 @@ begin
                          debug_reg_A, debug_reg_B, debug_reg_C, debug_reg_D, debug_reg_E, debug_reg_H, debug_reg_L,
                          debug_pc, debug_flags, debug_instruction, debug_stack_pointer, debug_hl_address);
 
-    -- ROM access
-    rom_addr <= debug_pc(7 downto 0);
+    -- State detection
+    is_t1 <= '1' when (S2 = '0' and S1 = '1' and S0 = '0') else '0';
+    is_t2 <= '1' when (S2 = '1' and S1 = '0' and S0 = '0') else '0';
+
+    -- Address capture from external bus (like real hardware / memory controller)
+    -- This replaces the debug_pc shortcut
+    ADDR_CAPTURE: process(SYNC)
+        variable current_state : std_logic_vector(2 downto 0);
+    begin
+        if rising_edge(SYNC) then
+            current_state := S2 & S1 & S0;
+
+            -- Only capture when state has changed (entering new T-state)
+            if current_state /= last_state then
+                last_state <= current_state;
+
+                -- T1 state: Capture low address byte from data bus
+                if is_t1 = '1' then
+                    addr_low_capture <= data_bus_out;
+                end if;
+
+                -- T2 state: Capture high address from data bus
+                if is_t2 = '1' then
+                    addr_high_capture <= data_bus_out(5 downto 0);
+                end if;
+            end if;
+        end if;
+    end process;
+
+    -- ROM access using captured address (not debug_pc!)
+    rom_addr <= addr_low_capture;
 
     ROM_PROC: process(phi2)
     begin
