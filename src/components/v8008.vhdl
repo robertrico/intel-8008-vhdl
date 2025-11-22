@@ -300,7 +300,9 @@ architecture rtl of v8008 is
         is_jmp : boolean;   -- JMP unconditional (01 XXX 100)
         is_jmp_conditional : boolean;  -- Conditional JMP (01 CCC 000)
         is_call : boolean;  -- CALL unconditional (01 XXX 110)
+        is_call_conditional : boolean;  -- Conditional CALL (01 0CC 010 = CFc, 01 1CC 010 = CTc)
         is_ret : boolean;   -- RET unconditional (00 XXX 111)
+        is_ret_conditional : boolean;   -- Conditional RET (00 0CC 011 = RFc, 00 1CC 011 = RTc)
         is_inr : boolean;   -- INR instruction (00 DDD 000, DDD ≠ 000)
         is_dcr : boolean;   -- DCR instruction (00 DDD 001, DDD ≠ 000)
         is_rotate : boolean;  -- Rotate instruction (00 FFF 010, FFF = 000-011)
@@ -392,7 +394,9 @@ architecture rtl of v8008 is
         result.is_jmp := false;
         result.is_jmp_conditional := false;
         result.is_call := false;
+        result.is_call_conditional := false;
         result.is_ret := false;
+        result.is_ret_conditional := false;
         result.is_inr := false;
         result.is_dcr := false;
         result.is_rotate := false;
@@ -452,8 +456,13 @@ architecture rtl of v8008 is
                     result.is_ret := true;
                     report "Decoder: Recognized RET for opcode 0x" & to_hstring(opcode);
 
-                -- More CLASS_00 instructions can be added here:
-                -- Conditional RET: 00 CCC 011
+                -- Conditional RET: 00 CCC 011 (RFc and RTc)
+                -- RFc (Return if False): 00 0CC 011 (bit 5 = 0)
+                -- RTc (Return if True):  00 1CC 011 (bit 5 = 1)
+                elsif opcode(2 downto 0) = "011" then
+                    result.is_ret_conditional := true;
+                    result.is_ret := true;  -- Also set is_ret for combined checks
+                    report "Decoder: Recognized conditional RET for opcode 0x" & to_hstring(opcode) & ", CCC=" & to_string(opcode(5 downto 3));
 
                 end if;
 
@@ -486,8 +495,14 @@ architecture rtl of v8008 is
                     result.is_immediate := true;  -- 3-byte instruction (opcode + 2 address bytes)
                     report "Decoder: Recognized CALL for opcode 0x" & to_hstring(opcode);
 
-                -- More CLASS_01 instructions can be added here:
-                -- Conditional CALL: 01 CCC 010
+                -- Conditional CALL: 01 CCC 010 (CFc and CTc)
+                -- CFc (Call if False): 01 0CC 010 (bit 5 = 0)
+                -- CTc (Call if True):  01 1CC 010 (bit 5 = 1)
+                elsif opcode(2 downto 0) = "010" then
+                    result.is_call_conditional := true;
+                    result.is_call := true;  -- Also set is_call for combined checks
+                    result.is_immediate := true;  -- 3-byte instruction (opcode + 2 address bytes)
+                    report "Decoder: Recognized conditional CALL for opcode 0x" & to_hstring(opcode) & ", CCC=" & to_string(opcode(5 downto 3));
 
                 end if;
 
@@ -845,32 +860,65 @@ architecture rtl of v8008 is
                                 flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
-                        elsif decoded.is_ret then
+                        elsif decoded.is_ret or decoded.is_ret_conditional then
                             -- RET: Single-cycle 5-state instruction
-                            -- RET: 00 XXX 111 (unconditional return from subroutine)
-                            -- T3: Fetch instruction, T4: Pop stack, T5: Restore PC (idle)
-                            return (
-                                next_state => T4,
-                                advance_state => true,
-                                new_cycle => false,
-                                instruction_complete => false,
-                                load_ir => false,
-                                load_temp_a => false,
-                                load_temp_b => false,
-                                temp_a_source => "00",
-                                temp_b_source => "00",
-                                pc_inc => true,                  -- Increment PC to next instruction
-                                pc_load_high => false,
-                                pc_load_low => false,
-                                stack_push => false,
-                                stack_pop => false,
-                                reg_write => false,
-                                reg_read => false,
-                                reg_target => "000",
-                                reg_source => "00",
-                                flags_update => false,
-                                next_cycle_type => CYCLE_PCI
-                            );
+                            -- RET unconditional: 00 XXX 111
+                            -- RET conditional: 00 CCC 011 (RFc and RTc)
+                            -- T3: Fetch instruction, check condition
+                            -- If condition FALSE (for conditional): Skip T4/T5, increment PC, complete
+                            -- If condition TRUE or unconditional: T4: Pop stack, T5: Restore PC (idle)
+
+                            if decoded.is_ret_conditional and not evaluate_condition(decoded.ccc_field, cpu_flags) then
+                                -- Condition FALSE: Skip T4/T5, increment PC, complete instruction
+                                report "Conditional RET: Condition FALSE, not returning. CCC=" & to_string(decoded.ccc_field) & ", flags=" & to_string(cpu_flags);
+                                return (
+                                    next_state => T1,
+                                    advance_state => true,
+                                    new_cycle => false,
+                                    instruction_complete => true,   -- RET not taken, instruction complete
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => true,                  -- Increment PC to next instruction
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,              -- Don't pop stack (not returning)
+                                    reg_write => false,
+                                    reg_read => false,
+                                    reg_target => "000",
+                                    reg_source => "00",
+                                    flags_update => false,
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            else
+                                -- Condition TRUE or unconditional: Proceed to T4/T5
+                                report "Conditional RET: Condition TRUE, returning. CCC=" & to_string(decoded.ccc_field) & ", flags=" & to_string(cpu_flags) & ", is_conditional=" & boolean'image(decoded.is_ret_conditional);
+                                return (
+                                    next_state => T4,
+                                    advance_state => true,
+                                    new_cycle => false,
+                                    instruction_complete => false,
+                                    load_ir => false,
+                                    load_temp_a => false,
+                                    load_temp_b => false,
+                                    temp_a_source => "00",
+                                    temp_b_source => "00",
+                                    pc_inc => true,                  -- Increment PC to next instruction
+                                    pc_load_high => false,
+                                    pc_load_low => false,
+                                    stack_push => false,
+                                    stack_pop => false,
+                                    reg_write => false,
+                                    reg_read => false,
+                                    reg_target => "000",
+                                    reg_source => "00",
+                                    flags_update => false,
+                                    next_cycle_type => CYCLE_PCI
+                                );
+                            end if;
                         elsif decoded.is_mov and decoded.is_memory_source and not decoded.is_memory_dest then
                             -- MOV r,M (LrM): Load from memory [HL] to register (2-cycle)
                             -- Cycle 0 T3 sub_phase=1: Increment PC and advance to Cycle 1
@@ -1634,9 +1682,9 @@ architecture rtl of v8008 is
                         end if;
 
                     -- ========== RET (RETURN from subroutine) ==========
-                    -- Opcode: 00 XXX 111
+                    -- Opcode: 00 XXX 111 (unconditional) or 00 CCC 011 (conditional)
                     -- T4: Pop stack (decrement SP)
-                    elsif (instr(7 downto 6) = "00" and instr(2 downto 0) = "111") then
+                    elsif (instr(7 downto 6) = "00" and (instr(2 downto 0) = "111" or instr(2 downto 0) = "011")) then
                         -- RET T4: Pop stack in sub_phase=1
                         if sub_phase = 0 then
                             return (
@@ -2857,7 +2905,7 @@ architecture rtl of v8008 is
                             next_cycle_type => CYCLE_PCI    -- Next cycle fetches high address byte
                         );
 
-                    elsif decoded.is_call then  -- CALL instruction
+                    elsif decoded.is_call or decoded.is_call_conditional then  -- CALL instructions
                         -- Cycle 1 T3: Fetch low address byte, skip T4/T5, advance to Cycle 2
                         return (
                             next_state => T1,
@@ -3560,30 +3608,64 @@ architecture rtl of v8008 is
                             );
                         end if;
 
-                    elsif decoded.is_call then  -- CALL instruction
-                        -- Cycle 2 T3: Fetch higher address byte, push PC to stack, proceed to T4/T5
-                        return (
-                            next_state => T4,               -- Continue to T4 for PC loading
-                            advance_state => (sub_phase = 1),
-                            new_cycle => false,
-                            instruction_complete => false,  -- Not done yet, need T4 & T5
-                            load_ir => false,
-                            load_temp_a => true,            -- Load high address byte to temp_a (Reg.a)
-                            load_temp_b => false,           -- temp_b already has low address byte
-                            temp_a_source => "01",          -- temp_a = data_bus (high address byte)
-                            temp_b_source => "00",
-                            pc_inc => true,                 -- Increment PC to next instruction before pushing
-                            pc_load_high => false,          -- PC load happens in T4 & T5
-                            pc_load_low => false,
-                            stack_push => true,             -- Push current PC to stack before we overwrite it
-                            stack_pop => false,
-                            reg_write => false,
-                            reg_read => false,
-                            reg_target => "000",
-                            reg_source => "00",
-                            flags_update => false,
-                            next_cycle_type => CYCLE_PCI
-                        );
+                    elsif decoded.is_call or decoded.is_call_conditional then  -- CALL instructions
+                        -- Cycle 2 T3: Fetch higher address byte and evaluate condition (if conditional)
+                        -- For conditional CALL: evaluate condition
+                        --   - If TRUE: push PC to stack and proceed to T4/T5 to load PC
+                        --   - If FALSE: skip T4/T5, increment PC to next instruction (no stack push)
+                        -- For unconditional CALL: always push PC and proceed to T4/T5
+
+                        if decoded.is_call_conditional and not evaluate_condition(decoded.ccc_field, cpu_flags) then
+                            -- Condition FALSE: Skip T4/T5, increment PC to next instruction, no stack push
+                            report "Conditional CALL: Condition FALSE, skipping call. CCC=" & to_string(decoded.ccc_field) & ", flags=" & to_string(cpu_flags);
+                            return (
+                                next_state => T1,               -- Skip to next instruction
+                                advance_state => (sub_phase = 1),
+                                new_cycle => false,
+                                instruction_complete => true,   -- Instruction complete (call not taken)
+                                load_ir => false,
+                                load_temp_a => false,           -- Don't load high address byte
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                 -- Increment PC to next instruction
+                                pc_load_high => false,          -- Don't load PC (call not taken)
+                                pc_load_low => false,
+                                stack_push => false,            -- Don't push to stack (call not taken)
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else
+                            -- Condition TRUE or unconditional: Push PC and proceed to T4/T5
+                            report "Conditional CALL: Condition TRUE, taking call. CCC=" & to_string(decoded.ccc_field) & ", flags=" & to_string(cpu_flags) & ", is_conditional=" & boolean'image(decoded.is_call_conditional);
+                            return (
+                                next_state => T4,               -- Continue to T4 for PC loading
+                                advance_state => (sub_phase = 1),
+                                new_cycle => false,
+                                instruction_complete => false,  -- Not done yet, need T4 & T5
+                                load_ir => false,
+                                load_temp_a => true,            -- Load high address byte to temp_a (Reg.a)
+                                load_temp_b => false,           -- temp_b already has low address byte
+                                temp_a_source => "01",          -- temp_a = data_bus (high address byte)
+                                temp_b_source => "00",
+                                pc_inc => true,                 -- Increment PC to next instruction before pushing
+                                pc_load_high => false,          -- PC load happens in T4 & T5
+                                pc_load_low => false,
+                                stack_push => true,             -- Push current PC to stack before we overwrite it
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
 
                     else
                         -- Default for unknown instructions in cycle 2
@@ -3620,7 +3702,7 @@ architecture rtl of v8008 is
                             next_cycle_type => CYCLE_PCI
                         );
 
-                    elsif decoded.is_call then  -- CALL instruction
+                    elsif decoded.is_call or decoded.is_call_conditional then  -- CALL instructions
                         -- Cycle 2 T4: Reg.a (temp_a) to PCH
                         -- Load PC high byte from temp_a[5:0] (14-bit addressing)
                         return (
@@ -3680,7 +3762,7 @@ architecture rtl of v8008 is
                             next_cycle_type => CYCLE_PCI    -- Next cycle fetches from new PC address
                         );
 
-                    elsif decoded.is_call then  -- CALL instruction
+                    elsif decoded.is_call or decoded.is_call_conditional then  -- CALL instructions
                         -- Cycle 2 T5: Reg.b (temp_b) to PCL
                         -- Load PC low byte from temp_b[7:0]
                         return (

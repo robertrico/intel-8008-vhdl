@@ -84,6 +84,8 @@ STOP_TIME_v8008_dcr_tb = 2000us
 STOP_TIME_v8008_rotate_tb = 1200us
 STOP_TIME_v8008_call_tb = 2500us
 STOP_TIME_v8008_ret_tb = 3500us
+STOP_TIME_v8008_call_cond_tb = 3500us
+STOP_TIME_v8008_ret_cond_tb = 4000us
 
 # Get stop time for active test, or use default
 SIM_STOP_TIME ?= $(or $(STOP_TIME_$(ACTIVE_TB_ENTITY)),1ms)
@@ -290,8 +292,14 @@ test-v8008-call:
 test-v8008-ret:
 	@$(MAKE) sim TEST=v8008_ret_tb
 
+test-v8008-call-cond:
+	@$(MAKE) sim TEST=v8008_call_cond_tb
+
+test-v8008-ret-cond:
+	@$(MAKE) sim TEST=v8008_ret_cond_tb
+
 # Run all v8008 tests
-test-v8008: test-v8008-minimal test-v8008-registers test-v8008-instruction test-v8008-stack test-v8008-scratchpad test-v8008-interrupt test-v8008-hlt test-v8008-rst test-v8008-mvi test-v8008-mvi-m test-v8008-inp test-v8008-out test-v8008-jmp test-v8008-alu-memory test-v8008-alu-register test-v8008-alu-imm test-v8008-mov-rr test-v8008-LrM test-v8008-LMr test-v8008-inr test-v8008-dcr test-v8008-rotate test-v8008-call test-v8008-ret
+test-v8008: test-v8008-minimal test-v8008-registers test-v8008-instruction test-v8008-stack test-v8008-scratchpad test-v8008-interrupt test-v8008-hlt test-v8008-rst test-v8008-mvi test-v8008-mvi-m test-v8008-inp test-v8008-out test-v8008-jmp test-v8008-alu-memory test-v8008-alu-register test-v8008-alu-imm test-v8008-mov-rr test-v8008-LrM test-v8008-LMr test-v8008-inr test-v8008-dcr test-v8008-rotate test-v8008-call test-v8008-ret test-v8008-call-cond test-v8008-ret-cond
 	@echo "=========================================="
 	@echo "All v8008 tests completed successfully!"
 	@echo "==========================================="
