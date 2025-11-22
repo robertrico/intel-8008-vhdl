@@ -18,11 +18,12 @@ use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
 entity phase_clocks is
-    Port ( 
+    Port (
         clk_in : in STD_LOGIC;
         reset  : in STD_LOGIC;
         phi1   : out STD_LOGIC;
-        phi2   : out STD_LOGIC
+        phi2   : out STD_LOGIC;
+        sync   : out STD_LOGIC  -- Divide-by-two: distinguishes between two clock periods of each state
     );
 end phase_clocks;
 
@@ -51,6 +52,11 @@ architecture rtl of phase_clocks is
     -- Internal signals to avoid glitches
     signal phi1_next : std_logic;
     signal phi2_next : std_logic;
+
+    -- SYNC signal: toggles every complete phi1+phi2 cycle
+    -- High during one clock cycle, low during next clock cycle
+    -- Two clock cycles = one state
+    signal sync_toggle : std_logic := '1';
 begin
     -- Registered outputs to eliminate glitches
     process(clk_in, reset)
@@ -58,9 +64,11 @@ begin
         if reset = '1' then
             phi1 <= '1';
             phi2 <= '0';
+            sync <= '1';  -- Start with SYNC high
         elsif rising_edge(clk_in) then
             phi1 <= phi1_next;
             phi2 <= phi2_next;
+            sync <= sync_toggle;
         end if;
     end process;
 
@@ -72,6 +80,7 @@ begin
             phi1_next <= '1';
             phi2_next <= '0';
             current_phase <= PHI_1;
+            sync_toggle <= '1';  -- Start with SYNC high
         elsif rising_edge(clk_in) then
             case current_phase is
                 -- PHI1 active phase
@@ -114,6 +123,8 @@ begin
                         phi2_next <= '0';
                         current_phase <= PHI_1;
                         counter <= 0;
+                        -- Toggle SYNC at end of every complete phi1+phi2 clock cycle
+                        sync_toggle <= not sync_toggle;
                     else
                         counter <= counter + 1;
                     end if;
