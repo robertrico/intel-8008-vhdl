@@ -1,14 +1,14 @@
 -------------------------------------------------------------------------------
--- Intel 8008 v8008 CALL Instruction Test
+-- Intel 8008 v8008 RET Instruction Test
 -------------------------------------------------------------------------------
--- Test for CALL (unconditional call) instruction
--- Opcode: 01 XXX 110 (0x46, 0x4E, 0x56, 0x5E, 0x66, 0x6E, 0x76, 0x7E)
+-- Test for RET (unconditional return from subroutine) instruction
+-- Opcode: 00 XXX 111 (0x07, 0x0F, 0x17, 0x1F, 0x27, 0x2F, 0x37, 0x3F)
 --
 -- Tests:
---   - CALL forward (jump to subroutine)
---   - Verify PC is pushed to stack
---   - Verify PC is loaded with call target address
---   - Simple subroutine execution
+--   - CALL to subroutine (pushes return address)
+--   - RET from subroutine (pops return address and restores PC)
+--   - Verify PC returns to correct address after RET
+--   - Verify stack pointer decrements correctly
 -------------------------------------------------------------------------------
 
 library IEEE;
@@ -18,10 +18,10 @@ use IEEE.NUMERIC_STD.ALL;
 library work;
 use work.v8008_tb_utils.all;
 
-entity v8008_call_tb is
-end v8008_call_tb;
+entity v8008_ret_tb is
+end v8008_ret_tb;
 
-architecture behavior of v8008_call_tb is
+architecture behavior of v8008_ret_tb is
 
     component phase_clocks
         port (clk_in, reset : in std_logic; phi1, phi2 : out std_logic);
@@ -62,14 +62,14 @@ architecture behavior of v8008_call_tb is
     type rom_array_t is array (0 to 255) of std_logic_vector(7 downto 0);
     signal rom_contents : rom_array_t := (
         -- Main program starts at 0x00
-        -- Test 1: CALL to subroutine at 0x10
+        -- Test: CALL to subroutine at 0x10, then verify RET returns to 0x05
         0 => x"0E",  -- MVI B, 0x11  (marker before CALL)
         1 => x"11",
         2 => x"46",  -- CALL (01 000 110 = 0x46)
         3 => x"10",  -- Low address = 0x10
         4 => x"00",  -- High address = 0x00 -> Call to 0x0010
-        -- After CALL returns, PC should be at 0x0005
-        5 => x"16",  -- MVI C, 0x22  (marker after return)
+        -- After RET, PC should return to 0x0005
+        5 => x"16",  -- MVI C, 0x22  (marker after return from subroutine)
         6 => x"22",
         7 => x"FF",  -- HLT
 
@@ -161,8 +161,8 @@ begin
         variable errors : integer := 0;
     begin
         report "========================================";
-        report "Intel 8008 CALL Instruction Test";
-        report "Testing unconditional CALL";
+        report "Intel 8008 RET Instruction Test";
+        report "Testing unconditional RET (return from subroutine)";
         report "========================================";
 
         -- Reset
@@ -180,15 +180,15 @@ begin
 
         -- Execute test program
         report "";
-        report "Executing CALL test program:";
+        report "Executing RET test program:";
         report "  1. MVI B, 0x11 (marker before CALL)";
         report "  2. CALL 0x0010 (call subroutine, pushes return address 0x0005)";
         report "  3. Subroutine: MVI D, 0x33";
-        report "  4. RET (return from subroutine to 0x0005)";
+        report "  4. RET (pop return address and restore PC to 0x0005)";
         report "  5. MVI C, 0x22 (should execute after RET)";
 
         -- Wait for execution
-        wait for 2000 us;
+        wait for 3000 us;
 
         -- Verify results
         report "";
@@ -220,38 +220,37 @@ begin
             report "ERROR: Register C mismatch" severity warning;
             errors := errors + 1;
         else
-            report "  PASS: Register C correct (code after CALL executed)";
+            report "  PASS: Register C correct (RET returned, code after CALL executed)";
         end if;
 
-        -- Check that RET returned (PC should be back at 0x0007 after MVI C)
-        -- Note: RET is now implemented, so the subroutine returns
-        report "Final PC: 0x" & to_hstring(debug_pc) & " (expected >= 0x0007 after RET)";
+        -- Check that PC is past the return address (should be at or past 0x0007)
+        report "Final PC: 0x" & to_hstring(debug_pc) & " (should be >= 0x0007)";
         if unsigned(debug_pc) < 7 then
-            report "ERROR: PC did not return from subroutine correctly" severity warning;
+            report "ERROR: PC did not return correctly" severity warning;
             errors := errors + 1;
         else
-            report "  PASS: PC returned from subroutine (RET executed)";
+            report "  PASS: PC returned to correct location after RET";
         end if;
 
-        -- Check stack pointer (should be back to 0 after RET pops the return address)
+        -- Check stack pointer (should be back to 0 after RET)
         report "Stack Pointer: " & integer'image(to_integer(unsigned(debug_stack_pointer))) & " (expected 0)";
         if debug_stack_pointer /= "000" then
             report "ERROR: Stack pointer mismatch" severity warning;
             errors := errors + 1;
         else
-            report "  PASS: Stack pointer correct (RET popped return address)";
+            report "  PASS: Stack pointer correct (return address popped)";
         end if;
 
         -- Test summary
         report "";
         report "========================================";
         if errors = 0 then
-            report "*** ALL CALL/RET TESTS PASSED ***";
+            report "*** ALL RET TESTS PASSED ***";
             report "  - CALL execution: PASS";
             report "  - Subroutine entry: PASS";
-            report "  - Stack push: PASS";
             report "  - RET execution: PASS";
             report "  - Return to caller: PASS";
+            report "  - Stack management: PASS";
         else
             report "*** TESTS FAILED: " & integer'image(errors) & " errors ***" severity error;
         end if;

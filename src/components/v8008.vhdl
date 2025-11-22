@@ -300,6 +300,7 @@ architecture rtl of v8008 is
         is_jmp : boolean;   -- JMP unconditional (01 XXX 100)
         is_jmp_conditional : boolean;  -- Conditional JMP (01 CCC 000)
         is_call : boolean;  -- CALL unconditional (01 XXX 110)
+        is_ret : boolean;   -- RET unconditional (00 XXX 111)
         is_inr : boolean;   -- INR instruction (00 DDD 000, DDD ≠ 000)
         is_dcr : boolean;   -- DCR instruction (00 DDD 001, DDD ≠ 000)
         is_rotate : boolean;  -- Rotate instruction (00 FFF 010, FFF = 000-011)
@@ -391,6 +392,7 @@ architecture rtl of v8008 is
         result.is_jmp := false;
         result.is_jmp_conditional := false;
         result.is_call := false;
+        result.is_ret := false;
         result.is_inr := false;
         result.is_dcr := false;
         result.is_rotate := false;
@@ -445,8 +447,13 @@ architecture rtl of v8008 is
                 elsif opcode(2 downto 0) = "010" and opcode(5) = '0' then
                     result.is_rotate := true;
 
+                -- RET unconditional: 00 XXX 111
+                elsif opcode(2 downto 0) = "111" then
+                    result.is_ret := true;
+                    report "Decoder: Recognized RET for opcode 0x" & to_hstring(opcode);
+
                 -- More CLASS_00 instructions can be added here:
-                -- RET: 00 XXX 111, 00 CCC 011
+                -- Conditional RET: 00 CCC 011
 
                 end if;
 
@@ -675,7 +682,7 @@ architecture rtl of v8008 is
                                 pc_inc => false,
                                 pc_load_high => false,
                                 pc_load_low => false,
-                                stack_push => false,
+                                stack_push => true,            -- Push PC to stack before jumping to vector
                                 stack_pop => false,
                                 reg_write => false,
                                 reg_read => false,
@@ -816,6 +823,32 @@ architecture rtl of v8008 is
                             -- INR: 00 DDD 000 (DDD ≠ 000), DCR: 00 DDD 001 (DDD ≠ 000)
                             -- ROTATE: 00 FFF 010 (FFF = 000-011: RLC, RRC, RAL, RAR)
                             -- T3: Fetch instruction, T4: IDLE, T5: Execute operation and update flags
+                            return (
+                                next_state => T4,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => true,                  -- Increment PC to next instruction
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        elsif decoded.is_ret then
+                            -- RET: Single-cycle 5-state instruction
+                            -- RET: 00 XXX 111 (unconditional return from subroutine)
+                            -- T3: Fetch instruction, T4: Pop stack, T5: Restore PC (idle)
                             return (
                                 next_state => T4,
                                 advance_state => true,
@@ -1600,6 +1633,59 @@ architecture rtl of v8008 is
                             );
                         end if;
 
+                    -- ========== RET (RETURN from subroutine) ==========
+                    -- Opcode: 00 XXX 111
+                    -- T4: Pop stack (decrement SP)
+                    elsif (instr(7 downto 6) = "00" and instr(2 downto 0) = "111") then
+                        -- RET T4: Pop stack in sub_phase=1
+                        if sub_phase = 0 then
+                            return (
+                                next_state => T5,
+                                advance_state => false,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            return (
+                                next_state => T5,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => true,               -- Pop stack (decrements SP)
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
                     else
                         -- Should not reach here - only instructions that need T4 should get here
                         return DEFAULT_UCODE;
@@ -1984,6 +2070,59 @@ architecture rtl of v8008 is
                                 reg_target => "000",             -- Register A (accumulator)
                                 reg_source => "10",              -- reg_source = ALU result (rotate uses ALU)
                                 flags_update => true,            -- Update carry flag only
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        end if;
+
+                    -- ========== RET (RETURN from subroutine) ==========
+                    -- T5: Restore PC from stack (IDLE state per spec)
+                    elsif decoded.is_ret then
+                        if sub_phase = 0 then
+                            return (
+                                next_state => T1,
+                                advance_state => false,
+                                new_cycle => false,
+                                instruction_complete => false,
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
+                                next_cycle_type => CYCLE_PCI
+                            );
+                        else  -- sub_phase = 1
+                            -- RET T5: Restore PC from stack (stack was popped in T4)
+                            -- Load PC from address_stack(stack_pointer) since SP was decremented in T4
+                            return (
+                                next_state => T1,
+                                advance_state => true,
+                                new_cycle => false,
+                                instruction_complete => true,      -- RET complete
+                                load_ir => false,
+                                load_temp_a => false,
+                                load_temp_b => false,
+                                temp_a_source => "00",
+                                temp_b_source => "00",
+                                pc_inc => false,
+                                pc_load_high => false,
+                                pc_load_low => false,
+                                stack_push => false,
+                                stack_pop => false,
+                                reg_write => false,
+                                reg_read => false,
+                                reg_target => "000",
+                                reg_source => "00",
+                                flags_update => false,
                                 next_cycle_type => CYCLE_PCI
                             );
                         end if;
@@ -3433,7 +3572,7 @@ architecture rtl of v8008 is
                             load_temp_b => false,           -- temp_b already has low address byte
                             temp_a_source => "01",          -- temp_a = data_bus (high address byte)
                             temp_b_source => "00",
-                            pc_inc => false,
+                            pc_inc => true,                 -- Increment PC to next instruction before pushing
                             pc_load_high => false,          -- PC load happens in T4 & T5
                             pc_load_low => false,
                             stack_push => true,             -- Push current PC to stack before we overwrite it
@@ -3803,18 +3942,29 @@ begin
             -- Only push/pop when advance_state is true to avoid double operations
             if ucode.stack_push and ucode.advance_state then
                 -- Save current PC to stack and increment pointer
-                address_stack(to_integer(stack_pointer)) <= pc;
+                -- If pc_inc is also true, push the incremented value
+                if ucode.pc_inc then
+                    address_stack(to_integer(stack_pointer)) <= pc + 1;
+                    report "Microcode: Pushing PC+1 to stack, SP: " & integer'image(to_integer(stack_pointer)) &
+                           " -> " & integer'image(to_integer(stack_pointer + 1)) &
+                           ", PC+1=0x" & to_hstring(pc + 1);
+                else
+                    address_stack(to_integer(stack_pointer)) <= pc;
+                    report "Microcode: Pushing PC to stack, SP: " & integer'image(to_integer(stack_pointer)) &
+                           " -> " & integer'image(to_integer(stack_pointer + 1));
+                end if;
                 stack_pointer <= stack_pointer + 1;
-                report "Microcode: Pushing PC to stack, SP: " & integer'image(to_integer(stack_pointer)) &
-                       " -> " & integer'image(to_integer(stack_pointer + 1));
             end if;
             
             if ucode.stack_pop and ucode.advance_state then
-                -- Decrement pointer and restore PC
+                -- Decrement pointer and restore PC from stack
                 stack_pointer <= stack_pointer - 1;
+                -- Load PC from the location we're popping (after decrement)
+                pc <= address_stack(to_integer(stack_pointer - 1));
                 report "Microcode: Popping from stack, SP: " & integer'image(to_integer(stack_pointer)) &
-                       " -> " & integer'image(to_integer(stack_pointer - 1));
-                -- PC will be loaded from stack on next cycle
+                       " -> " & integer'image(to_integer(stack_pointer - 1)) &
+                       ", restoring PC from stack[" & integer'image(to_integer(stack_pointer - 1)) & "] = 0x" &
+                       to_hstring(address_stack(to_integer(stack_pointer - 1)));
             end if;
 
             -- Register control
