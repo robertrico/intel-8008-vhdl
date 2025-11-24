@@ -1,0 +1,1167 @@
+{
+    "name":"Intel 8008 Instruction Set Details",
+    "schema": {
+        "instructions": {
+            "operation": "string",
+            "coding": {
+                "D7": "0|1|D|S|C|R|P|A|M|X",
+                "D6": "0|1|D|S|C|R|P|A|M|X",
+                "D5": "0|1|D|S|C|R|P|A|M|X",
+                "D4": "0|1|D|S|C|R|P|A|M|X",
+                "D3": "0|1|D|S|C|R|P|A|M|X",
+                "D2": "0|1|D|S|C|R|P|A|M|X",
+                "D1": "0|1|D|S|C|R|P|A|M|X",
+                "D0": "0|1|D|S|C|R|P|A|M|X"
+            },
+            "D[7:0]": "string",
+            "num_states_execution": "integer",
+            "num_cycles": "integer",
+            "cycle_1": {
+                "T1": "string",
+                "T2": "string",
+                "T3": "string",
+                "T4": "string",
+                "T5": "string",
+                "skip": "boolean"
+            },
+            "cycle_2": {
+                "T1": "string",
+                "T2": "string",
+                "T3": "string",
+                "T4": "string",
+                "T5": "string",
+                "skip": "boolean"
+            },
+            "cycle_3": {
+                "T1": "string",
+                "T2": "string",
+                "T3": "string",
+                "T4": "string",
+                "T5": "string",
+                "skip": "boolean"
+            }
+        }
+    },
+    "instructions": [
+        {
+            "operation": "Lr_1r_2",
+            "D[7:0]": "11DDDDSS",
+            "coding": {
+                "D7": "1",
+                "D6": "1",
+                "D5": "D",
+                "D4": "D",
+                "D3": "D",
+                "D2": "S",
+                "D1": "S",
+                "D0": "S"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "SSS TO REG. b",
+                "T5": "REG. b TO DDD",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "LrM",
+            "D[7:0]": "11DDD111",
+            "coding": {
+                "D7": "1",
+                "D6": "1",
+                "D5": "D",
+                "D4": "D",
+                "D3": "D",
+                "D2": "1",
+                "D1": "1",
+                "D0": "1"
+            },
+            "num_states_execution": 8,
+            "num_cycles": 2,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "REG. L OUT",
+                "T2": "REG. H OUT",
+                "T3": "DATA TO REG.b",
+                "T4": "X",
+                "T5": "REG.b TO DDD",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "LMr",
+            "D[7:0]": "11111SSS",
+            "coding": {
+                "D7": "1",
+                "D6": "1",
+                "D5": "1",
+                "D4": "1",
+                "D3": "1",
+                "D2": "S",
+                "D1": "S",
+                "D0": "S"
+            },
+            "num_states_execution": 7,
+            "num_cycles": 2,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "SSS TO REG.b",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "REG. L OUT",
+                "T2": "REG. H OUT",
+                "T3": "REG.b TO OUT",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "LMI",
+            "D[7:0]": "00111110",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "1",
+                "D4": "1",
+                "D3": "1",
+                "D2": "1",
+                "D1": "1",
+                "D0": "0"
+            },
+            "num_states_execution": 9,
+            "num_cycles": 3,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "DATA TO REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "REG. L OUT",
+                "T2": "REG. H OUT",
+                "T3": "REG.b TO OUT",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            }
+        },
+        {
+            "operation": "LrI",
+            "D[7:0]": "00DDD110",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "D",
+                "D4": "D",
+                "D3": "D",
+                "D2": "1",
+                "D1": "1",
+                "D0": "0"
+            },
+            "num_states_execution": 8,
+            "num_cycles": 2,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "DATA TO REG.b",
+                "T4": "X",
+                "T5": "REG.b TO DDD",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "INr",
+            "D[7:0]": "00DDD000",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "D",
+                "D4": "D",
+                "D3": "D",
+                "D2": "0",
+                "D1": "0",
+                "D0": "0"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "X",
+                "T5": "ADD OP - FLAGS AFFECTED",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "DCr",
+            "D[7:0]": "00DDD001",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "D",
+                "D4": "D",
+                "D3": "D",
+                "D2": "0",
+                "D1": "0",
+                "D0": "1"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "X",
+                "T5": "SUB OP - FLAGS AFFECTED",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "ALU OP r",
+            "D[7:0]": "10PPPSSS",
+            "coding": {
+                "D7": "1",
+                "D6": "0",
+                "D5": "P",
+                "D4": "P",
+                "D3": "P",
+                "D2": "S",
+                "D1": "S",
+                "D0": "S"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "SSS TO REG. b",
+                "T5": "ALU OP - FLAGS AFFECTED",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "ALU OP M",
+            "D[7:0]": "10PPP111",
+            "coding": {
+                "D7": "1",
+                "D6": "0",
+                "D5": "P",
+                "D4": "P",
+                "D3": "P",
+                "D2": "1",
+                "D1": "1",
+                "D0": "1"
+            },
+            "num_states_execution": 8,
+            "num_cycles": 2,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "REG. L OUT",
+                "T2": "REG. H OUT",
+                "T3": "DATA TO REG.b",
+                "T4": "X",
+                "T5": "ALU OP - FLAGS AFFECTED",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "ALU OP I",
+            "D[7:0]": "00PPP100",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "P",
+                "D4": "P",
+                "D3": "P",
+                "D2": "1",
+                "D1": "0",
+                "D0": "0"
+            },
+            "num_states_execution": 8,
+            "num_cycles": 2,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "DATA TO REG.b",
+                "T4": "X",
+                "T5": "ARITH OP - FLAGS AFFECTED",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "RLC",
+            "D[7:0]": "00000010",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "0",
+                "D4": "0",
+                "D3": "0",
+                "D2": "0",
+                "D1": "1",
+                "D0": "0"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "X",
+                "T5": "ROTATE REG.A - CARRY AFFECTED",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "RRC",
+            "D[7:0]": "00001010",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "0",
+                "D4": "0",
+                "D3": "1",
+                "D2": "0",
+                "D1": "1",
+                "D0": "0"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "X",
+                "T5": "ROTATE REG.A - CARRY AFFECTED",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "RAL",
+            "D[7:0]": "00010010",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "0",
+                "D4": "1",
+                "D3": "0",
+                "D2": "0",
+                "D1": "1",
+                "D0": "0"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "X",
+                "T5": "ROTATE REG.A - CARRY AFFECTED",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "RAR",
+            "D[7:0]": "00011010",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "0",
+                "D4": "1",
+                "D3": "1",
+                "D2": "0",
+                "D1": "1",
+                "D0": "0"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "X",
+                "T5": "ROTATE REG.A - CARRY AFFECTED",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "JMP",
+            "D[7:0]": "01XXX100",
+            "coding": {
+                "D7": "0",
+                "D6": "1",
+                "D5": "X",
+                "D4": "X",
+                "D3": "X",
+                "D2": "1",
+                "D1": "0",
+                "D0": "0"
+            },
+            "num_states_execution": 11,
+            "num_cycles": 3,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "LOWER ADD. TO REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "HIGHER ADD. REG.a",
+                "T4": "REG.a TO PCH",
+                "T5": "REG. b TO PCL",
+                "skip": false
+            }
+        },
+        {
+            "operation": "JFc",
+            "D[7:0]": "01CCC000",
+            "coding": {
+                "D7": "0",
+                "D6": "1",
+                "D5": "C",
+                "D4": "C",
+                "D3": "C",
+                "D2": "0",
+                "D1": "0",
+                "D0": "0"
+            },
+            "num_states_execution": 11,
+            "num_cycles": 3,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "LOWER ADD. TO REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "HIGHER ADD. REG.a (COND)",
+                "T4": "REG.a TO PCH",
+                "T5": "REG. b TO PCL",
+                "skip": false
+            }
+        },
+        {
+            "operation": "JTc",
+            "D[7:0]": "01CCC000",
+            "coding": {
+                "D7": "0",
+                "D6": "1",
+                "D5": "C",
+                "D4": "C",
+                "D3": "C",
+                "D2": "0",
+                "D1": "0",
+                "D0": "0"
+            },
+            "num_states_execution": 11,
+            "num_cycles": 3,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "LOWER ADD. TO REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "HIGHER ADD. REG.a (COND)",
+                "T4": "REG.a TO PCH",
+                "T5": "REG. b TO PCL",
+                "skip": false
+            }
+        },
+        {
+            "operation": "CAL",
+            "D[7:0]": "01XXX110",
+            "coding": {
+                "D7": "0",
+                "D6": "1",
+                "D5": "X",
+                "D4": "X",
+                "D3": "X",
+                "D2": "1",
+                "D1": "1",
+                "D0": "0"
+            },
+            "num_states_execution": 11,
+            "num_cycles": 3,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "LOWER ADD. TO REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "HIGHER ADD. REG.a",
+                "T4": "REG.a TO PCH",
+                "T5": "REG. b TO PCL",
+                "skip": false
+            }
+        },
+        {
+            "operation": "CFc",
+            "D[7:0]": "010CC010",
+            "coding": {
+                "D7": "0",
+                "D6": "1",
+                "D5": "0",
+                "D4": "C",
+                "D3": "C",
+                "D2": "0",
+                "D1": "1",
+                "D0": "0"
+            },
+            "num_states_execution": 11,
+            "num_cycles": 3,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "LOWER ADD. TO REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "HIGHER ADD. REG.a (COND)",
+                "T4": "REG.a TO PCH",
+                "T5": "REG. b TO PCL",
+                "skip": false
+            }
+        },
+        {
+            "operation": "CTc",
+            "D[7:0]": "011CC010",
+            "coding": {
+                "D7": "0",
+                "D6": "1",
+                "D5": "1",
+                "D4": "C",
+                "D3": "C",
+                "D2": "0",
+                "D1": "1",
+                "D0": "0"
+            },
+            "num_states_execution": 11,
+            "num_cycles": 3,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "LOWER ADD. TO REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "HIGHER ADD. REG.a (COND)",
+                "T4": "REG.a TO PCH",
+                "T5": "REG. b TO PCL",
+                "skip": false
+            }
+        },
+        {
+            "operation": "RET",
+            "D[7:0]": "00XXX111",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "X",
+                "D4": "X",
+                "D3": "X",
+                "D2": "1",
+                "D1": "1",
+                "D0": "1"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "POP STACK",
+                "T5": "X",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "RFc",
+            "D[7:0]": "000CC011",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "0",
+                "D4": "C",
+                "D3": "C",
+                "D2": "0",
+                "D1": "1",
+                "D0": "1"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "POP STACK (COND)",
+                "T5": "X",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "RTc",
+            "D[7:0]": "001CC011",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "1",
+                "D4": "C",
+                "D3": "C",
+                "D2": "0",
+                "D1": "1",
+                "D0": "1"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "POP STACK (COND)",
+                "T5": "X",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "RST",
+            "D[7:0]": "00AAA101",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "A",
+                "D4": "A",
+                "D3": "A",
+                "D2": "1",
+                "D1": "0",
+                "D0": "1"
+            },
+            "num_states_execution": 5,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b & PUSH STACK & Zero REG.a",
+                "T4": "REG.a TO PCH",
+                "T5": "REG.b TO PCL (Bits D3 through D5 are loaded into PCL and all other bits are set to zero)",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "INP",
+            "D[7:0]": "0100MMM1",
+            "coding": {
+                "D7": "0",
+                "D6": "1",
+                "D5": "0",
+                "D4": "0",
+                "D3": "M",
+                "D2": "M",
+                "D1": "M",
+                "D0": "1"
+            },
+            "num_states_execution": 8,
+            "num_cycles": 2,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "REG.A TO OUT",
+                "T2": "REG.b TO OUT",
+                "T3": "DATA TO Reg.b",
+                "T4": "COND FF OUT",
+                "T5": "REG.b TO REG.A",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "OUT",
+            "D[7:0]": "01RRMMM1",
+            "coding": {
+                "D7": "0",
+                "D6": "1",
+                "D5": "R",
+                "D4": "R",
+                "D3": "M",
+                "D2": "M",
+                "D1": "M",
+                "D0": "1"
+            },
+            "num_states_execution": 6,
+            "num_cycles": 2,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "REG.A TO OUT",
+                "T2": "REG.b TO OUT",
+                "T3": "X",
+                "T4": "skip",
+                "T5": "skip",
+                "skip": false
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "HLT",
+            "D[7:0]": "0000000X",
+            "coding": {
+                "D7": "0",
+                "D6": "0",
+                "D5": "0",
+                "D4": "0",
+                "D3": "0",
+                "D2": "0",
+                "D1": "0",
+                "D0": "X"
+            },
+            "num_states_execution": 4,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b & HALT",
+                "T4": "",
+                "T5": "",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        },
+        {
+            "operation": "HLT",
+            "D[7:0]": "11111111",
+            "coding": {
+                "D7": "1",
+                "D6": "1",
+                "D5": "1",
+                "D4": "1",
+                "D3": "1",
+                "D2": "1",
+                "D1": "1",
+                "D0": "1"
+            },
+            "num_states_execution": 4,
+            "num_cycles": 1,
+            "cycle_1": {
+                "T1": "PCL OUT",
+                "T2": "PCH OUT",
+                "T3": "FETCH INSTR. TO IR & REG.b & HALT",
+                "T4": "",
+                "T5": "",
+                "skip": false
+            },
+            "cycle_2": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            },
+            "cycle_3": {
+                "T1": "",
+                "T2": "",
+                "T3": "",
+                "T4": "",
+                "T5": "",
+                "skip": true
+            }
+        }
+    ]
+}
