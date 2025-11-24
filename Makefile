@@ -23,9 +23,9 @@ help:
 	@echo "============================================"
 	@echo ""
 	@echo "Targets:"
-	@echo "  make test-pc           - Test program counter"
-	@echo "  make test-phase-clocks - Test phase clocks with SYNC"
-	@echo "  make clean             - Remove build files"
+	@echo "  make test-pc            - Test program counter"
+	@echo "  make test-phase-clocks  - Test phase clocks with SYNC"
+	@echo "  make test-state-timing  - Test state timing generator"
 	@echo ""
 
 $(BUILD_DIR):
@@ -46,6 +46,13 @@ test-phase-clocks: $(BUILD_DIR)
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) phase_clocks_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) phase_clocks_tb --stop-time=30us
 
+test-state-timing: $(BUILD_DIR)
+	@echo "Testing state timing generator..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/state_timing_generator.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/state_timing_generator_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) state_timing_generator_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) state_timing_generator_tb --stop-time=10us
 clean:
 	@rm -rf $(BUILD_DIR)
 	@rm -f *.cf *.o work-obj*.cf
