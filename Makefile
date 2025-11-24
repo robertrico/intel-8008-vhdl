@@ -13,7 +13,7 @@ SRC_DIR = ./src/b8008
 TEST_DIR = ./sim/b8008
 BUILD_DIR = ./build/b8008
 
-.PHONY: all clean test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control help
+.PHONY: all clean test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs help
 
 all: help
 
@@ -29,6 +29,7 @@ help:
 	@echo "  make test-machine-cycle   - Test machine cycle control"
 	@echo "  make test-instr-decoder   - Test instruction decoder"
 	@echo "  make test-reg-alu-control - Test register and ALU control"
+	@echo "  make test-temp-regs       - Test temporary registers"
 	@echo "  make clean                - Remove build files"
 	@echo ""
 
@@ -81,6 +82,14 @@ test-reg-alu-control: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/register_alu_control_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_alu_control_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_alu_control_tb --stop-time=10us
+
+test-temp-regs: $(BUILD_DIR)
+	@echo "Testing temporary registers..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/temp_registers_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) temp_registers_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) temp_registers_tb --stop-time=10us
 
 clean:
 	@rm -rf $(BUILD_DIR)
