@@ -13,7 +13,7 @@ SRC_DIR = ./src/b8008
 TEST_DIR = ./sim/b8008
 BUILD_DIR = ./build/b8008
 
-.PHONY: all clean test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder help
+.PHONY: all clean test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control help
 
 all: help
 
@@ -23,12 +23,13 @@ help:
 	@echo "============================================"
 	@echo ""
 	@echo "Targets:"
-	@echo "  make test-pc            - Test program counter"
-	@echo "  make test-phase-clocks  - Test phase clocks with SYNC"
-	@echo "  make test-state-timing  - Test state timing generator"
-	@echo "  make test-machine-cycle - Test machine cycle control"
-	@echo "  make test-instr-decoder - Test instruction decoder"
-	@echo "  make clean              - Remove build files"
+	@echo "  make test-pc              - Test program counter"
+	@echo "  make test-phase-clocks    - Test phase clocks with SYNC"
+	@echo "  make test-state-timing    - Test state timing generator"
+	@echo "  make test-machine-cycle   - Test machine cycle control"
+	@echo "  make test-instr-decoder   - Test instruction decoder"
+	@echo "  make test-reg-alu-control - Test register and ALU control"
+	@echo "  make clean                - Remove build files"
 	@echo ""
 
 $(BUILD_DIR):
@@ -72,6 +73,14 @@ test-instr-decoder: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/instruction_decoder_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) instruction_decoder_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) instruction_decoder_tb --stop-time=10us
+
+test-reg-alu-control: $(BUILD_DIR)
+	@echo "Testing register and ALU control..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/register_alu_control_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_alu_control_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_alu_control_tb --stop-time=10us
 
 clean:
 	@rm -rf $(BUILD_DIR)

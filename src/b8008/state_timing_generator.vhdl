@@ -37,7 +37,12 @@ entity state_timing_generator is
         state_t1i : out std_logic;
 
         -- State half indicator (which cycle of the 2-cycle state)
-        state_half : out std_logic  -- 0 = first cycle, 1 = second cycle
+        state_half : out std_logic;  -- 0 = first cycle, 1 = second cycle
+
+        -- Status signals (for external use and internal control blocks)
+        status_s0 : out std_logic;
+        status_s1 : out std_logic;
+        status_s2 : out std_logic
     );
 end entity state_timing_generator;
 
@@ -63,6 +68,17 @@ begin
 
     -- Output which half of state we're in
     state_half <= cycle_count;
+
+    -- Generate status signals S0, S1, S2 based on current state
+    -- T1:  S2=0, S1=1, S0=0 (binary 010 = 2)
+    -- T2:  S2=1, S1=0, S0=0 (binary 100 = 4)
+    -- T3:  S2=0, S1=0, S0=1 (binary 001 = 1)
+    -- T4:  S2=0, S1=1, S0=1 (binary 011 = 3)
+    -- T5:  S2=1, S1=0, S0=1 (binary 101 = 5)
+    -- T1I: S2=1, S1=1, S0=0 (binary 110 = 6)
+    status_s0 <= '1' when (current_state = S_T3 or current_state = S_T4 or current_state = S_T5) else '0';
+    status_s1 <= '1' when (current_state = S_T1 or current_state = S_T4 or current_state = S_T1I) else '0';
+    status_s2 <= '1' when (current_state = S_T2 or current_state = S_T5 or current_state = S_T1I) else '0';
 
     -- State advancement logic (combinational)
     process(current_state, advance_state, interrupt_pending, cycle_count)
