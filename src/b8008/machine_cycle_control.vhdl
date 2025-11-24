@@ -1,0 +1,132 @@
+--------------------------------------------------------------------------------
+-- machine_cycle_control.vhdl
+--------------------------------------------------------------------------------
+-- Machine Cycle Control for Intel 8008
+--
+-- Orchestrates machine cycles (PCI, PCR, PCW, PCC) and generates control signals
+-- - Tracks which cycle of instruction (1st, 2nd, or 3rd)
+-- - Outputs cycle type (D6, D7) during T2
+-- - Signals State Timing Generator when to advance to next instruction
+-- - DUMB module: just sequences cycles based on instruction decoder flags
+--------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+library work;
+use work.b8008_types.all;
+
+entity machine_cycle_control is
+    port (
+        -- State inputs from State Timing Generator
+        state_t1  : in std_logic;
+        state_t2  : in std_logic;
+        state_t3  : in std_logic;
+        state_t4  : in std_logic;
+        state_t5  : in std_logic;
+        state_t1i : in std_logic;
+
+        -- Instruction decoder inputs
+        instr_needs_immediate : in std_logic;  -- Instruction needs 2nd byte
+        instr_needs_address   : in std_logic;  -- Instruction needs 14-bit address (2 bytes)
+        instr_is_io           : in std_logic;  -- I/O operation
+        instr_is_write        : in std_logic;  -- Memory write operation
+
+        -- Outputs to State Timing Generator
+        advance_state : out std_logic;  -- Signal to skip to next instruction
+
+        -- Outputs to Memory & I/O Control (cycle type)
+        cycle_type : out std_logic_vector(1 downto 0);  -- D6, D7 (only valid during T2)
+
+        -- Cycle tracking (for observation/debug)
+        current_cycle : out integer range 1 to 3  -- Which cycle of instruction (1, 2, or 3)
+    );
+end entity machine_cycle_control;
+
+architecture rtl of machine_cycle_control is
+
+    -- Internal cycle counter
+    signal cycle_count : integer range 1 to 3 := 1;
+
+    -- Determine if we need to continue to next cycle
+    signal needs_cycle_2 : std_logic;
+    signal needs_cycle_3 : std_logic;
+
+    -- Latched advance signal
+    signal advance_latch : std_logic := '0';
+
+    -- Latched cycle type signal
+    signal cycle_type_latch : std_logic_vector(1 downto 0) := "00";
+
+begin
+
+    -- Output current cycle
+    current_cycle <= cycle_count;
+
+    -- Determine if instruction needs additional cycles
+    needs_cycle_2 <= instr_needs_immediate or instr_needs_address;
+    needs_cycle_3 <= instr_needs_address;
+
+    -- Output latched cycle type
+    cycle_type <= cycle_type_latch;
+
+    -- Output latched advance signal
+    advance_state <= advance_latch;
+
+    -- Cycle type latch - latch value during T2 rising edge
+    process(state_t2)
+    begin
+        if rising_edge(state_t2) then
+            if cycle_count = 1 then
+                -- First cycle is always PCI
+                cycle_type_latch <= "00";
+            elsif instr_is_io = '1' then
+                -- I/O operation: PCC
+                cycle_type_latch <= "10";
+            elsif instr_is_write = '1' then
+                -- Memory write: PCW
+                cycle_type_latch <= "11";
+            else
+                -- Memory read: PCR
+                cycle_type_latch <= "01";
+            end if;
+        end if;
+    end process;
+
+    -- Advance state logic - latch when asserted during T3, clear on T1
+    process(state_t3, state_t1)
+    begin
+        -- Latch advance_state when conditions met during T3
+        if rising_edge(state_t3) then
+            if (cycle_count = 1 and needs_cycle_2 = '0') or      -- Single-cycle done
+               (cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done
+               (cycle_count = 3) then                            -- Three-cycle done
+                advance_latch <= '1';
+            end if;
+        -- Clear on T1 rising edge (start of new cycle)
+        elsif rising_edge(state_t1) then
+            advance_latch <= '0';
+        end if;
+    end process;
+
+    -- Cycle counter state machine
+    -- Updates on rising edge of T1 (start of each new cycle)
+    process(state_t1)
+    begin
+        if rising_edge(state_t1) then
+            -- We're entering T1 (start of new cycle or new instruction)
+            if cycle_count = 1 and needs_cycle_2 = '1' then
+                -- Continue to cycle 2
+                cycle_count <= 2;
+            elsif cycle_count = 2 and needs_cycle_3 = '1' then
+                -- Continue to cycle 3
+                cycle_count <= 3;
+            else
+                -- Start new instruction (reset to cycle 1)
+                cycle_count <= 1;
+            end if;
+        end if;
+    end process;
+
+end architecture rtl;

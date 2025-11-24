@@ -13,7 +13,7 @@ SRC_DIR = ./src/b8008
 TEST_DIR = ./sim/b8008
 BUILD_DIR = ./build/b8008
 
-.PHONY: all clean test-pc test-phase-clocks help
+.PHONY: all clean test-pc test-phase-clocks test-state-timing test-machine-cycle help
 
 all: help
 
@@ -26,6 +26,8 @@ help:
 	@echo "  make test-pc            - Test program counter"
 	@echo "  make test-phase-clocks  - Test phase clocks with SYNC"
 	@echo "  make test-state-timing  - Test state timing generator"
+	@echo "  make test-machine-cycle - Test machine cycle control"
+	@echo "  make clean              - Remove build files"
 	@echo ""
 
 $(BUILD_DIR):
@@ -53,6 +55,15 @@ test-state-timing: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/state_timing_generator_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) state_timing_generator_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) state_timing_generator_tb --stop-time=10us
+
+test-machine-cycle: $(BUILD_DIR)
+	@echo "Testing machine cycle control..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/machine_cycle_control_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) machine_cycle_control_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) machine_cycle_control_tb --stop-time=10us
+
 clean:
 	@rm -rf $(BUILD_DIR)
 	@rm -f *.cf *.o work-obj*.cf
