@@ -127,7 +127,12 @@ entity memory_io_control is
 
         -- To Stack Pointer
         stack_push : out std_logic;  -- Push to stack
-        stack_pop  : out std_logic   -- Pop from stack
+        stack_pop  : out std_logic;  -- Pop from stack
+
+        -- To Program Counter (CRITICAL ISSUE #1)
+        pc_increment : out std_logic;  -- Increment PC
+        pc_load      : out std_logic;  -- Load PC from data_in
+        pc_hold      : out std_logic   -- Hold PC (wait states)
     );
 end entity memory_io_control;
 
@@ -177,6 +182,35 @@ begin
         stack_addr_select     <= '0';
         stack_push            <= '0';
         stack_pop             <= '0';
+        pc_increment          <= '0';
+        pc_load               <= '0';
+        pc_hold               <= '0';
+
+        -- PC Control Logic (CRITICAL ISSUE #1)
+        -- Hold PC if ready signal is low or interrupt pending
+        if ready_status = '0' or interrupt_pending = '1' then
+            pc_hold <= '1';
+        else
+            -- Increment PC after instruction fetch (T3 during PCI cycle)
+            if state_t3 = '1' and cycle_type = CYCLE_PCI then
+                pc_increment <= '1';
+            -- Or after T2 when advancing to next cycle
+            elsif state_t2 = '1' and advance_state = '1' then
+                pc_increment <= '1';
+            end if;
+
+            -- Load PC during T4 for JMP/CALL
+            if state_t4 = '1' then
+                if current_cycle = 3 and (instr_is_call = '1' or instr_needs_address = '1') then
+                    pc_load <= '1';
+                end if;
+            -- Load PC during T5 for RET/RST
+            elsif state_t5 = '1' then
+                if instr_is_ret = '1' or instr_is_rst = '1' then
+                    pc_load <= '1';
+                end if;
+            end if;
+        end if;
 
         -- State-based control
         if state_t1 = '1' then

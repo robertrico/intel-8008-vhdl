@@ -32,6 +32,7 @@ entity machine_cycle_control is
         instr_needs_address   : in std_logic;  -- Instruction needs 14-bit address (2 bytes)
         instr_is_io           : in std_logic;  -- I/O operation
         instr_is_write        : in std_logic;  -- Memory write operation
+        instr_is_hlt          : in std_logic;  -- HLT (halt) instruction
 
         -- Outputs to State Timing Generator
         advance_state : out std_logic;  -- Signal to skip to next instruction
@@ -95,13 +96,15 @@ begin
     end process;
 
     -- Advance state logic - latch when asserted during T3, clear on T1
-    process(state_t3, state_t1)
+    process(state_t3, state_t1, instr_is_hlt)
     begin
         -- Latch advance_state when conditions met during T3
         if rising_edge(state_t3) then
-            if (cycle_count = 1 and needs_cycle_2 = '0') or      -- Single-cycle done
-               (cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done
-               (cycle_count = 3) then                            -- Three-cycle done
+            -- Don't advance if HLT instruction (stay halted)
+            if instr_is_hlt = '0' and
+               ((cycle_count = 1 and needs_cycle_2 = '0') or      -- Single-cycle done
+                (cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done
+                (cycle_count = 3)) then                           -- Three-cycle done
                 advance_latch <= '1';
             end if;
         -- Clear on T1 rising edge (start of new cycle)

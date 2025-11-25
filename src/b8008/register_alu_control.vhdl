@@ -38,11 +38,17 @@ entity register_alu_control is
         -- Interrupt input
         interrupt : in std_logic;
 
-        -- Control outputs
+        -- Control outputs (load signals)
         load_reg_a   : out std_logic;  -- Latch data into temp Reg.a
         load_reg_b   : out std_logic;  -- Latch data into temp Reg.b
         alu_enable   : out std_logic;  -- Enable ALU execution
-        update_flags : out std_logic   -- Latch condition flags
+        update_flags : out std_logic;  -- Latch condition flags
+
+        -- Output enable signals (CRITICAL ISSUE #2)
+        output_reg_a  : out std_logic;  -- Reg.a drives internal bus
+        output_reg_b  : out std_logic;  -- Reg.b drives internal bus
+        output_result : out std_logic;  -- ALU result drives internal bus
+        output_flags  : out std_logic   -- Flags drive internal bus
     );
 end entity register_alu_control;
 
@@ -103,5 +109,29 @@ begin
 
     -- Update flags: Same timing as ALU enable (flags updated after ALU operation)
     update_flags <= state_is_t5 and instr_is_alu_op and phi2;
+
+    -- Output Enable Signals (CRITICAL ISSUE #2)
+    --
+    -- NOTE: These are currently set to '0' (never drive bus) because in the Intel 8008
+    -- architecture, temp registers are internal to the ALU/register side and their
+    -- outputs (reg_a_out, reg_b_out) go directly to the ALU inputs, not the internal bus.
+    --
+    -- The temp registers are loaded FROM the internal bus, but they don't drive it back.
+    -- Their purpose is to hold operands for the ALU during phi2 cycle.
+    --
+    -- If we discover during integration that these need to drive the bus (e.g., for
+    -- JMP/CALL address formation), we can update this logic based on instruction decode.
+    --
+    output_reg_a  <= '0';  -- Temp registers don't drive internal bus in normal operation
+    output_reg_b  <= '0';  -- Temp registers don't drive internal bus in normal operation
+
+    -- ALU result drives bus after ALU execution completes
+    -- This happens when the ALU result needs to be written to accumulator
+    output_result <= state_is_t5 and instr_is_alu_op and phi2;
+
+    -- Flags never drive the internal bus in Intel 8008
+    -- Flags are tested internally by condition_flags module
+    -- They don't need to be read onto the bus
+    output_flags  <= '0';
 
 end architecture rtl;

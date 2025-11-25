@@ -37,8 +37,12 @@ entity instruction_decoder is
         instr_is_call         : out std_logic;  -- CALL instruction
         instr_is_ret          : out std_logic;  -- RET instruction
         instr_is_rst          : out std_logic;  -- RST instruction
+        instr_is_hlt          : out std_logic;  -- HLT (halt) instruction
         instr_writes_reg      : out std_logic;  -- Instruction writes to register
-        instr_reads_reg       : out std_logic   -- Instruction reads from register
+        instr_reads_reg       : out std_logic;  -- Instruction reads from register
+
+        -- RST vector (CRITICAL ISSUE #3)
+        rst_vector            : out std_logic_vector(2 downto 0)  -- RST instruction bits D5:D3
     );
 end entity instruction_decoder;
 
@@ -65,20 +69,31 @@ begin
         instr_is_call <= '0';
         instr_is_ret <= '0';
         instr_is_rst <= '0';
+        instr_is_hlt <= '0';
         instr_writes_reg <= '0';
         instr_reads_reg <= '0';
+        rst_vector <= (others => '0');  -- Default RST vector
 
         case op_76 is
             -- ================================================================
             -- 00 XXX XXX - Index register, ALU immediate, rotate, control
             -- ================================================================
             when "00" =>
-                case op_210 is
-                    when "000" =>
-                        -- 00 DDD 000 - INr (increment) - 1 cycle
-                        instr_is_alu <= '1';
-                        instr_reads_reg <= '1';
-                        instr_writes_reg <= '1';
+                -- SPECIAL CASE: 00 000 00X - HLT (HALT) - 1 cycle
+                if op_543 = "000" and op_210(2 downto 1) = "00" then
+                    -- HLT: 0x00 or 0x01 (bit 0 is don't care)
+                    instr_is_hlt <= '1';  -- Signal that this is HLT
+
+                else
+                    case op_210 is
+                        when "000" =>
+                            -- 00 DDD 000 - INr (increment) - 1 cycle
+                            -- But NOT if DDD=000, that's HLT (handled above)
+                            if op_543 /= "000" then
+                                instr_is_alu <= '1';
+                                instr_reads_reg <= '1';
+                                instr_writes_reg <= '1';
+                            end if;
 
                     when "001" =>
                         -- 00 DDD 001 - DCr (decrement) - 1 cycle
@@ -109,7 +124,9 @@ begin
 
                     when "101" =>
                         -- 00 AAA 101 - RST (restart) - 1 cycle
+                        -- RST vector is in bits [5:3] (AAA field)
                         instr_is_rst <= '1';
+                        rst_vector <= op_543;  -- Extract AAA field (bits D5:D3)
 
                     when "110" =>
                         -- 00 DDD 110 - LrI (load register immediate) - 2 cycles
@@ -128,9 +145,10 @@ begin
                         -- 00 XXX 111 - RET (return) - 1 cycle
                         instr_is_ret <= '1';
 
-                    when others =>
-                        null;
-                end case;
+                        when others =>
+                            null;
+                    end case;
+                end if;  -- End of HLT check
 
             -- ================================================================
             -- 01 XXX XXX - Jump, Call, I/O
@@ -189,7 +207,7 @@ begin
             when "11" =>
                 if instruction_byte = "11111111" then
                     -- 11 111 111 - HLT - 1 cycle
-                    null;
+                    instr_is_hlt <= '1';
                 elsif op_210 = "111" then
                     -- 11 DDD 111 - LrM (load register from memory) - 2 cycles
                     instr_needs_immediate <= '1';
