@@ -13,7 +13,7 @@ SRC_DIR = ./src/b8008
 TEST_DIR = ./sim/b8008
 BUILD_DIR = ./build/b8008
 
-.PHONY: all clean test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file help
+.PHONY: all clean test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help
 
 all: help
 
@@ -40,6 +40,10 @@ help:
 	@echo "  make test-ahl-pointer     - Test AHL address pointer"
 	@echo "  make test-scratchpad-decoder - Test scratchpad decoder"
 	@echo "  make test-register-file   - Test register file"
+	@echo "  make test-sss-ddd-selector - Test SSS/DDD register selector"
+	@echo "  make test-stack-pointer   - Test stack pointer"
+	@echo "  make test-stack-addr-decoder - Test stack address decoder"
+	@echo "  make test-stack-memory    - Test stack memory"
 	@echo "  make clean                - Remove build files"
 	@echo ""
 
@@ -180,6 +184,38 @@ test-register-file: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/register_file_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_file_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_file_tb --stop-time=10us
+
+test-stack-pointer: $(BUILD_DIR)
+	@echo "Testing stack pointer..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/stack_pointer_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_pointer_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_pointer_tb --stop-time=10us
+
+test-stack-addr-decoder: $(BUILD_DIR)
+	@echo "Testing stack address decoder..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_addr_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/stack_addr_decoder_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_addr_decoder_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_addr_decoder_tb --stop-time=10us
+
+test-stack-memory: $(BUILD_DIR)
+	@echo "Testing stack memory..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/stack_memory_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_memory_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_memory_tb --stop-time=10us
+
+test-sss-ddd-selector: $(BUILD_DIR)
+	@echo "Testing SSS/DDD selector..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/sss_ddd_selector.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/sss_ddd_selector_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) sss_ddd_selector_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) sss_ddd_selector_tb --stop-time=10us
 
 clean:
 	@rm -rf $(BUILD_DIR)
