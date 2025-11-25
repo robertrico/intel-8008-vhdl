@@ -1,0 +1,97 @@
+--------------------------------------------------------------------------------
+-- mem_mux_refresh.vhdl
+--------------------------------------------------------------------------------
+-- Memory Multiplexer and Refresh Amplifiers for Intel 8008
+--
+-- Handles address multiplexing, PC data input, and register file data routing
+-- - Selects address source for 14-bit address bus (PC, AHL, Stack)
+-- - Assembles PC load data from various sources (stack, temp regs, RST)
+-- - Routes data between internal bus and register file (scratchpad)
+-- - In original 8008, also handled DRAM refresh (not needed for FPGA)
+-- - DUMB module: just multiplexing, no logic
+--------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+library work;
+use work.b8008_types.all;
+
+entity mem_mux_refresh is
+    port (
+        -- Address inputs (14-bit sources)
+        pc_addr    : in std_logic_vector(13 downto 0);  -- From Program Counter
+        ahl_addr   : in std_logic_vector(13 downto 0);  -- From AHL pointer (H:L)
+        stack_addr : in std_logic_vector(13 downto 0);  -- From Stack Memory
+
+        -- PC load data sources (for JMP, CALL, RET, RST)
+        reg_a      : in std_logic_vector(7 downto 0);   -- From Temp Register A (high byte)
+        reg_b      : in std_logic_vector(7 downto 0);   -- From Temp Register B (low byte)
+        rst_vector : in std_logic_vector(2 downto 0);   -- RST instruction AAA field
+
+        -- Register file (scratchpad) data routing
+        regfile_data_out : in std_logic_vector(7 downto 0);   -- From register file
+        regfile_data_in  : out std_logic_vector(7 downto 0);  -- To register file
+
+        -- Internal 8-bit data bus
+        internal_bus : inout std_logic_vector(7 downto 0);
+
+        -- Control signals from Memory/I/O Control
+        select_pc    : in std_logic;  -- Use PC address
+        select_ahl   : in std_logic;  -- Use AHL address (for M operations)
+        select_stack : in std_logic;  -- Use Stack address
+
+        pc_load_from_regs  : in std_logic;  -- Load PC from Reg.a + Reg.b (JMP/CALL)
+        pc_load_from_stack : in std_logic;  -- Load PC from stack (RET)
+        pc_load_from_rst   : in std_logic;  -- Load PC from RST vector
+
+        regfile_to_bus : in std_logic;  -- Register file drives internal bus
+        bus_to_regfile : in std_logic;  -- Internal bus drives register file
+
+        -- Outputs
+        address_bus : out std_logic_vector(13 downto 0);  -- To external memory
+        pc_data_in  : out std_logic_vector(13 downto 0)   -- To PC data input
+    );
+end entity mem_mux_refresh;
+
+architecture rtl of mem_mux_refresh is
+
+    signal pc_load_data : std_logic_vector(13 downto 0);
+
+begin
+
+    -- Address bus multiplexer
+    -- Priority: Stack > AHL > PC (default)
+    address_bus <= stack_addr when select_stack = '1' else
+                   ahl_addr   when select_ahl = '1' else
+                   pc_addr;
+
+    -- PC data input multiplexer
+    -- Assemble 14-bit address from various sources
+    with (pc_load_from_regs & pc_load_from_stack & pc_load_from_rst) select
+        pc_load_data <=
+            -- JMP/CALL: Reg.a[5:0] & Reg.b[7:0]
+            (reg_a(5 downto 0) & reg_b) when "100",
+
+            -- RET: Stack output
+            stack_addr when "010",
+
+            -- RST: 00_000_AAA_000 (AAA from instruction bits D5:D3)
+            ("00000" & rst_vector & "000") when "001",
+
+            -- Default: zeros (PC will increment instead)
+            (others => '0') when others;
+
+    -- Output PC load data
+    pc_data_in <= pc_load_data;
+
+    -- Register file to internal bus routing (tri-state)
+    -- When regfile_to_bus='1', register file drives the bus
+    internal_bus <= regfile_data_out when regfile_to_bus = '1' else (others => 'Z');
+
+    -- Internal bus to register file routing
+    -- When bus_to_regfile='1', bus data goes to register file
+    regfile_data_in <= internal_bus when bus_to_regfile = '1' else (others => '0');
+
+end architecture rtl;

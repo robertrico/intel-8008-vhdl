@@ -7,9 +7,9 @@
 -- - A: Accumulator (special purpose for ALU operations)
 -- - B, C, D, E: General purpose
 -- - H, L: High and Low bytes for memory addressing (H:L pair)
--- - Bidirectional connection to internal data bus
+-- - Connects to internal data bus via Memory Multiplexer block
 -- - Individual register enables from scratchpad decoder
--- - DUMB module: just storage registers with tri-state outputs
+-- - DUMB module: just storage registers
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -26,8 +26,9 @@ entity register_file is
         -- Reset
         reset : in std_logic;
 
-        -- Bidirectional internal data bus
-        internal_bus : inout std_logic_vector(7 downto 0);
+        -- Data input/output (to/from Memory Multiplexer)
+        data_in  : in std_logic_vector(7 downto 0);
+        data_out : out std_logic_vector(7 downto 0);
 
         -- Individual register enables (from scratchpad decoder)
         enable_a : in std_logic;
@@ -74,26 +75,26 @@ begin
             reg_l <= (others => '0');
         elsif rising_edge(phi2) then
             if write_enable = '1' then
-                if enable_a = '1' then reg_a <= internal_bus; end if;
-                if enable_b = '1' then reg_b <= internal_bus; end if;
-                if enable_c = '1' then reg_c <= internal_bus; end if;
-                if enable_d = '1' then reg_d <= internal_bus; end if;
-                if enable_e = '1' then reg_e <= internal_bus; end if;
-                if enable_h = '1' then reg_h <= internal_bus; end if;
-                if enable_l = '1' then reg_l <= internal_bus; end if;
+                if enable_a = '1' then reg_a <= data_in; end if;
+                if enable_b = '1' then reg_b <= data_in; end if;
+                if enable_c = '1' then reg_c <= data_in; end if;
+                if enable_d = '1' then reg_d <= data_in; end if;
+                if enable_e = '1' then reg_e <= data_in; end if;
+                if enable_h = '1' then reg_h <= data_in; end if;
+                if enable_l = '1' then reg_l <= data_in; end if;
             end if;
         end if;
     end process;
 
-    -- Read from registers to internal bus (combinational, tri-state)
-    internal_bus <= reg_a when (read_enable = '1' and enable_a = '1') else
-                    reg_b when (read_enable = '1' and enable_b = '1') else
-                    reg_c when (read_enable = '1' and enable_c = '1') else
-                    reg_d when (read_enable = '1' and enable_d = '1') else
-                    reg_e when (read_enable = '1' and enable_e = '1') else
-                    reg_h when (read_enable = '1' and enable_h = '1') else
-                    reg_l when (read_enable = '1' and enable_l = '1') else
-                    (others => 'Z');
+    -- Read from registers (combinational, multiplexed output)
+    data_out <= reg_a when (read_enable = '1' and enable_a = '1') else
+                reg_b when (read_enable = '1' and enable_b = '1') else
+                reg_c when (read_enable = '1' and enable_c = '1') else
+                reg_d when (read_enable = '1' and enable_d = '1') else
+                reg_e when (read_enable = '1' and enable_e = '1') else
+                reg_h when (read_enable = '1' and enable_h = '1') else
+                reg_l when (read_enable = '1' and enable_l = '1') else
+                (others => '0');
 
     -- Direct outputs for H and L (always available to AHL pointer)
     h_reg_out <= reg_h;

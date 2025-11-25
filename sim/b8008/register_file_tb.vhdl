@@ -20,7 +20,8 @@ architecture test of register_file_tb is
         port (
             phi2         : in std_logic;
             reset        : in std_logic;
-            internal_bus : inout std_logic_vector(7 downto 0);
+            data_in      : in std_logic_vector(7 downto 0);
+            data_out     : out std_logic_vector(7 downto 0);
             enable_a     : in std_logic;
             enable_b     : in std_logic;
             enable_c     : in std_logic;
@@ -51,9 +52,9 @@ architecture test of register_file_tb is
     signal read_enable  : std_logic := '0';
     signal write_enable : std_logic := '0';
 
-    -- Bidirectional bus
-    signal internal_bus : std_logic_vector(7 downto 0);
-    signal bus_driver   : std_logic_vector(7 downto 0) := (others => 'Z');
+    -- Data signals
+    signal data_in  : std_logic_vector(7 downto 0) := (others => '0');
+    signal data_out : std_logic_vector(7 downto 0);
 
     -- Outputs
     signal h_reg_out : std_logic_vector(7 downto 0);
@@ -64,14 +65,12 @@ begin
     -- Clock generation
     phi2 <= not phi2 after phi2_period / 2;
 
-    -- Drive bus from testbench
-    internal_bus <= bus_driver;
-
     uut : register_file
         port map (
             phi2         => phi2,
             reset        => reset,
-            internal_bus => internal_bus,
+            data_in      => data_in,
+            data_out     => data_out,
             enable_a     => enable_a,
             enable_b     => enable_b,
             enable_c     => enable_c,
@@ -112,21 +111,21 @@ begin
         report "";
         report "Test 2: Write 0x42 to register A";
 
-        bus_driver   <= x"42";
+        data_in   <= x"42";
         enable_a     <= '1';
         write_enable <= '1';
         wait until rising_edge(phi2);
         wait for 10 ns;
         enable_a     <= '0';
         write_enable <= '0';
-        bus_driver   <= (others => 'Z');
+        data_in   <= (others => 'Z');
 
         -- Read back from A
         enable_a    <= '1';
         read_enable <= '1';
         wait for 10 ns;
 
-        if internal_bus /= x"42" then
+        if data_out /= x"42" then
             report "  ERROR: Register A should contain 0x42" severity error;
             errors := errors + 1;
         else
@@ -141,14 +140,14 @@ begin
         report "";
         report "Test 3: Write 0x3F to register H";
 
-        bus_driver   <= x"3F";
+        data_in   <= x"3F";
         enable_h     <= '1';
         write_enable <= '1';
         wait until rising_edge(phi2);
         wait for 10 ns;
         enable_h     <= '0';
         write_enable <= '0';
-        bus_driver   <= (others => 'Z');
+        data_in   <= (others => 'Z');
         wait for 10 ns;
 
         if h_reg_out /= x"3F" then
@@ -162,14 +161,14 @@ begin
         report "";
         report "Test 4: Write 0x2A to register L";
 
-        bus_driver   <= x"2A";
+        data_in   <= x"2A";
         enable_l     <= '1';
         write_enable <= '1';
         wait until rising_edge(phi2);
         wait for 10 ns;
         enable_l     <= '0';
         write_enable <= '0';
-        bus_driver   <= (others => 'Z');
+        data_in   <= (others => 'Z');
         wait for 10 ns;
 
         if l_reg_out /= x"2A" then
@@ -184,47 +183,47 @@ begin
         report "Test 5: Write to all registers (B=0x11, C=0x22, D=0x33, E=0x44)";
 
         -- Write B
-        bus_driver   <= x"11";
+        data_in   <= x"11";
         enable_b     <= '1';
         write_enable <= '1';
         wait until rising_edge(phi2);
         wait for 10 ns;
         enable_b     <= '0';
         write_enable <= '0';
-        bus_driver   <= (others => 'Z');
+        data_in   <= (others => 'Z');
         wait for 10 ns;
 
         -- Write C
-        bus_driver   <= x"22";
+        data_in   <= x"22";
         enable_c     <= '1';
         write_enable <= '1';
         wait until rising_edge(phi2);
         wait for 10 ns;
         enable_c     <= '0';
         write_enable <= '0';
-        bus_driver   <= (others => 'Z');
+        data_in   <= (others => 'Z');
         wait for 10 ns;
 
         -- Write D
-        bus_driver   <= x"33";
+        data_in   <= x"33";
         enable_d     <= '1';
         write_enable <= '1';
         wait until rising_edge(phi2);
         wait for 10 ns;
         enable_d     <= '0';
         write_enable <= '0';
-        bus_driver   <= (others => 'Z');
+        data_in   <= (others => 'Z');
         wait for 10 ns;
 
         -- Write E
-        bus_driver   <= x"44";
+        data_in   <= x"44";
         enable_e     <= '1';
         write_enable <= '1';
         wait until rising_edge(phi2);
         wait for 10 ns;
         enable_e     <= '0';
         write_enable <= '0';
-        bus_driver   <= (others => 'Z');
+        data_in   <= (others => 'Z');
         wait for 10 ns;
 
         report "  PASS: All registers written";
@@ -237,7 +236,7 @@ begin
         enable_b    <= '1';
         read_enable <= '1';
         wait for 10 ns;
-        if internal_bus /= x"11" then
+        if data_out /= x"11" then
             report "  ERROR: Register B should be 0x11" severity error;
             errors := errors + 1;
         end if;
@@ -249,7 +248,7 @@ begin
         enable_c    <= '1';
         read_enable <= '1';
         wait for 10 ns;
-        if internal_bus /= x"22" then
+        if data_out /= x"22" then
             report "  ERROR: Register C should be 0x22" severity error;
             errors := errors + 1;
         end if;
@@ -261,7 +260,7 @@ begin
         enable_d    <= '1';
         read_enable <= '1';
         wait for 10 ns;
-        if internal_bus /= x"33" then
+        if data_out /= x"33" then
             report "  ERROR: Register D should be 0x33" severity error;
             errors := errors + 1;
         end if;
@@ -273,7 +272,7 @@ begin
         enable_e    <= '1';
         read_enable <= '1';
         wait for 10 ns;
-        if internal_bus /= x"44" then
+        if data_out /= x"44" then
             report "  ERROR: Register E should be 0x44" severity error;
             errors := errors + 1;
         else
@@ -283,17 +282,17 @@ begin
         read_enable <= '0';
         wait for 10 ns;
 
-        -- Test 7: Bus tri-states when not reading
+        -- Test 7: Output is zero when not reading
         report "";
-        report "Test 7: Bus tri-states when read_enable=0";
+        report "Test 7: Output is zero when read_enable=0";
 
         wait for 10 ns;
 
-        if internal_bus /= "ZZZZZZZZ" then
-            report "  ERROR: Bus should be tri-stated" severity error;
+        if data_out /= x"00" then
+            report "  ERROR: Output should be zero when not reading" severity error;
             errors := errors + 1;
         else
-            report "  PASS: Bus correctly tri-stated";
+            report "  PASS: Output is zero when not reading";
         end if;
 
         -- Summary
