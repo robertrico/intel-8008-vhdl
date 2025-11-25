@@ -30,6 +30,8 @@ architecture test of condition_flags_tb is
             condition_code : in std_logic_vector(1 downto 0);
             test_true      : in std_logic;
             eval_condition : in std_logic;
+            output_flags   : in std_logic;
+            internal_bus   : inout std_logic_vector(7 downto 0);
             condition_met  : out std_logic;
             flag_carry     : out std_logic;
             flag_zero      : out std_logic;
@@ -52,6 +54,10 @@ architecture test of condition_flags_tb is
     signal condition_code : std_logic_vector(1 downto 0) := (others => '0');
     signal test_true      : std_logic := '0';
     signal eval_condition : std_logic := '0';
+    signal output_flags   : std_logic := '0';
+
+    -- Internal bus
+    signal internal_bus : std_logic_vector(7 downto 0);
 
     -- Outputs
     signal condition_met : std_logic;
@@ -83,6 +89,8 @@ begin
             condition_code => condition_code,
             test_true      => test_true,
             eval_condition => eval_condition,
+            output_flags   => output_flags,
+            internal_bus   => internal_bus,
             condition_met  => condition_met,
             flag_carry     => flag_carry,
             flag_zero      => flag_zero,

@@ -26,6 +26,8 @@ architecture test of alu_tb is
             carry_in        : in std_logic;
             carry_lookahead : in std_logic_vector(7 downto 0);
             enable          : in std_logic;
+            output_result   : in std_logic;
+            internal_bus    : inout std_logic_vector(7 downto 0);
             result          : out std_logic_vector(8 downto 0);
             flag_carry      : out std_logic;
             flag_zero       : out std_logic;
@@ -41,6 +43,10 @@ architecture test of alu_tb is
     signal carry_in        : std_logic := '0';
     signal carry_lookahead : std_logic_vector(7 downto 0) := (others => '0');
     signal enable          : std_logic := '0';
+    signal output_result   : std_logic := '0';
+
+    -- Internal bus
+    signal internal_bus : std_logic_vector(7 downto 0);
 
     -- Outputs
     signal result      : std_logic_vector(8 downto 0);
@@ -69,6 +75,8 @@ begin
             carry_in        => carry_in,
             carry_lookahead => carry_lookahead,
             enable          => enable,
+            output_result   => output_result,
+            internal_bus    => internal_bus,
             result          => result,
             flag_carry      => flag_carry,
             flag_zero       => flag_zero,

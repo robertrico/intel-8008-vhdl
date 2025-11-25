@@ -52,6 +52,12 @@ entity condition_flags is
         -- Condition evaluation enable (from instruction decoder)
         eval_condition : in std_logic;
 
+        -- Output enable to internal bus
+        output_flags : in std_logic;
+
+        -- Internal data bus (flags output as 8-bit value)
+        internal_bus : inout std_logic_vector(7 downto 0);
+
         -- Output: Condition met (to Memory and I/O Control)
         condition_met : out std_logic;
 
@@ -102,6 +108,10 @@ begin
     flag_zero   <= zero_ff;
     flag_sign   <= sign_ff;
     flag_parity <= parity_ff;
+
+    -- Drive internal bus with flags when output_flags is enabled
+    -- Format: bit 0=carry, bit 1=zero, bit 2=sign, bit 3=parity, bits 7:4=0
+    internal_bus <= ("0000" & parity_ff & sign_ff & zero_ff & carry_ff) when output_flags = '1' else (others => 'Z');
 
     -- Condition evaluation (pure combinational)
     process(condition_code, carry_ff, zero_ff, sign_ff, parity_ff, eval_condition, test_true)
