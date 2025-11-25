@@ -24,7 +24,15 @@ architecture test of instruction_decoder_tb is
             instr_needs_immediate : out std_logic;
             instr_needs_address   : out std_logic;
             instr_is_io           : out std_logic;
-            instr_is_write        : out std_logic
+            instr_is_write        : out std_logic;
+            instr_sss_field       : out std_logic_vector(2 downto 0);
+            instr_ddd_field       : out std_logic_vector(2 downto 0);
+            instr_is_alu          : out std_logic;
+            instr_is_call         : out std_logic;
+            instr_is_ret          : out std_logic;
+            instr_is_rst          : out std_logic;
+            instr_writes_reg      : out std_logic;
+            instr_reads_reg       : out std_logic
         );
     end component;
 
@@ -33,6 +41,14 @@ architecture test of instruction_decoder_tb is
     signal instr_needs_address   : std_logic;
     signal instr_is_io           : std_logic;
     signal instr_is_write        : std_logic;
+    signal instr_sss_field       : std_logic_vector(2 downto 0);
+    signal instr_ddd_field       : std_logic_vector(2 downto 0);
+    signal instr_is_alu          : std_logic;
+    signal instr_is_call         : std_logic;
+    signal instr_is_ret          : std_logic;
+    signal instr_is_rst          : std_logic;
+    signal instr_writes_reg      : std_logic;
+    signal instr_reads_reg       : std_logic;
 
     -- Test procedure
     procedure test_instruction(
@@ -106,7 +122,15 @@ begin
             instr_needs_immediate => instr_needs_immediate,
             instr_needs_address   => instr_needs_address,
             instr_is_io           => instr_is_io,
-            instr_is_write        => instr_is_write
+            instr_is_write        => instr_is_write,
+            instr_sss_field       => instr_sss_field,
+            instr_ddd_field       => instr_ddd_field,
+            instr_is_alu          => instr_is_alu,
+            instr_is_call         => instr_is_call,
+            instr_is_ret          => instr_is_ret,
+            instr_is_rst          => instr_is_rst,
+            instr_writes_reg      => instr_writes_reg,
+            instr_reads_reg       => instr_reads_reg
         );
 
     process
@@ -282,6 +306,212 @@ begin
                         instr_needs_immediate, instr_needs_address, instr_is_io, instr_is_write, errors);
         test_instruction("11111111", "HLT (variant 2)", 1, '0', '0', instruction_byte,
                         instr_needs_immediate, instr_needs_address, instr_is_io, instr_is_write, errors);
+
+        -- ================================================================
+        -- NEW CONTROL SIGNAL TESTS
+        -- ================================================================
+        report "";
+        report "========================================";
+        report "TESTING NEW CONTROL SIGNALS";
+        report "========================================";
+
+        -- Test 1: MOV B,C (11 DDD SSS) - register read/write
+        report "";
+        report "Test: MOV B,C - Register read/write signals";
+        instruction_byte <= "11001010";  -- 11 001 010 (DDD=B=001, SSS=C=010)
+        wait for 10 ns;
+
+        if instr_reads_reg /= '1' then
+            report "  ERROR: MOV should set reads_reg=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_writes_reg /= '1' then
+            report "  ERROR: MOV should set writes_reg=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_sss_field /= "010" then
+            report "  ERROR: SSS should be 010 (C)" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_ddd_field /= "001" then
+            report "  ERROR: DDD should be 001 (B)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: MOV B,C register fields correct";
+        end if;
+
+        -- Test 2: ADD E (10 000 101) - ALU operation
+        report "";
+        report "Test: ADD E - ALU operation signals";
+        instruction_byte <= "10000101";  -- 10 000 101 (ALU add, SSS=E=101)
+        wait for 10 ns;
+
+        if instr_is_alu /= '1' then
+            report "  ERROR: ADD should set is_alu=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_reads_reg /= '1' then
+            report "  ERROR: ADD should set reads_reg=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_writes_reg /= '1' then
+            report "  ERROR: ADD should set writes_reg=1 (writes A)" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_sss_field /= "101" then
+            report "  ERROR: SSS should be 101 (E)" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_ddd_field /= "000" then
+            report "  ERROR: DDD should be 000 (A)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: ADD E signals correct";
+        end if;
+
+        -- Test 3: LrI B,data (00 001 110) - Load register immediate
+        report "";
+        report "Test: LrI B - Load register immediate";
+        instruction_byte <= "00001110";  -- 00 001 110 (DDD=B=001)
+        wait for 10 ns;
+
+        if instr_writes_reg /= '1' then
+            report "  ERROR: LrI should set writes_reg=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_ddd_field /= "001" then
+            report "  ERROR: DDD should be 001 (B)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: LrI B signals correct";
+        end if;
+
+        -- Test 4: INP port (01 000 001) - I/O read
+        report "";
+        report "Test: INP - I/O input to A";
+        instruction_byte <= "01000001";  -- 01 000 001
+        wait for 10 ns;
+
+        if instr_is_io /= '1' then
+            report "  ERROR: INP should set is_io=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_writes_reg /= '1' then
+            report "  ERROR: INP should set writes_reg=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_ddd_field /= "000" then
+            report "  ERROR: DDD should be 000 (A)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: INP signals correct";
+        end if;
+
+        -- Test 5: OUT port (01 100 001) - I/O write
+        report "";
+        report "Test: OUT - I/O output from A";
+        instruction_byte <= "01100001";  -- 01 100 001
+        wait for 10 ns;
+
+        if instr_is_io /= '1' then
+            report "  ERROR: OUT should set is_io=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_reads_reg /= '1' then
+            report "  ERROR: OUT should set reads_reg=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_sss_field /= "000" then
+            report "  ERROR: SSS should be 000 (A)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: OUT signals correct";
+        end if;
+
+        -- Test 6: CALL (01 XXX 110)
+        report "";
+        report "Test: CALL - Stack push";
+        instruction_byte <= "01000110";  -- 01 000 110
+        wait for 10 ns;
+
+        if instr_is_call /= '1' then
+            report "  ERROR: CALL should set is_call=1" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: CALL signals correct";
+        end if;
+
+        -- Test 7: RET (00 XXX 111)
+        report "";
+        report "Test: RET - Stack pop";
+        instruction_byte <= "00000111";  -- 00 000 111
+        wait for 10 ns;
+
+        if instr_is_ret /= '1' then
+            report "  ERROR: RET should set is_ret=1" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: RET signals correct";
+        end if;
+
+        -- Test 8: RST 0 (00 000 101)
+        report "";
+        report "Test: RST 0 - Restart";
+        instruction_byte <= "00000101";  -- 00 000 101
+        wait for 10 ns;
+
+        if instr_is_rst /= '1' then
+            report "  ERROR: RST should set is_rst=1" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: RST signals correct";
+        end if;
+
+        -- Test 9: INr D (00 011 000) - Increment
+        report "";
+        report "Test: INr D - Increment register";
+        instruction_byte <= "00011000";  -- 00 011 000 (DDD=D=011)
+        wait for 10 ns;
+
+        if instr_is_alu /= '1' then
+            report "  ERROR: INr should set is_alu=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_reads_reg /= '1' then
+            report "  ERROR: INr should set reads_reg=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_writes_reg /= '1' then
+            report "  ERROR: INr should set writes_reg=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_ddd_field /= "011" then
+            report "  ERROR: DDD should be 011 (D)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: INr D signals correct";
+        end if;
+
+        -- Test 10: LMr C (11 111 010) - Load memory from register
+        report "";
+        report "Test: LMr C - Memory write from register";
+        instruction_byte <= "11111010";  -- 11 111 010 (SSS=C=010)
+        wait for 10 ns;
+
+        if instr_is_write /= '1' then
+            report "  ERROR: LMr should set is_write=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_reads_reg /= '1' then
+            report "  ERROR: LMr should set reads_reg=1" severity error;
+            errors := errors + 1;
+        end if;
+        if instr_sss_field /= "010" then
+            report "  ERROR: SSS should be 010 (C)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: LMr C signals correct";
+        end if;
 
         -- Summary
         report "";

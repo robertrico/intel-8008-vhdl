@@ -13,7 +13,7 @@ SRC_DIR = ./src/b8008
 TEST_DIR = ./sim/b8008
 BUILD_DIR = ./build/b8008
 
-.PHONY: all clean test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer help
+.PHONY: all clean test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file help
 
 all: help
 
@@ -36,6 +36,10 @@ help:
 	@echo "  make test-interrupt-ready - Test interrupt and ready flip-flops"
 	@echo "  make test-instr-reg       - Test instruction register"
 	@echo "  make test-io-buffer       - Test I/O data buffer"
+	@echo "  make test-memory-io-control - Test memory and I/O control"
+	@echo "  make test-ahl-pointer     - Test AHL address pointer"
+	@echo "  make test-scratchpad-decoder - Test scratchpad decoder"
+	@echo "  make test-register-file   - Test register file"
 	@echo "  make clean                - Remove build files"
 	@echo ""
 
@@ -144,6 +148,38 @@ test-io-buffer: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/io_buffer_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) io_buffer_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) io_buffer_tb --stop-time=10us
+
+test-memory-io-control: $(BUILD_DIR)
+	@echo "Testing memory and I/O control..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/memory_io_control_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) memory_io_control_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) memory_io_control_tb --stop-time=10us
+
+test-ahl-pointer: $(BUILD_DIR)
+	@echo "Testing AHL address pointer..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/ahl_pointer_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ahl_pointer_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ahl_pointer_tb --stop-time=10us
+
+test-scratchpad-decoder: $(BUILD_DIR)
+	@echo "Testing scratchpad decoder..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/scratchpad_decoder_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) scratchpad_decoder_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) scratchpad_decoder_tb --stop-time=10us
+
+test-register-file: $(BUILD_DIR)
+	@echo "Testing register file..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/register_file_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_file_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_file_tb --stop-time=10us
 
 clean:
 	@rm -rf $(BUILD_DIR)
