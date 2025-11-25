@@ -105,6 +105,20 @@ entity memory_io_control is
         memory_write   : out std_logic;  -- Write to memory
         memory_refresh : out std_logic;  -- DRAM refresh cycle
 
+        -- To Memory Multiplexer - Register File routing
+        regfile_to_bus : out std_logic;  -- Register file drives internal bus
+        bus_to_regfile : out std_logic;  -- Internal bus drives register file
+
+        -- To Memory Multiplexer - Address selection
+        select_pc    : out std_logic;  -- Use PC for address bus
+        select_ahl   : out std_logic;  -- Use AHL for address bus (M operations)
+        select_stack : out std_logic;  -- Use Stack for address bus
+
+        -- To Memory Multiplexer - PC load source selection
+        pc_load_from_regs  : out std_logic;  -- Load PC from temp regs (JMP/CALL)
+        pc_load_from_stack : out std_logic;  -- Load PC from stack (RET)
+        pc_load_from_rst   : out std_logic;  -- Load PC from RST vector
+
         -- To Refresh Counter
         refresh_increment : out std_logic;  -- Increment refresh address
 
@@ -151,6 +165,14 @@ begin
         memory_read           <= '0';
         memory_write          <= '0';
         memory_refresh        <= '0';
+        regfile_to_bus        <= '0';
+        bus_to_regfile        <= '0';
+        select_pc             <= '1';  -- Default to PC
+        select_ahl            <= '0';
+        select_stack          <= '0';
+        pc_load_from_regs     <= '0';
+        pc_load_from_stack    <= '0';
+        pc_load_from_rst      <= '0';
         refresh_increment     <= '0';
         stack_addr_select     <= '0';
         stack_push            <= '0';
@@ -181,11 +203,13 @@ begin
                     -- ALU operations, MOV, etc. - read source register
                     scratchpad_select <= instr_sss_field;
                     scratchpad_read   <= '1';
+                    regfile_to_bus    <= '1';  -- Register file drives internal bus
                 end if;
                 if instr_writes_reg = '1' and instr_needs_immediate = '0' then
                     -- Single-cycle register write (MOV, ALU result)
                     scratchpad_select <= instr_ddd_field;
                     scratchpad_write  <= '1';
+                    bus_to_regfile    <= '1';  -- Bus writes to register file
                 end if;
             end if;
 
@@ -202,21 +226,18 @@ begin
                     io_buffer_enable    <= '1';
                     io_buffer_direction <= '0';  -- Read from external
                     memory_read         <= '1';
-                    -- For load operations (LrM, etc.)
-                    -- Address comes from H:L registers
-                    ahl_output <= '1';
+                    select_ahl          <= '1';  -- Use AHL for address
 
                 when CYCLE_PCW =>
                     -- Memory write: write data to memory
                     io_buffer_enable    <= '1';
                     io_buffer_direction <= '1';  -- Write to external
                     memory_write        <= '1';
-                    -- For store operations (LMr, LMI)
-                    -- Address comes from H:L registers
-                    ahl_output <= '1';
+                    select_ahl          <= '1';  -- Use AHL for address
                     -- Data on internal bus comes from register file
                     scratchpad_select <= instr_sss_field;
                     scratchpad_read   <= '1';
+                    regfile_to_bus    <= '1';
 
                 when CYCLE_PCC =>
                     -- I/O operation (INP/OUT)
@@ -226,6 +247,7 @@ begin
                         io_buffer_direction <= '1';
                         scratchpad_select   <= "000";  -- A register
                         scratchpad_read     <= '1';
+                        regfile_to_bus      <= '1';  -- Register file drives bus
                     else
                         -- INP: read from I/O
                         io_buffer_direction <= '0';
@@ -246,25 +268,32 @@ begin
                     -- Instructions like LrI, LrM, INP - write to register
                     scratchpad_select <= instr_ddd_field;
                     scratchpad_write  <= '1';
+                    bus_to_regfile    <= '1';  -- Bus writes to register file
                 end if;
 
             elsif current_cycle = 3 then
-                -- Third cycle of CALL - push return address to stack
+                -- Third cycle of CALL/JMP - load PC from temp registers
                 if instr_is_call = '1' then
-                    stack_push <= '1';
+                    stack_push         <= '1';
+                    pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
+                elsif instr_needs_address = '1' then  -- JMP
+                    pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
                 end if;
             end if;
 
         elsif state_t5 = '1' then
             -- T5: Final extended cycle processing
             -- S2=1, S1=0, S0=1
-            -- RET: pop return address from stack
-            -- RST: push current PC to stack
+            -- RET: pop return address from stack and load PC
+            -- RST: push current PC to stack and load RST vector
 
             if instr_is_ret = '1' then
-                stack_pop <= '1';
+                stack_pop           <= '1';
+                pc_load_from_stack  <= '1';  -- Load PC from stack
+                select_stack        <= '1';  -- Use stack for address
             elsif instr_is_rst = '1' then
-                stack_push <= '1';
+                stack_push          <= '1';
+                pc_load_from_rst    <= '1';  -- Load PC from RST vector
             end if;
 
         elsif state_t1i = '1' then
