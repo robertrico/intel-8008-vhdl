@@ -129,6 +129,10 @@ entity memory_io_control is
         stack_push : out std_logic;  -- Push to stack
         stack_pop  : out std_logic;  -- Pop from stack
 
+        -- To Stack Address Decoder
+        stack_read  : out std_logic;  -- Read from stack (RET)
+        stack_write : out std_logic;  -- Write to stack (CALL, RST)
+
         -- To Program Counter (CRITICAL ISSUE #1)
         pc_increment : out std_logic;  -- Increment PC
         pc_load      : out std_logic;  -- Load PC from data_in
@@ -182,6 +186,8 @@ begin
         stack_addr_select     <= '0';
         stack_push            <= '0';
         stack_pop             <= '0';
+        stack_read            <= '0';
+        stack_write           <= '0';
         pc_increment          <= '0';
         pc_load               <= '0';
         pc_hold               <= '0';
@@ -309,6 +315,7 @@ begin
                 -- Third cycle of CALL/JMP - load PC from temp registers
                 if instr_is_call = '1' then
                     stack_push         <= '1';
+                    stack_write        <= '1';  -- Write PC to stack
                     pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
                 elsif instr_needs_address = '1' then  -- JMP
                     pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
@@ -323,10 +330,12 @@ begin
 
             if instr_is_ret = '1' then
                 stack_pop           <= '1';
+                stack_read          <= '1';  -- Read from stack
                 pc_load_from_stack  <= '1';  -- Load PC from stack
                 select_stack        <= '1';  -- Use stack for address
             elsif instr_is_rst = '1' then
                 stack_push          <= '1';
+                stack_write         <= '1';  -- Write PC to stack
                 pc_load_from_rst    <= '1';  -- Load PC from RST vector
             end if;
 

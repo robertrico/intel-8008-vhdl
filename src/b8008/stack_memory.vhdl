@@ -11,6 +11,7 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
 library work;
 use work.b8008_types.all;
@@ -24,7 +25,7 @@ entity stack_memory is
         reset : in std_logic;
 
         -- 14-bit address input (from PC during CALL/RST)
-        addr_in : in std_logic_vector(13 downto 0);
+        addr_in : in address_t;
 
         -- Individual level enables from stack decoder
         enable_level_0 : in std_logic;
@@ -41,14 +42,14 @@ entity stack_memory is
         stack_write : in std_logic;
 
         -- 14-bit address output (to PC during RET)
-        addr_out : out std_logic_vector(13 downto 0)
+        addr_out : out address_t
     );
 end entity stack_memory;
 
 architecture rtl of stack_memory is
 
     -- 8 stack levels, each 14 bits wide
-    type stack_array_t is array (0 to 7) of std_logic_vector(13 downto 0);
+    type stack_array_t is array (0 to 7) of address_t;
     signal stack : stack_array_t := (others => (others => '0'));
 
 begin

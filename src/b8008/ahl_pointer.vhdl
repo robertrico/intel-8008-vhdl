@@ -14,6 +14,7 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
 library work;
 use work.b8008_types.all;
@@ -35,14 +36,14 @@ entity ahl_pointer is
         output_ahl : in std_logic;  -- Output address to memory bus
 
         -- 14-bit address output (to memory address bus)
-        address_out : out std_logic_vector(13 downto 0)
+        address_out : out address_t
     );
 end entity ahl_pointer;
 
 architecture rtl of ahl_pointer is
 
     -- Internal 14-bit address register
-    signal ahl_address : std_logic_vector(13 downto 0) := (others => '0');
+    signal ahl_address : address_t := (others => '0');
 
 begin
 
@@ -54,8 +55,8 @@ begin
         elsif rising_edge(phi1) then
             if load_ahl = '1' then
                 -- H provides bits [13:6], L provides bits [5:0]
-                ahl_address(13 downto 6) <= h_reg;
-                ahl_address(5 downto 0)  <= l_reg(5 downto 0);
+                ahl_address(13 downto 6) <= unsigned(h_reg);
+                ahl_address(5 downto 0)  <= unsigned(l_reg(5 downto 0));
             end if;
         end if;
     end process;

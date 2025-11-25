@@ -42,7 +42,12 @@ entity instruction_decoder is
         instr_reads_reg       : out std_logic;  -- Instruction reads from register
 
         -- RST vector (CRITICAL ISSUE #3)
-        rst_vector            : out std_logic_vector(2 downto 0)  -- RST instruction bits D5:D3
+        rst_vector            : out std_logic_vector(2 downto 0);  -- RST instruction bits D5:D3
+
+        -- Condition evaluation (for condition_flags module)
+        condition_code        : out std_logic_vector(1 downto 0);  -- CC field: 00=C, 01=Z, 10=S, 11=P
+        test_true             : out std_logic;  -- 1=test true, 0=test false
+        eval_condition        : out std_logic   -- 1=conditional instruction, evaluate condition
     );
 end entity instruction_decoder;
 
@@ -73,6 +78,9 @@ begin
         instr_writes_reg <= '0';
         instr_reads_reg <= '0';
         rst_vector <= (others => '0');  -- Default RST vector
+        condition_code <= "00";  -- Default condition code
+        test_true <= '0';  -- Default test false
+        eval_condition <= '0';  -- Default no condition evaluation
 
         case op_76 is
             -- ================================================================
@@ -111,7 +119,12 @@ begin
 
                     when "011" =>
                         -- 00 CCC 011 - RFc, RTc (conditional return) - 1 cycle
+                        -- Bit 5 determines F (false) or T (true)
+                        -- Bits 4:3 determine condition code
                         instr_is_ret <= '1';
+                        eval_condition <= '1';
+                        condition_code <= op_543(1 downto 0);  -- CC field
+                        test_true <= op_543(2);  -- T=1, F=0
 
                     when "100" =>
                         -- 00 PPP 100 - ALU OP I (immediate) - 2 cycles
@@ -171,14 +184,32 @@ begin
                     end if;
                 else
                     -- 01 XXX XX0 - Jump/Call instructions - 3 cycles
-                    -- 01 XXX 100 - JMP
+                    -- 01 XXX 100 - JMP (unconditional)
                     -- 01 CCC 000 - JFc, JTc (conditional jump)
-                    -- 01 XXX 110 - CAL (CALL)
+                    -- 01 XXX 110 - CAL (CALL, unconditional)
                     -- 01 0CC 010 - CFc (conditional call false)
                     -- 01 1CC 010 - CTc (conditional call true)
                     instr_needs_address <= '1';
-                    if op_210(2 downto 1) = "11" then
-                        -- CAL (CALL) instruction
+
+                    if op_210 = "000" then
+                        -- 01 CCC 000 - JFc/JTc (conditional jump)
+                        -- Bit 5 determines F (false) or T (true)
+                        -- Bits 4:3 determine condition code
+                        eval_condition <= '1';
+                        condition_code <= op_543(1 downto 0);  -- CC field
+                        test_true <= op_543(2);  -- T=1, F=0
+
+                    elsif op_210 = "010" then
+                        -- 01 XCC 010 - CFc/CTc (conditional call)
+                        -- Bit 5 determines F (false) or T (true)
+                        -- Bits 4:3 determine condition code
+                        instr_is_call <= '1';
+                        eval_condition <= '1';
+                        condition_code <= op_543(1 downto 0);  -- CC field
+                        test_true <= op_543(2);  -- T=1, F=0
+
+                    elsif op_210(2 downto 1) = "11" then
+                        -- 01 XXX 110 - CAL (unconditional CALL)
                         instr_is_call <= '1';
                     end if;
                 end if;

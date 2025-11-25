@@ -21,9 +21,9 @@ use work.b8008_types.all;
 entity mem_mux_refresh is
     port (
         -- Address inputs (14-bit sources)
-        pc_addr    : in std_logic_vector(13 downto 0);  -- From Program Counter
-        ahl_addr   : in std_logic_vector(13 downto 0);  -- From AHL pointer (H:L)
-        stack_addr : in std_logic_vector(13 downto 0);  -- From Stack Memory
+        pc_addr    : in address_t;  -- From Program Counter
+        ahl_addr   : in address_t;  -- From AHL pointer (H:L)
+        stack_addr : in address_t;  -- From Stack Memory
 
         -- PC load data sources (for JMP, CALL, RET, RST)
         reg_a      : in std_logic_vector(7 downto 0);   -- From Temp Register A (high byte)
@@ -50,14 +50,14 @@ entity mem_mux_refresh is
         bus_to_regfile : in std_logic;  -- Internal bus drives register file
 
         -- Outputs
-        address_bus : out std_logic_vector(13 downto 0);  -- To external memory
-        pc_data_in  : out std_logic_vector(13 downto 0)   -- To PC data input
+        address_bus : out address_t;  -- To external memory
+        pc_data_in  : out address_t   -- To PC data input
     );
 end entity mem_mux_refresh;
 
 architecture rtl of mem_mux_refresh is
 
-    signal pc_load_data : std_logic_vector(13 downto 0);
+    signal pc_load_data : address_t;
 
 begin
 
@@ -69,19 +69,23 @@ begin
 
     -- PC data input multiplexer
     -- Assemble 14-bit address from various sources
-    with (pc_load_from_regs & pc_load_from_stack & pc_load_from_rst) select
-        pc_load_data <=
+    pc_load_select : process(pc_load_from_regs, pc_load_from_stack, pc_load_from_rst,
+                             reg_a, reg_b, stack_addr, rst_vector)
+    begin
+        if pc_load_from_regs = '1' then
             -- JMP/CALL: Reg.a[5:0] & Reg.b[7:0]
-            (reg_a(5 downto 0) & reg_b) when "100",
-
+            pc_load_data <= unsigned(reg_a(5 downto 0) & reg_b);
+        elsif pc_load_from_stack = '1' then
             -- RET: Stack output
-            stack_addr when "010",
-
+            pc_load_data <= stack_addr;
+        elsif pc_load_from_rst = '1' then
             -- RST: 00_000_AAA_000 (AAA from instruction bits D5:D3)
-            ("00000" & rst_vector & "000") when "001",
-
+            pc_load_data <= unsigned("00000" & rst_vector & "000");
+        else
             -- Default: zeros (PC will increment instead)
-            (others => '0') when others;
+            pc_load_data <= (others => '0');
+        end if;
+    end process;
 
     -- Output PC load data
     pc_data_in <= pc_load_data;
