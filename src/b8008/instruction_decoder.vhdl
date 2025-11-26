@@ -167,9 +167,10 @@ begin
                             instr_needs_address <= '1';
                             instr_is_write <= '1';
                         else
-                            -- LrI - needs 2 cycles
+                            -- LrI - needs 2 cycles, needs T4 to write register
                             instr_needs_immediate <= '1';
                             instr_writes_reg <= '1';
+                            instr_needs_t4t5 <= '1';  -- Need T4 to write result to register
                         end if;
 
                     when "111" =>
@@ -271,6 +272,7 @@ begin
                     -- 11 DDD 111 - LrM (load register from memory) - 2 cycles
                     instr_needs_immediate <= '1';
                     instr_writes_reg <= '1';
+                    instr_needs_t4t5 <= '1';  -- Need T4 to write result to register
                     -- DDD field already set by default
                 elsif op_543 = "111" then
                     -- 11 111 SSS - LMr (load memory from register) - 2 cycles, write

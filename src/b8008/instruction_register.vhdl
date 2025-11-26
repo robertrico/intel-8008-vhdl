@@ -13,6 +13,7 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
 library work;
 use work.b8008_types.all;
@@ -60,6 +61,7 @@ begin
         elsif rising_edge(phi1) then
             if load_ir = '1' then
                 ir <= internal_bus;
+                report "IR: Loading from bus = 0x" & to_hstring(unsigned(internal_bus));
             end if;
         end if;
     end process;

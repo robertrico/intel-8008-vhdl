@@ -79,7 +79,7 @@ begin
     --       signals during cycle 1 (they reflect the PREVIOUS instruction).
     --       Therefore, cycle 1 is always short (T1-T2-T3).
     --       T4/T5 are only needed in cycles 2-3 for certain instructions.
-    needs_t4t5_this_cycle <= '1' when (instr_needs_address = '1' and cycle_count = 3)  -- JMP/CALL cycle 3
+    needs_t4t5_this_cycle <= '1' when (cycle_count >= 2 and instr_needs_t4t5 = '1')  -- Cycles 2-3 when decoder says needed
                              else '0';
 
     -- Output latched cycle type

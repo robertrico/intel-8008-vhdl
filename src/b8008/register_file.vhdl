@@ -14,6 +14,7 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
 library work;
 use work.b8008_types.all;
@@ -80,8 +81,14 @@ begin
                 if enable_c = '1' then reg_c <= data_in; end if;
                 if enable_d = '1' then reg_d <= data_in; end if;
                 if enable_e = '1' then reg_e <= data_in; end if;
-                if enable_h = '1' then reg_h <= data_in; end if;
-                if enable_l = '1' then reg_l <= data_in; end if;
+                if enable_h = '1' then
+                    reg_h <= data_in;
+                    report "REGFILE: Writing H register = 0x" & to_hstring(unsigned(data_in));
+                end if;
+                if enable_l = '1' then
+                    reg_l <= data_in;
+                    report "REGFILE: Writing L register = 0x" & to_hstring(unsigned(data_in));
+                end if;
             end if;
         end if;
     end process;

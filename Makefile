@@ -7,13 +7,17 @@
 # Tools
 GHDL = ~/oss-cad-suite/bin/ghdl
 GHDL_FLAGS = --std=08 --work=work
+ASL = ~/Development/asl-current/asl
+P2HEX = ~/Development/asl-current/p2hex
+HEX2MEM = ./hex_to_mem.py
 
 # Directories
 SRC_DIR = ./src/b8008
 TEST_DIR = ./sim/b8008
 BUILD_DIR = ./build/b8008
+PROG_DIR = ./test_programs
 
-.PHONY: all clean test-b8008 test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help
+.PHONY: all clean assemble test-b8008 test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help
 
 all: help
 
@@ -21,6 +25,10 @@ help:
 	@echo "============================================"
 	@echo "b8008 - Block-based Intel 8008"
 	@echo "============================================"
+	@echo ""
+	@echo "Assembler:"
+	@echo "  make assemble PROG=file.asm  - Assemble program and create .hex/.mem files"
+	@echo "  make assemble file.asm       - Alternative syntax"
 	@echo ""
 	@echo "Integration Tests:"
 	@echo "  make test-b8008           - Test b8008 top-level (progressive integration)"
@@ -130,7 +138,7 @@ test-b8008-top: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_top_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb --stop-time=200us
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb --stop-time=20ms
 
 # ============================================================================
 # INDIVIDUAL MODULE TESTS
@@ -302,6 +310,44 @@ test-sss-ddd-selector: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/sss_ddd_selector_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) sss_ddd_selector_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) sss_ddd_selector_tb --stop-time=10us
+
+# ============================================================================
+# ASSEMBLER
+# ============================================================================
+
+# Assemble a program and generate .hex and .mem files
+# Usage: make assemble PROG=search_as.asm
+#    or: make assemble search_as.asm
+assemble:
+	@if [ -z "$(PROG)" ]; then \
+		if [ -n "$(filter %.asm,$(MAKECMDGOALS))" ]; then \
+			PROG_FILE="$(filter %.asm,$(MAKECMDGOALS))"; \
+		else \
+			echo "Error: Please specify a program file"; \
+			echo "Usage: make assemble PROG=filename.asm"; \
+			echo "   or: make assemble filename.asm"; \
+			exit 1; \
+		fi; \
+	else \
+		PROG_FILE="$(PROG)"; \
+	fi; \
+	BASENAME=$$(basename $$PROG_FILE .asm); \
+	echo "========================================="; \
+	echo "Assembling $$PROG_FILE"; \
+	echo "========================================="; \
+	cd $(PROG_DIR) && \
+	$(ASL) -cpu 8008new -L $$BASENAME.asm && \
+	$(P2HEX) $$BASENAME.p $$BASENAME.hex -r 0-4095 && \
+	python3 ../$(HEX2MEM) $$BASENAME.hex $$BASENAME.mem && \
+	echo "" && \
+	echo "Output files created:" && \
+	echo "  $(PROG_DIR)/$$BASENAME.lst - Assembly listing" && \
+	echo "  $(PROG_DIR)/$$BASENAME.hex - Intel HEX format" && \
+	echo "  $(PROG_DIR)/$$BASENAME.mem - Memory initialization file"
+
+# Allow using the .asm filename as a target
+%.asm:
+	@:
 
 clean:
 	@rm -rf $(BUILD_DIR)

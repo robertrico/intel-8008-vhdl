@@ -174,6 +174,7 @@ begin
                     -- Second cycle of state, advance to next state and reset counter
                     cycle_count <= '0';
                     current_state <= next_state;
+                    report "STATE: " & state_t'image(current_state) & " -> " & state_t'image(next_state);
                 end if;
             end if;
             -- If READY is low, we wait (stretch the current state)

@@ -50,6 +50,7 @@ entity memory_io_control is
         state_t4  : in std_logic;
         state_t5  : in std_logic;
         state_t1i : in std_logic;
+        state_half : in std_logic;  -- Which half of 2-cycle state (0=first, 1=second)
         status_s0 : in std_logic;
         status_s1 : in std_logic;
         status_s2 : in std_logic;
@@ -149,9 +150,6 @@ architecture rtl of memory_io_control is
     constant CYCLE_PCC : std_logic_vector(1 downto 0) := "10";  -- I/O
     constant CYCLE_PCW : std_logic_vector(1 downto 0) := "11";  -- Memory write
 
-    -- Track if we just came from T1I (to suppress PC increment in following T2)
-    signal came_from_t1i : std_logic := '0';
-
     -- Edge detection for generating single-cycle pulses
     signal prev_state_t2 : std_logic := '0';
     signal prev_state_t5 : std_logic := '0';
@@ -168,25 +166,17 @@ begin
     process(phi1, reset)
     begin
         if reset = '1' then
-            came_from_t1i <= '0';
             prev_state_t2 <= '0';
             prev_state_t5 <= '0';
         elsif rising_edge(phi1) then
             -- Update previous state values for edge detection
             prev_state_t2 <= state_t2;
             prev_state_t5 <= state_t5;
-
-            -- Track if we came from T1I
-            if state_t1i = '1' then
-                came_from_t1i <= '1';  -- Mark that we're in T1I
-            elsif state_t2 = '0' then
-                came_from_t1i <= '0';  -- Clear when we leave T2
-            end if;
         end if;
     end process;
 
     -- Control signal generation (combinational based on state and cycle)
-    process(state_t1, state_t2, state_t3, state_t4, state_t5, state_t1i,
+    process(state_t1, state_t2, state_t3, state_t4, state_t5, state_t1i, state_half,
             status_s0, status_s1, status_s2,
             cycle_type, current_cycle, instr_is_io, instr_is_write,
             condition_met, ready_status, interrupt_pending,
@@ -236,8 +226,11 @@ begin
         if ready_status = '0' or interrupt_pending = '1' then
             pc_hold <= '1';
         else
-            -- Increment PC during T2, but only if we came from T1 (not T1I)
-            if state_t2 = '1' and came_from_t1i = '0' then
+            -- Increment PC during second half of T1
+            -- Per datasheet: "incremented immediately after the lower order address bits are sent out"
+            -- Lower address sent during T1 first half, so increment happens in T1 second half
+            -- BUT NOT during T1I - PC is not advanced during interrupt acknowledge
+            if state_t1 = '1' and state_half = '1' and state_t1i = '0' then
                 pc_increment <= '1';
             end if;
 
@@ -273,7 +266,12 @@ begin
             -- S2=1, S1=0, S0=0
             -- Cycle type encoding is handled by machine_cycle_control
             -- D[7:6] driven from cycle_type signal
-            null;
+
+            -- Load AHL pointer from H:L registers before memory operations
+            -- This happens during cycle 2 T2 for instructions that use M addressing
+            if current_cycle = 2 and (cycle_type = CYCLE_PCR or cycle_type = CYCLE_PCW) and instr_needs_address = '0' then
+                ahl_load <= '1';  -- Load H:L into AHL pointer for memory operation in T3
+            end if;
 
         elsif state_t3 = '1' then
             -- T3: Data transfer state (main activity happens here)
@@ -357,6 +355,7 @@ begin
                     scratchpad_select <= instr_ddd_field;
                     scratchpad_write  <= '1';
                     bus_to_regfile    <= '1';  -- Bus writes to register file
+                    report "MEM_IO: T4 cycle 2, writing to register DDD=" & integer'image(to_integer(unsigned(instr_ddd_field)));
                 end if;
 
             elsif current_cycle = 3 then

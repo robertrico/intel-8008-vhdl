@@ -170,6 +170,7 @@ architecture structural of b8008 is
             state_t4              : in std_logic;
             state_t5              : in std_logic;
             state_t1i             : in std_logic;
+            state_half            : in std_logic;
             status_s0             : in std_logic;
             status_s1             : in std_logic;
             status_s2             : in std_logic;
@@ -660,6 +661,14 @@ begin
     -- Address bus type conversion (internal unsigned to external std_logic_vector)
     address_bus <= std_logic_vector(address_bus_internal);
 
+    -- Address multiplexing onto data bus (Real 8008 behavior)
+    -- T1: Output address low byte [7:0]
+    -- T2: Output address high byte [13:8] on D[5:0], cycle type on D[7:6]
+    -- T3+: Data bus available for data transfer via io_buffer
+    data_bus <= std_logic_vector(address_bus_internal(7 downto 0)) when state_t1 = '1' else
+                (cycle_type & std_logic_vector(address_bus_internal(13 downto 8))) when state_t2 = '1' else
+                (others => 'Z');
+
     -- Debug outputs
     debug_reg_a         <= reg_a_out;
     debug_reg_b         <= reg_b_out;
@@ -791,6 +800,7 @@ begin
             state_t4              => state_t4,
             state_t5              => state_t5,
             state_t1i             => state_t1i,
+            state_half            => state_half,
             status_s0             => status_s0,
             status_s1             => status_s1,
             status_s2             => status_s2,

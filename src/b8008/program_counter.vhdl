@@ -48,10 +48,12 @@ begin
         -- Increment on rising edge of increment strobe
         if rising_edge(control.increment) then
             pc <= pc + 1;
+            report "PC: Incrementing from 0x" & to_hstring(pc) & " to 0x" & to_hstring(pc + 1);
 
         -- Load on rising edge of load strobe
         elsif rising_edge(control.load) then
             pc <= data_in;
+            report "PC: Loading 0x" & to_hstring(data_in);
         end if;
 
         -- Hold is implicit - no edge means no change
