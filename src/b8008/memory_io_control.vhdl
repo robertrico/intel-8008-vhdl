@@ -81,7 +81,8 @@ entity memory_io_control is
         ready_status      : in std_logic;
 
         -- To Instruction Register
-        ir_output_enable : out std_logic;
+        ir_load          : out std_logic;  -- Load IR from internal bus
+        ir_output_enable : out std_logic;  -- Output IR to internal bus
 
         -- To I/O Buffer
         io_buffer_enable    : out std_logic;
@@ -148,7 +149,41 @@ architecture rtl of memory_io_control is
     constant CYCLE_PCC : std_logic_vector(1 downto 0) := "10";  -- I/O
     constant CYCLE_PCW : std_logic_vector(1 downto 0) := "11";  -- Memory write
 
+    -- Track if we just came from T1I (to suppress PC increment in following T2)
+    signal came_from_t1i : std_logic := '0';
+
+    -- Edge detection for generating single-cycle pulses
+    signal prev_state_t2 : std_logic := '0';
+    signal prev_state_t5 : std_logic := '0';
+    signal state_t2_edge : std_logic;
+    signal state_t5_edge : std_logic;
+
 begin
+
+    -- Detect rising edges of state signals
+    state_t2_edge <= '1' when (state_t2 = '1' and prev_state_t2 = '0') else '0';
+    state_t5_edge <= '1' when (state_t5 = '1' and prev_state_t5 = '0') else '0';
+
+    -- Track state transitions and generate edge signals
+    process(phi1, reset)
+    begin
+        if reset = '1' then
+            came_from_t1i <= '0';
+            prev_state_t2 <= '0';
+            prev_state_t5 <= '0';
+        elsif rising_edge(phi1) then
+            -- Update previous state values for edge detection
+            prev_state_t2 <= state_t2;
+            prev_state_t5 <= state_t5;
+
+            -- Track if we came from T1I
+            if state_t1i = '1' then
+                came_from_t1i <= '1';  -- Mark that we're in T1I
+            elsif state_t2 = '0' then
+                came_from_t1i <= '0';  -- Clear when we leave T2
+            end if;
+        end if;
+    end process;
 
     -- Control signal generation (combinational based on state and cycle)
     process(state_t1, state_t2, state_t3, state_t4, state_t5, state_t1i,
@@ -161,6 +196,7 @@ begin
             instr_writes_reg, instr_reads_reg)
     begin
         -- Defaults: all outputs inactive
+        ir_load               <= '0';
         ir_output_enable      <= '0';
         io_buffer_enable      <= '0';
         io_buffer_direction   <= '0';
@@ -192,27 +228,33 @@ begin
         pc_load               <= '0';
         pc_hold               <= '0';
 
-        -- PC Control Logic (CRITICAL ISSUE #1)
+        -- PC Control Logic
+        -- Per datasheet: "The program counter is incremented immediately after the lower order address bits are sent out."
+        -- Lower address bits are sent during T1, so PC increments during T2 (after T1 completes)
+        -- But NOT after T1I - only after regular T1
         -- Hold PC if ready signal is low or interrupt pending
         if ready_status = '0' or interrupt_pending = '1' then
             pc_hold <= '1';
         else
-            -- Increment PC after instruction fetch (T3 during PCI cycle)
-            if state_t3 = '1' and cycle_type = CYCLE_PCI then
-                pc_increment <= '1';
-            -- Or after T2 when advancing to next cycle
-            elsif state_t2 = '1' and advance_state = '1' then
+            -- Increment PC during T2, but only if we came from T1 (not T1I)
+            if state_t2 = '1' and came_from_t1i = '0' then
                 pc_increment <= '1';
             end if;
 
-            -- Load PC during T4 for JMP/CALL
-            if state_t4 = '1' then
-                if current_cycle = 3 and (instr_is_call = '1' or instr_needs_address = '1') then
+            -- Load PC during T5 for JMP/RET/RST
+            -- CALL loads PC during T4 (different timing)
+            if state_t5 = '1' then
+                if current_cycle = 3 and instr_needs_address = '1' then
+                    -- JMP: Load PC from Reg.a+Reg.b during T5 of cycle 3
+                    pc_load <= '1';
+                    report "MEM_IO: Setting pc_load at T5 cycle 3 for JMP";
+                elsif instr_is_ret = '1' or instr_is_rst = '1' then
+                    -- RET/RST: Load PC during T5
                     pc_load <= '1';
                 end if;
-            -- Load PC during T5 for RET/RST
-            elsif state_t5 = '1' then
-                if instr_is_ret = '1' or instr_is_rst = '1' then
+            elsif state_t4 = '1' then
+                if current_cycle = 3 and instr_is_call = '1' then
+                    -- CALL: Load PC during T4
                     pc_load <= '1';
                 end if;
             end if;
@@ -255,18 +297,24 @@ begin
 
             case cycle_type is
                 when CYCLE_PCI =>
-                    -- Instruction fetch: read from external memory
+                    -- Instruction fetch: read from external memory and load IR
+                    -- Cycle type PCI only occurs during cycle 1 (machine_cycle_control ensures this)
                     io_buffer_enable    <= '1';
                     io_buffer_direction <= '0';  -- Read from external
                     memory_read         <= '1';
-                    -- Data goes to internal bus, will be loaded into IR by rising edge of phi1
+                    ir_load             <= '1';  -- Load instruction into IR
 
                 when CYCLE_PCR =>
                     -- Memory read: read data from memory
                     io_buffer_enable    <= '1';
                     io_buffer_direction <= '0';  -- Read from external
                     memory_read         <= '1';
-                    select_ahl          <= '1';  -- Use AHL for address
+                    -- For JMP/CALL address fetching (cycles 2-3), use PC not AHL
+                    -- For normal memory reads (LrM), use AHL
+                    if instr_needs_address = '0' then
+                        select_ahl <= '1';  -- Use AHL for address (normal memory read)
+                    end if;
+                    -- Otherwise use PC (default) for address byte fetching
 
                 when CYCLE_PCW =>
                     -- Memory write: write data to memory
@@ -312,22 +360,27 @@ begin
                 end if;
 
             elsif current_cycle = 3 then
-                -- Third cycle of CALL/JMP - load PC from temp registers
+                -- Third cycle of CALL - load PC from temp registers during T4
                 if instr_is_call = '1' then
                     stack_push         <= '1';
                     stack_write        <= '1';  -- Write PC to stack
                     pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
-                elsif instr_needs_address = '1' then  -- JMP
-                    pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
                 end if;
+                -- JMP loads PC during T5, handled below
             end if;
 
         elsif state_t5 = '1' then
             -- T5: Final extended cycle processing
             -- S2=1, S1=0, S0=1
+
+            -- JMP: Load PC from temp registers during T5 of cycle 3
+            if current_cycle = 3 and instr_needs_address = '1' and instr_is_call = '0' then
+                pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
+                report "MEM_IO: Setting pc_load_from_regs at T5 cycle 3 for JMP";
+            end if;
+
             -- RET: pop return address from stack and load PC
             -- RST: push current PC to stack and load RST vector
-
             if instr_is_ret = '1' then
                 stack_pop           <= '1';
                 stack_read          <= '1';  -- Read from stack
@@ -342,9 +395,11 @@ begin
         elsif state_t1i = '1' then
             -- T1I: Interrupt acknowledge cycle
             -- S2=1, S1=1, S0=0
-            -- Output interrupt acknowledge signals
-            -- Prepare for interrupt vector read
-            null;
+            -- External hardware provides interrupt instruction (typically RST 0)
+            -- Read instruction from external data bus and load into IR
+            io_buffer_enable    <= '1';
+            io_buffer_direction <= '0';  -- Read from external
+            ir_load             <= '1';  -- Load interrupt instruction into IR
 
         end if;
 

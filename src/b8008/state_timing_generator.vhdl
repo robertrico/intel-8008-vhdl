@@ -49,8 +49,8 @@ end entity state_timing_generator;
 architecture rtl of state_timing_generator is
 
     -- State type
-    type state_t is (S_T1, S_T2, S_T3, S_T4, S_T5, S_T1I);
-    signal current_state : state_t := S_T1;
+    type state_t is (S_STOPPED, S_T1, S_T2, S_T3, S_T4, S_T5, S_T1I);
+    signal current_state : state_t := S_STOPPED;
     signal next_state : state_t;
 
     -- Cycle counter within each state (each state = 2 clock cycles)
@@ -70,15 +70,17 @@ begin
     state_half <= cycle_count;
 
     -- Generate status signals S0, S1, S2 based on current state
-    -- T1:  S2=0, S1=1, S0=0 (binary 010 = 2)
-    -- T2:  S2=1, S1=0, S0=0 (binary 100 = 4)
-    -- T3:  S2=0, S1=0, S0=1 (binary 001 = 1)
-    -- T4:  S2=0, S1=1, S0=1 (binary 011 = 3)
-    -- T5:  S2=1, S1=0, S0=1 (binary 101 = 5)
-    -- T1I: S2=1, S1=1, S0=0 (binary 110 = 6)
-    status_s0 <= '1' when (current_state = S_T3 or current_state = S_T4 or current_state = S_T5) else '0';
-    status_s1 <= '1' when (current_state = S_T1 or current_state = S_T4 or current_state = S_T1I) else '0';
-    status_s2 <= '1' when (current_state = S_T2 or current_state = S_T5 or current_state = S_T1I) else '0';
+    -- STOPPED: S2=0, S1=1, S0=1 (binary 011 = 3)
+    -- T1:      S2=0, S1=1, S0=0 (binary 010 = 2)
+    -- T2:      S2=1, S1=0, S0=0 (binary 100 = 4)
+    -- T3:      S2=0, S1=0, S0=1 (binary 001 = 1)
+    -- T4:      S2=1, S1=1, S0=1 (binary 111 = 7)
+    -- T5:      S2=1, S1=0, S0=1 (binary 101 = 5)
+    -- T1I:     S2=1, S1=1, S0=0 (binary 110 = 6)
+    -- WAIT:    S2=0, S1=0, S0=0 (binary 000 = 0) - not a state, just default
+    status_s0 <= '1' when (current_state = S_STOPPED or current_state = S_T3 or current_state = S_T4 or current_state = S_T5) else '0';
+    status_s1 <= '1' when (current_state = S_STOPPED or current_state = S_T1 or current_state = S_T4 or current_state = S_T1I) else '0';
+    status_s2 <= '1' when (current_state = S_T2 or current_state = S_T4 or current_state = S_T5 or current_state = S_T1I) else '0';
 
     -- State advancement logic (combinational)
     process(current_state, advance_state, interrupt_pending, cycle_count)
@@ -87,6 +89,14 @@ begin
         next_state <= current_state;
 
         case current_state is
+            when S_STOPPED =>
+                -- STOPPED state: CPU waits for interrupt to begin execution
+                -- Only exit STOPPED when interrupt is pending
+                if interrupt_pending = '1' then
+                    next_state <= S_T1I;  -- Go directly to T1I (interrupt acknowledge)
+                end if;
+                -- Otherwise stay in STOPPED
+
             when S_T1 =>
                 -- T1 always goes to T2 (after 2 cycles)
                 if cycle_count = '1' then

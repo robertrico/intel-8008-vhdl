@@ -41,6 +41,12 @@ entity instruction_decoder is
         instr_writes_reg      : out std_logic;  -- Instruction writes to register
         instr_reads_reg       : out std_logic;  -- Instruction reads from register
 
+        -- For Register & ALU Control (temp register loading)
+        instr_uses_temp_regs  : out std_logic;  -- Instruction uses Reg.a/Reg.b (ALU ops, JMP, CALL)
+
+        -- For Machine Cycle Control (extended states T4/T5)
+        instr_needs_t4t5      : out std_logic;  -- Instruction needs T4/T5 states (JMP, CALL, RET, RST, ALU ops)
+
         -- RST vector (CRITICAL ISSUE #3)
         rst_vector            : out std_logic_vector(2 downto 0);  -- RST instruction bits D5:D3
 
@@ -77,6 +83,8 @@ begin
         instr_is_hlt <= '0';
         instr_writes_reg <= '0';
         instr_reads_reg <= '0';
+        instr_uses_temp_regs <= '0';  -- Default: doesn't use temp registers
+        instr_needs_t4t5 <= '0';  -- Default: doesn't need T4/T5
         rst_vector <= (others => '0');  -- Default RST vector
         condition_code <= "00";  -- Default condition code
         test_true <= '0';  -- Default test false
@@ -99,29 +107,36 @@ begin
                             -- But NOT if DDD=000, that's HLT (handled above)
                             if op_543 /= "000" then
                                 instr_is_alu <= '1';
+                                instr_uses_temp_regs <= '1';
                                 instr_reads_reg <= '1';
                                 instr_writes_reg <= '1';
+                                instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
                             end if;
 
                     when "001" =>
                         -- 00 DDD 001 - DCr (decrement) - 1 cycle
                         instr_is_alu <= '1';
+                        instr_uses_temp_regs <= '1';
                         instr_reads_reg <= '1';
                         instr_writes_reg <= '1';
+                        instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
 
                     when "010" =>
                         -- 00 XXX 010 - Rotate instructions (RLC, RRC, RAL, RAR) - 1 cycle
                         instr_is_alu <= '1';
+                        instr_uses_temp_regs <= '1';
                         instr_reads_reg <= '1';   -- Read A
                         instr_writes_reg <= '1';  -- Write A
                         instr_sss_field <= "000"; -- A register
                         instr_ddd_field <= "000"; -- A register
+                        instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
 
                     when "011" =>
                         -- 00 CCC 011 - RFc, RTc (conditional return) - 1 cycle
                         -- Bit 5 determines F (false) or T (true)
                         -- Bits 4:3 determine condition code
                         instr_is_ret <= '1';
+                        instr_needs_t4t5 <= '1';  -- RET needs T5
                         eval_condition <= '1';
                         condition_code <= op_543(1 downto 0);  -- CC field
                         test_true <= op_543(2);  -- T=1, F=0
@@ -130,15 +145,18 @@ begin
                         -- 00 PPP 100 - ALU OP I (immediate) - 2 cycles
                         instr_needs_immediate <= '1';
                         instr_is_alu <= '1';
+                        instr_uses_temp_regs <= '1';
                         instr_reads_reg <= '1';   -- Read A
                         instr_writes_reg <= '1';  -- Write A
                         instr_sss_field <= "000"; -- A register
                         instr_ddd_field <= "000"; -- A register
+                        instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
 
                     when "101" =>
                         -- 00 AAA 101 - RST (restart) - 1 cycle
                         -- RST vector is in bits [5:3] (AAA field)
                         instr_is_rst <= '1';
+                        instr_needs_t4t5 <= '1';  -- RST needs T5
                         rst_vector <= op_543;  -- Extract AAA field (bits D5:D3)
 
                     when "110" =>
@@ -157,6 +175,7 @@ begin
                     when "111" =>
                         -- 00 XXX 111 - RET (return) - 1 cycle
                         instr_is_ret <= '1';
+                        instr_needs_t4t5 <= '1';  -- RET needs T5
 
                         when others =>
                             null;
@@ -190,6 +209,8 @@ begin
                     -- 01 0CC 010 - CFc (conditional call false)
                     -- 01 1CC 010 - CTc (conditional call true)
                     instr_needs_address <= '1';
+                    instr_uses_temp_regs <= '1';  -- JMP/CALL load address into Reg.a/Reg.b
+                    instr_needs_t4t5 <= '1';  -- JMP/CALL need T4/T5 in cycle 3
 
                     if op_210 = "000" then
                         -- 01 CCC 000 - JFc/JTc (conditional jump)
@@ -208,6 +229,11 @@ begin
                         condition_code <= op_543(1 downto 0);  -- CC field
                         test_true <= op_543(2);  -- T=1, F=0
 
+                    elsif op_210 = "100" then
+                        -- 01 XXX 100 - JMP (unconditional jump)
+                        -- Already set: instr_needs_address, instr_uses_temp_regs, instr_needs_t4t5
+                        -- No additional signals needed for unconditional JMP
+
                     elsif op_210(2 downto 1) = "11" then
                         -- 01 XXX 110 - CAL (unconditional CALL)
                         instr_is_call <= '1';
@@ -220,9 +246,11 @@ begin
             when "10" =>
                 -- 10 PPP SSS - ALU operations with A as destination
                 instr_is_alu <= '1';
+                instr_uses_temp_regs <= '1';
                 instr_reads_reg <= '1';   -- Read source (SSS or memory)
                 instr_writes_reg <= '1';  -- Write to A
                 instr_ddd_field <= "000"; -- A register
+                instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
                 if op_210 = "111" then
                     -- 10 PPP 111 - ALU OP M (memory via H:L) - 2 cycles
                     instr_needs_immediate <= '1';

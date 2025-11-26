@@ -67,28 +67,10 @@ begin
                    ahl_addr   when select_ahl = '1' else
                    pc_addr;
 
-    -- PC data input multiplexer
-    -- Assemble 14-bit address from various sources
-    pc_load_select : process(pc_load_from_regs, pc_load_from_stack, pc_load_from_rst,
-                             reg_a, reg_b, stack_addr, rst_vector)
-    begin
-        if pc_load_from_regs = '1' then
-            -- JMP/CALL: Reg.a[5:0] & Reg.b[7:0]
-            pc_load_data <= unsigned(reg_a(5 downto 0) & reg_b);
-        elsif pc_load_from_stack = '1' then
-            -- RET: Stack output
-            pc_load_data <= stack_addr;
-        elsif pc_load_from_rst = '1' then
-            -- RST: 00_000_AAA_000 (AAA from instruction bits D5:D3)
-            pc_load_data <= unsigned("00000" & rst_vector & "000");
-        else
-            -- Default: zeros (PC will increment instead)
-            pc_load_data <= (others => '0');
-        end if;
-    end process;
-
-    -- Output PC load data
-    pc_data_in <= pc_load_data;
+    -- PC data input - always output computed value
+    -- The actual load is controlled by pc_control.load in the PC module
+    -- This avoids delta cycle issues by pre-computing the value
+    pc_data_in <= unsigned(reg_a(5 downto 0) & reg_b);
 
     -- Register file to internal bus routing (tri-state)
     -- When regfile_to_bus='1', register file drives the bus

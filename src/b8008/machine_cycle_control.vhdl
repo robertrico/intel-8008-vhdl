@@ -33,6 +33,7 @@ entity machine_cycle_control is
         instr_is_io           : in std_logic;  -- I/O operation
         instr_is_write        : in std_logic;  -- Memory write operation
         instr_is_hlt          : in std_logic;  -- HLT (halt) instruction
+        instr_needs_t4t5      : in std_logic;  -- Instruction needs T4/T5 extended states
 
         -- Outputs to State Timing Generator
         advance_state : out std_logic;  -- Signal to skip to next instruction
@@ -60,6 +61,9 @@ architecture rtl of machine_cycle_control is
     -- Latched cycle type signal
     signal cycle_type_latch : std_logic_vector(1 downto 0) := "00";
 
+    -- Determine if current cycle needs T4/T5 (computed based on instruction and cycle)
+    signal needs_t4t5_this_cycle : std_logic;
+
 begin
 
     -- Output current cycle
@@ -68,6 +72,15 @@ begin
     -- Determine if instruction needs additional cycles
     needs_cycle_2 <= instr_needs_immediate or instr_needs_address;
     needs_cycle_3 <= instr_needs_address;
+
+    -- Determine if current cycle needs T4/T5 states
+    -- This depends on both the instruction type AND which cycle we're in
+    -- NOTE: Cycle 1 always fetches the opcode, so we can't use instruction decoder
+    --       signals during cycle 1 (they reflect the PREVIOUS instruction).
+    --       Therefore, cycle 1 is always short (T1-T2-T3).
+    --       T4/T5 are only needed in cycles 2-3 for certain instructions.
+    needs_t4t5_this_cycle <= '1' when (instr_needs_address = '1' and cycle_count = 3)  -- JMP/CALL cycle 3
+                             else '0';
 
     -- Output latched cycle type
     cycle_type <= cycle_type_latch;
@@ -95,29 +108,54 @@ begin
         end if;
     end process;
 
-    -- Advance state logic - latch when asserted during T3, clear on T1
-    process(state_t3, state_t1, instr_is_hlt)
+    -- Advance state logic - set when instruction/cycle is complete
+    -- This is checked by state_timing_generator to decide when to return to T1
+    --
+    -- Key insight: advance_state should ONLY be set when we're DONE with the cycle
+    -- - Short cycles: Set at T3 (last state)
+    -- - Extended cycles: Set at T5 (last state)
+    -- - Never set between T3 and T5 for extended cycles!
+    process(state_t3, state_t5, state_t1, instr_is_hlt, needs_t4t5_this_cycle, cycle_count, needs_cycle_2, needs_cycle_3)
     begin
-        -- Latch advance_state when conditions met during T3
-        if rising_edge(state_t3) then
-            -- Don't advance if HLT instruction (stay halted)
+        if rising_edge(state_t1) then
+            -- Clear at start of new cycle
+            advance_latch <= '0';
+
+        elsif rising_edge(state_t3) then
+            -- Only set if this is a SHORT cycle (no T4/T5) AND cycle is complete
+            report "MCycle: T3 rising, cycle=" & integer'image(cycle_count) &
+                   " needs_t4t5_this=" & std_logic'image(needs_t4t5_this_cycle);
+            if instr_is_hlt = '0' and needs_t4t5_this_cycle = '0' and
+               ((cycle_count = 1 and needs_cycle_2 = '0') or      -- Single-cycle done
+                (cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done
+                (cycle_count = 3)) then                           -- Three-cycle done
+                advance_latch <= '1';
+                report "MCycle: Setting advance_latch at T3 (short cycle complete)";
+            end if;
+
+        elsif rising_edge(state_t5) then
+            -- Set at T5 when cycle is complete (extended cycles end here)
+            report "MCycle: T5 rising, cycle=" & integer'image(cycle_count);
             if instr_is_hlt = '0' and
                ((cycle_count = 1 and needs_cycle_2 = '0') or      -- Single-cycle done
                 (cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done
                 (cycle_count = 3)) then                           -- Three-cycle done
                 advance_latch <= '1';
+                report "MCycle: Setting advance_latch at T5 (extended cycle complete)";
             end if;
-        -- Clear on T1 rising edge (start of new cycle)
-        elsif rising_edge(state_t1) then
-            advance_latch <= '0';
         end if;
     end process;
 
     -- Cycle counter state machine
     -- Updates on rising edge of T1 (start of each new cycle)
-    process(state_t1)
+    -- OR on rising edge of T1I (interrupt acknowledge - counts as cycle 1)
+    process(state_t1, state_t1i)
     begin
-        if rising_edge(state_t1) then
+        if rising_edge(state_t1i) then
+            -- T1I is interrupt acknowledge - this is the cycle 1 instruction fetch
+            -- Set cycle counter to 1 (it should already be, but ensure it)
+            cycle_count <= 1;
+        elsif rising_edge(state_t1) then
             -- We're entering T1 (start of new cycle or new instruction)
             if cycle_count = 1 and needs_cycle_2 = '1' then
                 -- Continue to cycle 2

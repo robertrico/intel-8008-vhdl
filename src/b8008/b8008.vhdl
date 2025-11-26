@@ -56,7 +56,18 @@ entity b8008 is
         -- CONTROL INPUTS
         -- ====================================================================
         ready_in  : in std_logic;  -- READY signal (halt CPU if '0')
-        interrupt : in std_logic   -- INTERRUPT request
+        interrupt : in std_logic;  -- INTERRUPT request
+
+        -- ====================================================================
+        -- DEBUG OUTPUTS
+        -- ====================================================================
+        debug_reg_a           : out std_logic_vector(7 downto 0);
+        debug_reg_b           : out std_logic_vector(7 downto 0);
+        debug_cycle           : out integer range 1 to 3;
+        debug_pc              : out std_logic_vector(13 downto 0);
+        debug_ir              : out std_logic_vector(7 downto 0);
+        debug_needs_address   : out std_logic;
+        debug_int_pending     : out std_logic
     );
 end entity b8008;
 
@@ -117,6 +128,7 @@ architecture structural of b8008 is
             instr_is_io           : in std_logic;
             instr_is_write        : in std_logic;
             instr_is_hlt          : in std_logic;
+            instr_needs_t4t5      : in std_logic;
             advance_state         : out std_logic;
             cycle_type            : out std_logic_vector(1 downto 0);
             current_cycle         : out integer range 1 to 3
@@ -139,6 +151,8 @@ architecture structural of b8008 is
             instr_is_hlt          : out std_logic;
             instr_writes_reg      : out std_logic;
             instr_reads_reg       : out std_logic;
+            instr_uses_temp_regs  : out std_logic;
+            instr_needs_t4t5      : out std_logic;
             rst_vector            : out std_logic_vector(2 downto 0);
             condition_code        : out std_logic_vector(1 downto 0);
             test_true             : out std_logic;
@@ -177,6 +191,7 @@ architecture structural of b8008 is
             condition_met         : in std_logic;
             interrupt_pending     : in std_logic;
             ready_status          : in std_logic;
+            ir_load               : out std_logic;
             ir_output_enable      : out std_logic;
             io_buffer_enable      : out std_logic;
             io_buffer_direction   : out std_logic;
@@ -374,21 +389,22 @@ architecture structural of b8008 is
     -- Phase 8: ALU and Flags
     component register_alu_control is
         port (
-            phi2            : in std_logic;
-            status_s0       : in std_logic;
-            status_s1       : in std_logic;
-            status_s2       : in std_logic;
-            instr_is_alu_op : in std_logic;
-            cycle_is_2      : in std_logic;
-            interrupt       : in std_logic;
-            load_reg_a      : out std_logic;
-            load_reg_b      : out std_logic;
-            alu_enable      : out std_logic;
-            update_flags    : out std_logic;
-            output_reg_a    : out std_logic;
-            output_reg_b    : out std_logic;
-            output_result   : out std_logic;
-            output_flags    : out std_logic
+            phi2                 : in std_logic;
+            status_s0            : in std_logic;
+            status_s1            : in std_logic;
+            status_s2            : in std_logic;
+            instr_is_alu_op      : in std_logic;
+            instr_uses_temp_regs : in std_logic;
+            current_cycle        : in integer range 1 to 3;
+            interrupt            : in std_logic;
+            load_reg_a           : out std_logic;
+            load_reg_b           : out std_logic;
+            alu_enable           : out std_logic;
+            update_flags         : out std_logic;
+            output_reg_a         : out std_logic;
+            output_reg_b         : out std_logic;
+            output_result        : out std_logic;
+            output_flags         : out std_logic
         );
     end component;
 
@@ -488,7 +504,6 @@ architecture structural of b8008 is
     -- Machine cycle control signals
     signal cycle_type    : std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
     signal current_cycle : integer range 1 to 3;
-    signal cycle_is_2    : std_logic;  -- For register_alu_control
     signal advance_state : std_logic;
 
     -- Instruction decoder outputs
@@ -506,6 +521,8 @@ architecture structural of b8008 is
     signal instr_is_hlt          : std_logic;
     signal instr_writes_reg      : std_logic;
     signal instr_reads_reg       : std_logic;
+    signal instr_uses_temp_regs  : std_logic;
+    signal instr_needs_t4t5      : std_logic;
     signal rst_vector            : std_logic_vector(2 downto 0);
     signal condition_code        : std_logic_vector(1 downto 0);
     signal test_true             : std_logic;
@@ -643,8 +660,14 @@ begin
     -- Address bus type conversion (internal unsigned to external std_logic_vector)
     address_bus <= std_logic_vector(address_bus_internal);
 
-    -- Convert current_cycle to cycle_is_2 for register_alu_control
-    cycle_is_2 <= '1' when current_cycle = 2 else '0';
+    -- Debug outputs
+    debug_reg_a         <= reg_a_out;
+    debug_reg_b         <= reg_b_out;
+    debug_cycle         <= current_cycle;
+    debug_pc            <= std_logic_vector(pc_addr);
+    debug_ir            <= instr_byte;
+    debug_needs_address <= instr_needs_address;
+    debug_int_pending   <= interrupt_pending;
 
     -- PC control record construction
     pc_control.increment <= pc_increment;
@@ -662,9 +685,7 @@ begin
 
     -- Instruction byte assembly from IR bit outputs (will be connected in Phase 9)
     -- For now, instr_byte signal will be driven by instruction_register outputs
-
-    -- Load IR during T3 of instruction fetch (PCI) cycle
-    load_ir <= '1' when (state_t3 = '1' and cycle_type = "00") else '0';
+    -- Note: load_ir signal now comes from memory_io_control (proper control flow)
 
     -- ========================================================================
     -- MODULE INSTANTIATIONS
@@ -730,6 +751,7 @@ begin
             instr_is_io           => instr_is_io,
             instr_is_write        => instr_is_write,
             instr_is_hlt          => instr_is_hlt,
+            instr_needs_t4t5      => instr_needs_t4t5,
             advance_state         => advance_state,
             cycle_type            => cycle_type,
             current_cycle         => current_cycle
@@ -751,6 +773,8 @@ begin
             instr_is_hlt          => instr_is_hlt,
             instr_writes_reg      => instr_writes_reg,
             instr_reads_reg       => instr_reads_reg,
+            instr_uses_temp_regs  => instr_uses_temp_regs,
+            instr_needs_t4t5      => instr_needs_t4t5,
             rst_vector            => rst_vector,
             condition_code        => condition_code,
             test_true             => test_true,
@@ -788,6 +812,7 @@ begin
             condition_met         => condition_met,
             interrupt_pending     => interrupt_pending,
             ready_status          => ready_status,
+            ir_load               => load_ir,
             ir_output_enable      => ir_output_enable,
             io_buffer_enable      => io_buffer_enable,
             io_buffer_direction   => io_buffer_direction,
@@ -961,21 +986,22 @@ begin
 
     u_register_alu_control : register_alu_control
         port map (
-            phi2            => phi2,
-            status_s0       => status_s0,
-            status_s1       => status_s1,
-            status_s2       => status_s2,
-            instr_is_alu_op => instr_is_alu,
-            cycle_is_2      => cycle_is_2,
-            interrupt       => interrupt_pending,
-            load_reg_a      => load_reg_a,
-            load_reg_b      => load_reg_b,
-            alu_enable      => alu_enable,
-            update_flags    => update_flags,
-            output_reg_a    => output_reg_a,
-            output_reg_b    => output_reg_b,
-            output_result   => output_result,
-            output_flags    => output_flags
+            phi2                 => phi2,
+            status_s0            => status_s0,
+            status_s1            => status_s1,
+            status_s2            => status_s2,
+            instr_is_alu_op      => instr_is_alu,
+            instr_uses_temp_regs => instr_uses_temp_regs,
+            current_cycle        => current_cycle,
+            interrupt            => interrupt_pending,
+            load_reg_a           => load_reg_a,
+            load_reg_b           => load_reg_b,
+            alu_enable           => alu_enable,
+            update_flags         => update_flags,
+            output_reg_a         => output_reg_a,
+            output_reg_b         => output_reg_b,
+            output_result        => output_result,
+            output_flags         => output_flags
         );
 
     u_temp_registers : temp_registers

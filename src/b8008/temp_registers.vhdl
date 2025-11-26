@@ -62,6 +62,7 @@ begin
         if rising_edge(phi2) then
             if load_reg_a = '1' then
                 reg_a <= internal_bus;
+                report "TEMP_REG: Loading Reg.a from internal_bus = 0x" & to_hstring(unsigned(internal_bus));
             end if;
         end if;
     end process;
@@ -72,6 +73,9 @@ begin
         if rising_edge(phi2) then
             if load_reg_b = '1' then
                 reg_b <= internal_bus;
+                report "TEMP_REG: Loading Reg.b from internal_bus = 0x" & to_hstring(unsigned(internal_bus));
+            else
+                report "TEMP_REG: phi2 rising but load_reg_b = 0";
             end if;
         end if;
     end process;

@@ -118,10 +118,12 @@ begin
         variable flag_value : std_logic;
         variable condition_result : std_logic;
     begin
-        -- Default: condition not met
-        condition_result := '0';
+        -- Default: condition met (for unconditional instructions)
+        -- Only evaluate flags if eval_condition = '1' (conditional instructions)
+        condition_result := '1';
 
         if eval_condition = '1' then
+            -- Conditional instruction - evaluate the condition
             -- Select which flag to test
             case condition_code is
                 when COND_CARRY =>

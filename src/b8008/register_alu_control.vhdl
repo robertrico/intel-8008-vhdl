@@ -29,11 +29,12 @@ entity register_alu_control is
         status_s1 : in std_logic;
         status_s2 : in std_logic;
 
-        -- Instruction decoder input
-        instr_is_alu_op : in std_logic;
+        -- Instruction decoder inputs
+        instr_is_alu_op      : in std_logic;  -- ALU operation (for ALU enable)
+        instr_uses_temp_regs : in std_logic;  -- Uses Reg.a/Reg.b (ALU ops, JMP, CALL)
 
         -- Machine cycle control input
-        cycle_is_2 : in std_logic;  -- 0=cycle 1, 1=cycle 2
+        current_cycle : in integer range 1 to 3;
 
         -- Interrupt input
         interrupt : in std_logic;
@@ -94,14 +95,26 @@ begin
     --   - ALU OP r: C1 T5
     --   - ALU OP I/M: C2 T5
 
-    -- Load Reg.b: T3 (any cycle) OR T4 (cycle 1 only, for register operands)
-    load_reg_b <= (state_is_t3 and phi2) or
-                  (state_is_t4 and not cycle_is_2 and phi2);
+    -- Load Reg.b: T3 (cycles 1-2 only) OR T4 (cycle 1 only, for register operands)
+    -- Cycle 1 T3: opcode byte (all instructions)
+    -- Cycle 2 T3: immediate/address low byte (for instructions that use temp regs)
+    -- Cycle 3 T3: address high byte goes to Reg.a, NOT Reg.b!
+    -- Cycle 1 T4: source register operand (for ALU register operations)
+    -- NOTE: Don't gate on phi2 here - let the temp registers sample on phi2 rising edge
+    load_reg_b <= '1' when (state_is_t3 = '1' and instr_uses_temp_regs = '1' and current_cycle < 3) else
+                  '1' when (state_is_t4 = '1' and current_cycle = 1) else
+                  '0';
 
-    -- Load Reg.a: T4 (cycle 1) OR T3 (cycle 2) for ALU operations
-    -- Note: Accumulator is loaded when we need it for ALU operations
-    load_reg_a <= (state_is_t4 and not cycle_is_2 and instr_is_alu_op and phi2) or
-                  (state_is_t3 and cycle_is_2 and instr_is_alu_op and phi2);
+    -- Load Reg.a: T4 (cycle 1) OR T3 (cycle 2 or 3) for instructions using temp regs
+    -- Cycle 1 T4: accumulator (for ALU operations)
+    -- Cycle 2 T3: accumulator (for ALU immediate/memory operations - NOT for JMP/CALL!)
+    -- Cycle 3 T3: address high byte (for JMP/CALL)
+    -- For JMP/CALL: only load Reg.a in cycle 3 (high byte), not cycle 2
+    -- NOTE: Don't gate on phi2 here - let the temp registers sample on phi2 rising edge
+    load_reg_a <= '1' when (state_is_t4 = '1' and current_cycle = 1 and instr_is_alu_op = '1') else
+                  '1' when (state_is_t3 = '1' and current_cycle = 2 and instr_is_alu_op = '1') else
+                  '1' when (state_is_t3 = '1' and current_cycle = 3 and instr_uses_temp_regs = '1') else
+                  '0';
 
     -- ALU enable: T5 during ALU operations
     -- ALU executes on phi2 falling edge (start of phi1.2 period)
