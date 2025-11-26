@@ -32,6 +32,7 @@ entity register_alu_control is
         -- Instruction decoder inputs
         instr_is_alu_op      : in std_logic;  -- ALU operation (for ALU enable)
         instr_uses_temp_regs : in std_logic;  -- Uses Reg.a/Reg.b (ALU ops, JMP, CALL)
+        instr_writes_reg     : in std_logic;  -- Instruction writes to register (for MVI output)
 
         -- Machine cycle control input
         current_cycle : in integer range 1 to 3;
@@ -59,7 +60,7 @@ architecture rtl of register_alu_control is
     -- T1:  S2=0, S1=1, S0=0 (binary 010)
     -- T2:  S2=1, S1=0, S0=0 (binary 100)
     -- T3:  S2=0, S1=0, S0=1 (binary 001)
-    -- T4:  S2=0, S1=1, S0=1 (binary 011)
+    -- T4:  S2=1, S1=1, S0=1 (binary 111)
     -- T5:  S2=1, S1=0, S0=1 (binary 101)
     -- T1I: S2=1, S1=1, S0=0 (binary 110)
     signal state_is_t1  : std_logic;
@@ -75,7 +76,7 @@ begin
     state_is_t1  <= '1' when (status_s2 = '0' and status_s1 = '1' and status_s0 = '0') else '0';
     state_is_t2  <= '1' when (status_s2 = '1' and status_s1 = '0' and status_s0 = '0') else '0';
     state_is_t3  <= '1' when (status_s2 = '0' and status_s1 = '0' and status_s0 = '1') else '0';
-    state_is_t4  <= '1' when (status_s2 = '0' and status_s1 = '1' and status_s0 = '1') else '0';
+    state_is_t4  <= '1' when (status_s2 = '1' and status_s1 = '1' and status_s0 = '1') else '0';
     state_is_t5  <= '1' when (status_s2 = '1' and status_s1 = '0' and status_s0 = '1') else '0';
     state_is_t1i <= '1' when (status_s2 = '1' and status_s1 = '1' and status_s0 = '0') else '0';
 
@@ -123,20 +124,15 @@ begin
     -- Update flags: Same timing as ALU enable (flags updated after ALU operation)
     update_flags <= state_is_t5 and instr_is_alu_op and phi2;
 
-    -- Output Enable Signals (CRITICAL ISSUE #2)
+    -- Output Enable Signals
     --
-    -- NOTE: These are currently set to '0' (never drive bus) because in the Intel 8008
-    -- architecture, temp registers are internal to the ALU/register side and their
-    -- outputs (reg_a_out, reg_b_out) go directly to the ALU inputs, not the internal bus.
+    -- Temp registers normally don't drive the internal bus - they hold operands for ALU.
+    -- EXCEPTION: For MVI (load register immediate), Reg.b must drive the bus during T4
+    -- so the register file can read the immediate value from Reg.b.
     --
-    -- The temp registers are loaded FROM the internal bus, but they don't drive it back.
-    -- Their purpose is to hold operands for the ALU during phi2 cycle.
-    --
-    -- If we discover during integration that these need to drive the bus (e.g., for
-    -- JMP/CALL address formation), we can update this logic based on instruction decode.
-    --
-    output_reg_a  <= '0';  -- Temp registers don't drive internal bus in normal operation
-    output_reg_b  <= '0';  -- Temp registers don't drive internal bus in normal operation
+    output_reg_a  <= '0';  -- Reg.a never needs to drive bus
+    output_reg_b  <= '1' when (state_is_t4 = '1' and current_cycle = 2 and instr_writes_reg = '1' and instr_is_alu_op = '0') else
+                     '0';
 
     -- ALU result drives bus after ALU execution completes
     -- This happens when the ALU result needs to be written to accumulator

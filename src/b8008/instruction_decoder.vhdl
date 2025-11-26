@@ -40,6 +40,7 @@ entity instruction_decoder is
         instr_is_hlt          : out std_logic;  -- HLT (halt) instruction
         instr_writes_reg      : out std_logic;  -- Instruction writes to register
         instr_reads_reg       : out std_logic;  -- Instruction reads from register
+        instr_is_mem_indirect : out std_logic;  -- Memory indirect (SSS or DDD = "111")
 
         -- For Register & ALU Control (temp register loading)
         instr_uses_temp_regs  : out std_logic;  -- Instruction uses Reg.a/Reg.b (ALU ops, JMP, CALL)
@@ -83,12 +84,19 @@ begin
         instr_is_hlt <= '0';
         instr_writes_reg <= '0';
         instr_reads_reg <= '0';
+        instr_is_mem_indirect <= '0';  -- Default: not memory indirect
         instr_uses_temp_regs <= '0';  -- Default: doesn't use temp registers
         instr_needs_t4t5 <= '0';  -- Default: doesn't need T4/T5
         rst_vector <= (others => '0');  -- Default RST vector
         condition_code <= "00";  -- Default condition code
         test_true <= '0';  -- Default test false
         eval_condition <= '0';  -- Default no condition evaluation
+
+        -- Detect memory indirect operations (M register access)
+        -- This happens when SSS or DDD field = "111"
+        if op_210 = "111" or op_543 = "111" then
+            instr_is_mem_indirect <= '1';
+        end if;
 
         case op_76 is
             -- ================================================================
@@ -171,6 +179,7 @@ begin
                             instr_needs_immediate <= '1';
                             instr_writes_reg <= '1';
                             instr_needs_t4t5 <= '1';  -- Need T4 to write result to register
+                            instr_uses_temp_regs <= '1';  -- Need Reg.b to hold immediate byte
                         end if;
 
                     when "111" =>
@@ -220,6 +229,9 @@ begin
                         eval_condition <= '1';
                         condition_code <= op_543(1 downto 0);  -- CC field
                         test_true <= op_543(2);  -- T=1, F=0
+                        report "INSTR_DEC: JZ/JNZ opcode=0x" & to_hstring(unsigned(instruction_byte)) &
+                               " op_543=" & to_string(op_543) &
+                               " test_true=" & std_logic'image(op_543(2));
 
                     elsif op_210 = "010" then
                         -- 01 XCC 010 - CFc/CTc (conditional call)

@@ -3,12 +3,14 @@
 --------------------------------------------------------------------------------
 -- Memory Multiplexer and Refresh Amplifiers for Intel 8008
 --
--- Handles address multiplexing, PC data input, and register file data routing
--- - Selects address source for 14-bit address bus (PC, AHL, Stack)
+-- Handles PC data input and register file data routing
 -- - Assembles PC load data from various sources (stack, temp regs, RST)
 -- - Routes data between internal bus and register file (scratchpad)
 -- - In original 8008, also handled DRAM refresh (not needed for FPGA)
--- - DUMB module: just multiplexing, no logic
+-- - DUMB module: just data routing, no logic
+--
+-- NOTE: Address selection (PC vs Stack) is now handled by b8008.vhdl.
+-- H:L addresses come directly from register file via internal bus during T1/T2.
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -20,9 +22,8 @@ use work.b8008_types.all;
 
 entity mem_mux_refresh is
     port (
-        -- Address inputs (14-bit sources)
+        -- Address inputs (14-bit sources) - only used for PC loading
         pc_addr    : in address_t;  -- From Program Counter
-        ahl_addr   : in address_t;  -- From AHL pointer (H:L)
         stack_addr : in address_t;  -- From Stack Memory
 
         -- PC load data sources (for JMP, CALL, RET, RST)
@@ -39,7 +40,6 @@ entity mem_mux_refresh is
 
         -- Control signals from Memory/I/O Control
         select_pc    : in std_logic;  -- Use PC address
-        select_ahl   : in std_logic;  -- Use AHL address (for M operations)
         select_stack : in std_logic;  -- Use Stack address
 
         pc_load_from_regs  : in std_logic;  -- Load PC from Reg.a + Reg.b (JMP/CALL)
@@ -50,7 +50,6 @@ entity mem_mux_refresh is
         bus_to_regfile : in std_logic;  -- Internal bus drives register file
 
         -- Outputs
-        address_bus : out address_t;  -- To external memory
         pc_data_in  : out address_t   -- To PC data input
     );
 end entity mem_mux_refresh;
@@ -60,12 +59,6 @@ architecture rtl of mem_mux_refresh is
     signal pc_load_data : address_t;
 
 begin
-
-    -- Address bus multiplexer
-    -- Priority: Stack > AHL > PC (default)
-    address_bus <= stack_addr when select_stack = '1' else
-                   ahl_addr   when select_ahl = '1' else
-                   pc_addr;
 
     -- PC data input - always output computed value
     -- The actual load is controlled by pc_control.load in the PC module

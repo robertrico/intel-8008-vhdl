@@ -39,9 +39,8 @@ entity b8008 is
         phi2_out : out std_logic;  -- Phase 2 clock output (for debugging)
 
         -- ====================================================================
-        -- ADDRESS AND DATA
+        -- DATA BUS (Address and data are time-multiplexed on this bus)
         -- ====================================================================
-        address_bus : out std_logic_vector(13 downto 0);  -- 14-bit address output
         data_bus    : inout std_logic_vector(7 downto 0); -- 8-bit bidirectional data
 
         -- ====================================================================
@@ -129,6 +128,8 @@ architecture structural of b8008 is
             instr_is_write        : in std_logic;
             instr_is_hlt          : in std_logic;
             instr_needs_t4t5      : in std_logic;
+            eval_condition        : in std_logic;
+            condition_met         : in std_logic;
             advance_state         : out std_logic;
             cycle_type            : out std_logic_vector(1 downto 0);
             current_cycle         : out integer range 1 to 3
@@ -151,6 +152,7 @@ architecture structural of b8008 is
             instr_is_hlt          : out std_logic;
             instr_writes_reg      : out std_logic;
             instr_reads_reg       : out std_logic;
+            instr_is_mem_indirect : out std_logic;
             instr_uses_temp_regs  : out std_logic;
             instr_needs_t4t5      : out std_logic;
             rst_vector            : out std_logic_vector(2 downto 0);
@@ -189,6 +191,7 @@ architecture structural of b8008 is
             instr_is_rst          : in std_logic;
             instr_writes_reg      : in std_logic;
             instr_reads_reg       : in std_logic;
+            instr_is_mem_indirect : in std_logic;
             condition_met         : in std_logic;
             interrupt_pending     : in std_logic;
             ready_status          : in std_logic;
@@ -198,8 +201,6 @@ architecture structural of b8008 is
             io_buffer_direction   : out std_logic;
             addr_select_sss       : out std_logic_vector(2 downto 0);
             addr_select_ddd       : out std_logic_vector(2 downto 0);
-            ahl_load              : out std_logic;
-            ahl_output            : out std_logic;
             scratchpad_select     : out std_logic_vector(2 downto 0);
             scratchpad_read       : out std_logic;
             scratchpad_write      : out std_logic;
@@ -209,7 +210,6 @@ architecture structural of b8008 is
             regfile_to_bus        : out std_logic;
             bus_to_regfile        : out std_logic;
             select_pc             : out std_logic;
-            select_ahl            : out std_logic;
             select_stack          : out std_logic;
             pc_load_from_regs     : out std_logic;
             pc_load_from_stack    : out std_logic;
@@ -220,9 +220,11 @@ architecture structural of b8008 is
             stack_pop             : out std_logic;
             stack_read            : out std_logic;
             stack_write           : out std_logic;
-            pc_increment          : out std_logic;
+            pc_increment_lower    : out std_logic;
+            pc_increment_upper    : out std_logic;
             pc_load               : out std_logic;
-            pc_hold               : out std_logic
+            pc_hold               : out std_logic;
+            pc_carry_in           : in std_logic
         );
     end component;
 
@@ -244,28 +246,27 @@ architecture structural of b8008 is
 
     component program_counter is
         port (
-            control  : in pc_control_t;
-            data_in  : in address_t;
-            pc_out   : out address_t
+            control   : in  pc_control_t;
+            data_in   : in  address_t;
+            pc_out    : out address_t;
+            carry_out : out std_logic
         );
     end component;
 
     component ahl_pointer is
         port (
-            phi1        : in std_logic;
-            reset       : in std_logic;
-            h_reg       : in std_logic_vector(7 downto 0);
-            l_reg       : in std_logic_vector(7 downto 0);
-            load_ahl    : in std_logic;
-            output_ahl  : in std_logic;
-            address_out : out address_t
+            state_t1              : in std_logic;
+            state_t2              : in std_logic;
+            current_cycle         : in integer range 1 to 3;
+            instr_is_mem_indirect : in std_logic;
+            ahl_select            : out std_logic_vector(2 downto 0);
+            ahl_active            : out std_logic
         );
     end component;
 
     component mem_mux_refresh is
         port (
             pc_addr            : in address_t;
-            ahl_addr           : in address_t;
             stack_addr         : in address_t;
             reg_a              : in std_logic_vector(7 downto 0);
             reg_b              : in std_logic_vector(7 downto 0);
@@ -274,14 +275,12 @@ architecture structural of b8008 is
             regfile_data_in    : out std_logic_vector(7 downto 0);
             internal_bus       : inout std_logic_vector(7 downto 0);
             select_pc          : in std_logic;
-            select_ahl         : in std_logic;
             select_stack       : in std_logic;
             pc_load_from_regs  : in std_logic;
             pc_load_from_stack : in std_logic;
             pc_load_from_rst   : in std_logic;
             regfile_to_bus     : in std_logic;
             bus_to_regfile     : in std_logic;
-            address_bus        : out address_t;
             pc_data_in         : out address_t
         );
     end component;
@@ -367,9 +366,7 @@ architecture structural of b8008 is
             enable_h     : in std_logic;
             enable_l     : in std_logic;
             read_enable  : in std_logic;
-            write_enable : in std_logic;
-            h_reg_out    : out std_logic_vector(7 downto 0);
-            l_reg_out    : out std_logic_vector(7 downto 0)
+            write_enable : in std_logic
         );
     end component;
 
@@ -396,6 +393,7 @@ architecture structural of b8008 is
             status_s2            : in std_logic;
             instr_is_alu_op      : in std_logic;
             instr_uses_temp_regs : in std_logic;
+            instr_writes_reg     : in std_logic;
             current_cycle        : in integer range 1 to 3;
             interrupt            : in std_logic;
             load_reg_a           : out std_logic;
@@ -522,6 +520,7 @@ architecture structural of b8008 is
     signal instr_is_hlt          : std_logic;
     signal instr_writes_reg      : std_logic;
     signal instr_reads_reg       : std_logic;
+    signal instr_is_mem_indirect : std_logic;
     signal instr_uses_temp_regs  : std_logic;
     signal instr_needs_t4t5      : std_logic;
     signal rst_vector            : std_logic_vector(2 downto 0);
@@ -544,18 +543,16 @@ architecture structural of b8008 is
     -- Program counter signals
     signal pc_addr    : address_t;  -- unsigned(13 downto 0)
     signal pc_data_in : address_t;  -- unsigned(13 downto 0)
-    signal pc_control : pc_control_t;  -- From b8008_types: increment, load, hold
+    signal pc_control : pc_control_t;  -- From b8008_types: increment_lower, increment_upper, load, hold
+    signal pc_carry   : std_logic;  -- Carry flag from PC lower byte increment
 
     -- Address signals (sources for multiplexer)
-    signal ahl_addr          : address_t;
     signal stack_addr        : address_t;
-    signal address_bus_internal : address_t;  -- Internal address bus (converted to external)
+    signal selected_address  : address_t;  -- Multiplexed address (PC/Stack only - H:L come from regfile)
 
     -- Register file signals
     signal regfile_data_out : std_logic_vector(7 downto 0);
     signal regfile_data_in  : std_logic_vector(7 downto 0);
-    signal h_reg_out        : std_logic_vector(7 downto 0);
-    signal l_reg_out        : std_logic_vector(7 downto 0);
     signal regfile_enable_a : std_logic;
     signal regfile_enable_b : std_logic;
     signal regfile_enable_c : std_logic;
@@ -603,8 +600,6 @@ architecture structural of b8008 is
     signal io_buffer_direction  : std_logic;
     signal addr_select_sss      : std_logic_vector(2 downto 0);
     signal addr_select_ddd      : std_logic_vector(2 downto 0);
-    signal ahl_load             : std_logic;
-    signal ahl_output           : std_logic;
     signal scratchpad_select    : std_logic_vector(2 downto 0);
     signal scratchpad_read      : std_logic;
     signal scratchpad_write     : std_logic;
@@ -614,8 +609,12 @@ architecture structural of b8008 is
     signal regfile_to_bus       : std_logic;
     signal bus_to_regfile       : std_logic;
     signal select_pc            : std_logic;
-    signal select_ahl           : std_logic;
     signal select_stack         : std_logic;
+
+    -- AHL scratchpad address selection signals
+    signal ahl_scratchpad_addr  : std_logic_vector(2 downto 0);  -- From AHL module
+    signal ahl_active           : std_logic;  -- AHL overrides SSS/DDD
+    signal final_scratchpad_addr : std_logic_vector(2 downto 0);  -- Muxed scratchpad address
     signal pc_load_from_regs    : std_logic;
     signal pc_load_from_stack   : std_logic;
     signal pc_load_from_rst     : std_logic;
@@ -625,7 +624,8 @@ architecture structural of b8008 is
     signal stack_pop            : std_logic;
     signal stack_read           : std_logic;
     signal stack_write          : std_logic;
-    signal pc_increment         : std_logic;
+    signal pc_increment_lower   : std_logic;
+    signal pc_increment_upper   : std_logic;
     signal pc_load              : std_logic;
     signal pc_hold              : std_logic;
 
@@ -658,15 +658,21 @@ begin
     s1_out   <= status_s1;
     s2_out   <= status_s2;
 
-    -- Address bus type conversion (internal unsigned to external std_logic_vector)
-    address_bus <= std_logic_vector(address_bus_internal);
-
     -- Address multiplexing onto data bus (Real 8008 behavior)
     -- T1: Output address low byte [7:0]
     -- T2: Output address high byte [13:8] on D[5:0], cycle type on D[7:6]
-    -- T3+: Data bus available for data transfer via io_buffer
-    data_bus <= std_logic_vector(address_bus_internal(7 downto 0)) when state_t1 = '1' else
-                (cycle_type & std_logic_vector(address_bus_internal(13 downto 8))) when state_t2 = '1' else
+    -- Address multiplexer: Only PC and Stack (H:L addressed via register file)
+    -- During memory operations, H and L are read from regfile and output on data bus
+    selected_address <= stack_addr when select_stack = '1' else pc_addr;
+
+    -- Scratchpad address multiplexer: AHL overrides SSS/DDD during cycle 2 T1/T2 of memory ops
+    final_scratchpad_addr <= ahl_scratchpad_addr when ahl_active = '1' else scratchpad_select;
+
+    -- Data bus driver: T1/T2 output address, T3+ tri-state for io_buffer
+    -- During cycle 2 T1/T2 of memory indirect operations, io_buffer drives data_bus from internal_bus (H/L regs)
+    -- Otherwise during T1/T2, output selected_address (PC or Stack)
+    data_bus <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (current_cycle = 2 and instr_is_mem_indirect = '1')) else
+                (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (current_cycle = 2 and instr_is_mem_indirect = '1')) else
                 (others => 'Z');
 
     -- Debug outputs
@@ -679,9 +685,10 @@ begin
     debug_int_pending   <= interrupt_pending;
 
     -- PC control record construction
-    pc_control.increment <= pc_increment;
-    pc_control.load      <= pc_load;
-    pc_control.hold      <= pc_hold;
+    pc_control.increment_lower <= pc_increment_lower;
+    pc_control.increment_upper <= pc_increment_upper;
+    pc_control.load            <= pc_load;
+    pc_control.hold            <= pc_hold;
 
     -- ALU opcode comes from instruction bits 5:3 (PPP field)
     alu_opcode <= instr_byte(5 downto 3);
@@ -761,6 +768,8 @@ begin
             instr_is_write        => instr_is_write,
             instr_is_hlt          => instr_is_hlt,
             instr_needs_t4t5      => instr_needs_t4t5,
+            eval_condition        => eval_condition,
+            condition_met         => condition_met,
             advance_state         => advance_state,
             cycle_type            => cycle_type,
             current_cycle         => current_cycle
@@ -782,6 +791,7 @@ begin
             instr_is_hlt          => instr_is_hlt,
             instr_writes_reg      => instr_writes_reg,
             instr_reads_reg       => instr_reads_reg,
+            instr_is_mem_indirect => instr_is_mem_indirect,
             instr_uses_temp_regs  => instr_uses_temp_regs,
             instr_needs_t4t5      => instr_needs_t4t5,
             rst_vector            => rst_vector,
@@ -819,6 +829,7 @@ begin
             instr_is_rst          => instr_is_rst,
             instr_writes_reg      => instr_writes_reg,
             instr_reads_reg       => instr_reads_reg,
+            instr_is_mem_indirect => instr_is_mem_indirect,
             condition_met         => condition_met,
             interrupt_pending     => interrupt_pending,
             ready_status          => ready_status,
@@ -828,8 +839,6 @@ begin
             io_buffer_direction   => io_buffer_direction,
             addr_select_sss       => addr_select_sss,
             addr_select_ddd       => addr_select_ddd,
-            ahl_load              => ahl_load,
-            ahl_output            => ahl_output,
             scratchpad_select     => scratchpad_select,
             scratchpad_read       => scratchpad_read,
             scratchpad_write      => scratchpad_write,
@@ -839,7 +848,6 @@ begin
             regfile_to_bus        => regfile_to_bus,
             bus_to_regfile        => bus_to_regfile,
             select_pc             => select_pc,
-            select_ahl            => select_ahl,
             select_stack          => select_stack,
             pc_load_from_regs     => pc_load_from_regs,
             pc_load_from_stack    => pc_load_from_stack,
@@ -850,7 +858,9 @@ begin
             stack_pop             => stack_pop,
             stack_read            => stack_read,
             stack_write           => stack_write,
-            pc_increment          => pc_increment,
+            pc_increment_lower    => pc_increment_lower,
+            pc_increment_upper    => pc_increment_upper,
+            pc_carry_in           => pc_carry,
             pc_load               => pc_load,
             pc_hold               => pc_hold
         );
@@ -862,26 +872,25 @@ begin
 
     u_program_counter : program_counter
         port map (
-            control => pc_control,
-            data_in => pc_data_in,
-            pc_out  => pc_addr
+            control   => pc_control,
+            data_in   => pc_data_in,
+            pc_out    => pc_addr,
+            carry_out => pc_carry
         );
 
     u_ahl_pointer : ahl_pointer
         port map (
-            phi1        => phi1,
-            reset       => reset,
-            h_reg       => h_reg_out,
-            l_reg       => l_reg_out,
-            load_ahl    => ahl_load,
-            output_ahl  => ahl_output,
-            address_out => ahl_addr
+            state_t1              => state_t1,
+            state_t2              => state_t2,
+            current_cycle         => current_cycle,
+            instr_is_mem_indirect => instr_is_mem_indirect,
+            ahl_select            => ahl_scratchpad_addr,
+            ahl_active            => ahl_active
         );
 
     u_mem_mux_refresh : mem_mux_refresh
         port map (
             pc_addr            => pc_addr,
-            ahl_addr           => ahl_addr,
             stack_addr         => stack_addr,
             reg_a              => reg_a_out,
             reg_b              => reg_b_out,
@@ -890,14 +899,12 @@ begin
             regfile_data_in    => regfile_data_in,
             internal_bus       => internal_bus,
             select_pc          => select_pc,
-            select_ahl         => select_ahl,
             select_stack       => select_stack,
             pc_load_from_regs  => pc_load_from_regs,
             pc_load_from_stack => pc_load_from_stack,
             pc_load_from_rst   => pc_load_from_rst,
             regfile_to_bus     => regfile_to_bus,
             bus_to_regfile     => bus_to_regfile,
-            address_bus        => address_bus_internal,
             pc_data_in         => pc_data_in
         );
 
@@ -956,7 +963,7 @@ begin
 
     u_scratchpad_decoder : scratchpad_decoder
         port map (
-            addr_in      => scratchpad_select,
+            addr_in      => final_scratchpad_addr,
             read_enable  => scratchpad_read,
             write_enable => scratchpad_write,
             enable_a     => regfile_enable_a,
@@ -985,9 +992,7 @@ begin
             enable_h     => regfile_enable_h,
             enable_l     => regfile_enable_l,
             read_enable  => regfile_read_enable,
-            write_enable => regfile_write_enable,
-            h_reg_out    => h_reg_out,
-            l_reg_out    => l_reg_out
+            write_enable => regfile_write_enable
         );
 
     -- ------------------------------------------------------------------------
@@ -1002,6 +1007,7 @@ begin
             status_s2            => status_s2,
             instr_is_alu_op      => instr_is_alu,
             instr_uses_temp_regs => instr_uses_temp_regs,
+            instr_writes_reg     => instr_writes_reg,
             current_cycle        => current_cycle,
             interrupt            => interrupt_pending,
             load_reg_a           => load_reg_a,

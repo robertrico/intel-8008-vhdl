@@ -31,18 +31,24 @@ architecture testbench of b8008_tb is
     -- Component declaration
     component b8008 is
         port (
-            clk_in      : in std_logic;
-            reset       : in std_logic;
-            phi1_out    : out std_logic;
-            phi2_out    : out std_logic;
-            address_bus : out std_logic_vector(13 downto 0);
-            data_bus    : inout std_logic_vector(7 downto 0);
-            sync_out    : out std_logic;
-            s0_out      : out std_logic;
-            s1_out      : out std_logic;
-            s2_out      : out std_logic;
-            ready_in    : in std_logic;
-            interrupt   : in std_logic
+            clk_in                : in std_logic;
+            reset                 : in std_logic;
+            phi1_out              : out std_logic;
+            phi2_out              : out std_logic;
+            data_bus              : inout std_logic_vector(7 downto 0);
+            sync_out              : out std_logic;
+            s0_out                : out std_logic;
+            s1_out                : out std_logic;
+            s2_out                : out std_logic;
+            ready_in              : in std_logic;
+            interrupt             : in std_logic;
+            debug_reg_a           : out std_logic_vector(7 downto 0);
+            debug_reg_b           : out std_logic_vector(7 downto 0);
+            debug_cycle           : out integer range 1 to 3;
+            debug_pc              : out std_logic_vector(13 downto 0);
+            debug_ir              : out std_logic_vector(7 downto 0);
+            debug_needs_address   : out std_logic;
+            debug_int_pending     : out std_logic
         );
     end component;
 
@@ -55,18 +61,27 @@ architecture testbench of b8008_tb is
     end component;
 
     -- Test signals
-    signal clk_in      : std_logic := '0';
-    signal reset       : std_logic := '1';
-    signal phi1_out    : std_logic;
-    signal phi2_out    : std_logic;
+    signal clk_in             : std_logic := '0';
+    signal reset              : std_logic := '1';
+    signal phi1_out           : std_logic;
+    signal phi2_out           : std_logic;
+    signal data_bus           : std_logic_vector(7 downto 0) := (others => 'Z');
+    signal sync_out           : std_logic;
+    signal s0_out             : std_logic;
+    signal s1_out             : std_logic;
+    signal s2_out             : std_logic;
+    signal ready_in           : std_logic := '1';  -- Default ready
+    signal interrupt          : std_logic := '0';  -- Default no interrupt
+    signal debug_reg_a        : std_logic_vector(7 downto 0);
+    signal debug_reg_b        : std_logic_vector(7 downto 0);
+    signal debug_cycle        : integer range 1 to 3;
+    signal debug_pc           : std_logic_vector(13 downto 0);
+    signal debug_ir           : std_logic_vector(7 downto 0);
+    signal debug_needs_address : std_logic;
+    signal debug_int_pending  : std_logic;
+
+    -- Address bus signal (latched from data bus during T1/T2)
     signal address_bus : std_logic_vector(13 downto 0);
-    signal data_bus    : std_logic_vector(7 downto 0) := (others => 'Z');
-    signal sync_out    : std_logic;
-    signal s0_out      : std_logic;
-    signal s1_out      : std_logic;
-    signal s2_out      : std_logic;
-    signal ready_in    : std_logic := '1';  -- Default ready
-    signal interrupt   : std_logic := '0';  -- Default no interrupt
 
     -- Clock generation
     constant CLK_PERIOD : time := 10 ns;  -- 100 MHz clock
@@ -88,19 +103,28 @@ begin
 
     dut : b8008
         port map (
-            clk_in      => clk_in,
-            reset       => reset,
-            phi1_out    => phi1_out,
-            phi2_out    => phi2_out,
-            address_bus => address_bus,
-            data_bus    => data_bus,
-            sync_out    => sync_out,
-            s0_out      => s0_out,
-            s1_out      => s1_out,
-            s2_out      => s2_out,
-            ready_in    => ready_in,
-            interrupt   => interrupt
+            clk_in                => clk_in,
+            reset                 => reset,
+            phi1_out              => phi1_out,
+            phi2_out              => phi2_out,
+            data_bus              => data_bus,
+            sync_out              => sync_out,
+            s0_out                => s0_out,
+            s1_out                => s1_out,
+            s2_out                => s2_out,
+            ready_in              => ready_in,
+            interrupt             => interrupt,
+            debug_reg_a           => debug_reg_a,
+            debug_reg_b           => debug_reg_b,
+            debug_cycle           => debug_cycle,
+            debug_pc              => debug_pc,
+            debug_ir              => debug_ir,
+            debug_needs_address   => debug_needs_address,
+            debug_int_pending     => debug_int_pending
         );
+
+    -- Use debug_pc as address for ROM (since addresses are no longer on separate bus)
+    address_bus <= debug_pc;
 
     -- ========================================================================
     -- MEMORY (ROM)

@@ -29,30 +29,60 @@ entity program_counter is
         data_in   : in  address_t;
 
         -- Current PC value (always available)
-        pc_out    : out address_t
+        pc_out    : out address_t;
+
+        -- Carry flag: set when lower byte increment wraps from 0xFF to 0x00
+        carry_out : out std_logic
     );
 end entity program_counter;
 
 architecture rtl of program_counter is
     signal pc : address_t := (others => '0');
+    signal carry_flag : std_logic := '0';
 begin
 
     -- Output current PC
     pc_out <= pc;
+    carry_out <= carry_flag;
 
-    -- Latch behavior: respond to rising edge of control strobes
-    -- In real 1972 hardware, these would be level-triggered latches
-    -- In VHDL simulation, we model the strobe edge to avoid delta cycles
-    process(control.increment, control.load)
+    -- Two-stage increment (1972 design per datasheet):
+    -- T1: Increment lower byte, set carry if wraps from 0xFF to 0x00
+    -- T2: If carry set, increment upper byte
+    process(control.increment_lower, control.increment_upper, control.load)
+        variable pc_lower : unsigned(7 downto 0);
+        variable pc_upper : unsigned(5 downto 0);
     begin
-        -- Increment on rising edge of increment strobe
-        if rising_edge(control.increment) then
-            pc <= pc + 1;
-            report "PC: Incrementing from 0x" & to_hstring(pc) & " to 0x" & to_hstring(pc + 1);
+        -- Increment lower byte during T1
+        if rising_edge(control.increment_lower) then
+            pc_lower := pc(7 downto 0);
+            pc_upper := pc(13 downto 8);
+
+            -- Check for carry before increment
+            if pc_lower = x"FF" then
+                carry_flag <= '1';
+                report "PC: Lower byte increment 0x" & to_hstring(pc_lower) & " -> 0x00 (CARRY)";
+            else
+                carry_flag <= '0';
+            end if;
+
+            -- Increment lower byte
+            pc_lower := pc_lower + 1;
+            pc <= pc_upper & pc_lower;
+            report "PC: Lower byte = 0x" & to_hstring(pc_lower) & ", full PC = 0x" & to_hstring(pc_upper & pc_lower);
+
+        -- Increment upper byte during T2 if carry occurred
+        elsif rising_edge(control.increment_upper) then
+            pc_lower := pc(7 downto 0);
+            pc_upper := pc(13 downto 8);
+            pc_upper := pc_upper + 1;
+            pc <= pc_upper & pc_lower;
+            carry_flag <= '0';  -- Clear carry after use
+            report "PC: Upper byte increment (carry), full PC = 0x" & to_hstring(pc_upper & pc_lower);
 
         -- Load on rising edge of load strobe
         elsif rising_edge(control.load) then
             pc <= data_in;
+            carry_flag <= '0';
             report "PC: Loading 0x" & to_hstring(data_in);
         end if;
 

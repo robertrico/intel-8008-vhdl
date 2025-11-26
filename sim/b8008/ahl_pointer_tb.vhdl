@@ -1,8 +1,8 @@
 --------------------------------------------------------------------------------
 -- ahl_pointer_tb.vhdl
 --------------------------------------------------------------------------------
--- Testbench for AHL Address Pointer
--- Tests: Load H:L into address pointer, output 14-bit address
+-- Testbench for AHL Pointer (Scratchpad Address Selector)
+-- Tests: Selecting H and L register addresses during memory indirect operations
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -18,156 +18,179 @@ architecture test of ahl_pointer_tb is
 
     component ahl_pointer is
         port (
-            phi1        : in std_logic;
-            reset       : in std_logic;
-            h_reg       : in std_logic_vector(7 downto 0);
-            l_reg       : in std_logic_vector(7 downto 0);
-            load_ahl    : in std_logic;
-            output_ahl  : in std_logic;
-            address_out : out std_logic_vector(13 downto 0)
+            state_t1              : in std_logic;
+            state_t2              : in std_logic;
+            current_cycle         : in integer range 1 to 3;
+            instr_is_mem_indirect : in std_logic;
+            ahl_select            : out std_logic_vector(2 downto 0);
+            ahl_active            : out std_logic
         );
     end component;
 
-    -- Clock
-    signal phi1 : std_logic := '0';
-    constant phi1_period : time := 500 ns;
-
     -- Inputs
-    signal reset      : std_logic := '0';
-    signal h_reg      : std_logic_vector(7 downto 0) := (others => '0');
-    signal l_reg      : std_logic_vector(7 downto 0) := (others => '0');
-    signal load_ahl   : std_logic := '0';
-    signal output_ahl : std_logic := '0';
+    signal state_t1              : std_logic := '0';
+    signal state_t2              : std_logic := '0';
+    signal current_cycle         : integer range 1 to 3 := 1;
+    signal instr_is_mem_indirect : std_logic := '0';
 
     -- Outputs
-    signal address_out : std_logic_vector(13 downto 0);
+    signal ahl_select : std_logic_vector(2 downto 0);
+    signal ahl_active : std_logic;
+
+    -- Constants for scratchpad addresses
+    constant ADDR_A : std_logic_vector(2 downto 0) := "000";
+    constant ADDR_B : std_logic_vector(2 downto 0) := "001";
+    constant ADDR_C : std_logic_vector(2 downto 0) := "010";
+    constant ADDR_D : std_logic_vector(2 downto 0) := "011";
+    constant ADDR_E : std_logic_vector(2 downto 0) := "100";
+    constant ADDR_H : std_logic_vector(2 downto 0) := "101";
+    constant ADDR_L : std_logic_vector(2 downto 0) := "110";
 
 begin
 
-    -- Clock generation
-    phi1 <= not phi1 after phi1_period / 2;
-
     uut : ahl_pointer
         port map (
-            phi1        => phi1,
-            reset       => reset,
-            h_reg       => h_reg,
-            l_reg       => l_reg,
-            load_ahl    => load_ahl,
-            output_ahl  => output_ahl,
-            address_out => address_out
+            state_t1              => state_t1,
+            state_t2              => state_t2,
+            current_cycle         => current_cycle,
+            instr_is_mem_indirect => instr_is_mem_indirect,
+            ahl_select            => ahl_select,
+            ahl_active            => ahl_active
         );
 
     test_process : process
         variable errors : integer := 0;
     begin
         report "========================================";
-        report "AHL Address Pointer Test";
+        report "AHL Pointer (Scratchpad Selector) Test";
         report "========================================";
 
-        -- Test 1: Reset clears address
+        -- Test 1: Not a memory indirect operation - should be inactive
         report "";
-        report "Test 1: Reset clears address";
+        report "Test 1: Non-memory operation (instr_is_mem_indirect=0)";
 
-        reset <= '1';
-        wait for phi1_period;
-        reset <= '0';
-        wait for phi1_period;
-
-        if address_out /= "00000000000000" then
-            report "  ERROR: Address should be 0 after reset" severity error;
-            errors := errors + 1;
-        else
-            report "  PASS: Address cleared after reset";
-        end if;
-
-        -- Test 2: Load H:L into address pointer
-        report "";
-        report "Test 2: Load H=0x3F, L=0x2A (14-bit: 0x3F2A -> 0011111100101010)";
-
-        h_reg    <= x"3F";  -- 00111111
-        l_reg    <= x"2A";  -- 00101010 (only [5:0] used = 101010)
-        load_ahl <= '1';
-        wait until rising_edge(phi1);
+        state_t1 <= '0';
+        state_t2 <= '0';
+        current_cycle <= 2;
+        instr_is_mem_indirect <= '0';
         wait for 10 ns;
-        load_ahl <= '0';
 
-        if address_out /= "00111111101010" then
-            report "  ERROR: Address should be 0011111110101010, got " &
-                   to_string(address_out) severity error;
+        if ahl_active /= '0' then
+            report "  ERROR: ahl_active should be '0' for non-memory ops" severity error;
             errors := errors + 1;
         else
-            report "  PASS: H:L loaded correctly";
+            report "  PASS: ahl_active='0' for non-memory indirect ops";
         end if;
 
-        -- Test 3: Load different address
+        -- Test 2: Memory indirect, cycle 2, T1 state - should select L register
         report "";
-        report "Test 3: Load H=0xFF, L=0xFF (14-bit: 0x3FFF)";
+        report "Test 2: LrM cycle 2, T1 - should select L register (110)";
 
-        h_reg    <= x"FF";
-        l_reg    <= x"FF";
-        load_ahl <= '1';
-        wait until rising_edge(phi1);
+        state_t1 <= '1';
+        state_t2 <= '0';
+        current_cycle <= 2;
+        instr_is_mem_indirect <= '1';
         wait for 10 ns;
-        load_ahl <= '0';
 
-        if address_out /= "11111111111111" then
-            report "  ERROR: Address should be all ones" severity error;
+        if ahl_active /= '1' then
+            report "  ERROR: ahl_active should be '1'" severity error;
+            errors := errors + 1;
+        elsif ahl_select /= ADDR_L then
+            report "  ERROR: ahl_select should be L (110), got " & to_string(ahl_select) severity error;
             errors := errors + 1;
         else
-            report "  PASS: Maximum address loaded";
+            report "  PASS: Correctly selected L register during T1";
         end if;
 
-        -- Test 4: Hold address when load=0
+        -- Test 3: Memory indirect, cycle 2, T2 state - should select H register
         report "";
-        report "Test 4: Address holds when load_ahl=0";
+        report "Test 3: LrM cycle 2, T2 - should select H register (101)";
 
-        h_reg <= x"00";
-        l_reg <= x"00";
-        wait for phi1_period * 2;
-
-        if address_out /= "11111111111111" then
-            report "  ERROR: Address should hold previous value" severity error;
-            errors := errors + 1;
-        else
-            report "  PASS: Address held correctly";
-        end if;
-
-        -- Test 5: Load zero address
-        report "";
-        report "Test 5: Load H=0x00, L=0x00";
-
-        h_reg    <= x"00";
-        l_reg    <= x"00";
-        load_ahl <= '1';
-        wait until rising_edge(phi1);
+        state_t1 <= '0';
+        state_t2 <= '1';
+        current_cycle <= 2;
+        instr_is_mem_indirect <= '1';
         wait for 10 ns;
-        load_ahl <= '0';
 
-        if address_out /= "00000000000000" then
-            report "  ERROR: Address should be zero" severity error;
+        if ahl_active /= '1' then
+            report "  ERROR: ahl_active should be '1'" severity error;
+            errors := errors + 1;
+        elsif ahl_select /= ADDR_H then
+            report "  ERROR: ahl_select should be H (101), got " & to_string(ahl_select) severity error;
             errors := errors + 1;
         else
-            report "  PASS: Zero address loaded";
+            report "  PASS: Correctly selected H register during T2";
         end if;
 
-        -- Test 6: Only lower 6 bits of L are used
+        -- Test 4: Memory indirect, cycle 2, T3 state - should be inactive
         report "";
-        report "Test 6: Upper 2 bits of L ignored (L=0xC0 -> only 0x00 used)";
+        report "Test 4: LrM cycle 2, T3 - should be inactive";
 
-        h_reg    <= x"12";  -- 00010010
-        l_reg    <= x"C0";  -- 11000000 (only [5:0]=000000 used)
-        load_ahl <= '1';
-        wait until rising_edge(phi1);
+        state_t1 <= '0';
+        state_t2 <= '0';
+        current_cycle <= 2;
+        instr_is_mem_indirect <= '1';
         wait for 10 ns;
-        load_ahl <= '0';
 
-        if address_out /= "00010010000000" then
-            report "  ERROR: Upper bits of L should be ignored, got " &
-                   to_string(address_out) severity error;
+        if ahl_active /= '0' then
+            report "  ERROR: ahl_active should be '0' during T3" severity error;
             errors := errors + 1;
         else
-            report "  PASS: Upper L bits correctly ignored";
+            report "  PASS: Inactive during T3 (not T1 or T2)";
+        end if;
+
+        -- Test 5: Memory indirect, cycle 1, T1 - should be inactive (wrong cycle)
+        report "";
+        report "Test 5: LrM cycle 1, T1 - should be inactive (wrong cycle)";
+
+        state_t1 <= '1';
+        state_t2 <= '0';
+        current_cycle <= 1;
+        instr_is_mem_indirect <= '1';
+        wait for 10 ns;
+
+        if ahl_active /= '0' then
+            report "  ERROR: ahl_active should be '0' during cycle 1" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Inactive during cycle 1 (needs cycle 2)";
+        end if;
+
+        -- Test 6: Memory indirect, cycle 3, T1 - should be inactive (wrong cycle)
+        report "";
+        report "Test 6: LrM cycle 3, T1 - should be inactive (wrong cycle)";
+
+        state_t1 <= '1';
+        state_t2 <= '0';
+        current_cycle <= 3;
+        instr_is_mem_indirect <= '1';
+        wait for 10 ns;
+
+        if ahl_active /= '0' then
+            report "  ERROR: ahl_active should be '0' during cycle 3" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Inactive during cycle 3 (needs cycle 2)";
+        end if;
+
+        -- Test 7: Both T1 and T2 active simultaneously (shouldn't happen, but test priority)
+        report "";
+        report "Test 7: Both T1 and T2 active - T1 should take priority (L register)";
+
+        state_t1 <= '1';
+        state_t2 <= '1';
+        current_cycle <= 2;
+        instr_is_mem_indirect <= '1';
+        wait for 10 ns;
+
+        if ahl_active /= '1' then
+            report "  ERROR: ahl_active should be '1'" severity error;
+            errors := errors + 1;
+        elsif ahl_select /= ADDR_L then
+            report "  ERROR: T1 should take priority, selecting L, got " & to_string(ahl_select) severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: T1 takes priority over T2";
         end if;
 
         -- Summary

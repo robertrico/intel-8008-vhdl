@@ -54,11 +54,12 @@ architecture rtl of instruction_register is
 begin
 
     -- Load instruction register from internal bus
+    -- Use falling_edge to sample in middle of clock cycle when data is stable
     process(phi1, reset)
     begin
         if reset = '1' then
             ir <= (others => '0');
-        elsif rising_edge(phi1) then
+        elsif falling_edge(phi1) then
             if load_ir = '1' then
                 ir <= internal_bus;
                 report "IR: Loading from bus = 0x" & to_hstring(unsigned(internal_bus));

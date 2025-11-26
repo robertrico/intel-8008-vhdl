@@ -148,6 +148,13 @@ begin
             else
                 condition_result := not flag_value;  -- JFc, CFc, RFc (test if flag = 0)
             end if;
+
+            -- Debug condition evaluation
+            if eval_condition = '1' then
+                report "COND_FLAGS: eval_condition=1 test_true=" & std_logic'image(test_true) &
+                       " flag_value=" & std_logic'image(flag_value) &
+                       " condition_result=" & std_logic'image(condition_result);
+            end if;
         end if;
 
         condition_met <= condition_result;

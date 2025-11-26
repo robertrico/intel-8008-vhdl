@@ -10,6 +10,10 @@
 -- - Connects to internal data bus via Memory Multiplexer block
 -- - Individual register enables from scratchpad decoder
 -- - DUMB module: just storage registers
+--
+-- NOTE: H and L registers are accessed via normal scratchpad read mechanism.
+-- During memory indirect operations, ahl_pointer module overrides scratchpad
+-- address selection to read H and L during T1/T2 of cycle 2.
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -42,11 +46,7 @@ entity register_file is
 
         -- Read/Write control (from scratchpad decoder)
         read_enable  : in std_logic;
-        write_enable : in std_logic;
-
-        -- Direct outputs for H and L (to AHL pointer)
-        h_reg_out : out std_logic_vector(7 downto 0);
-        l_reg_out : out std_logic_vector(7 downto 0)
+        write_enable : in std_logic
     );
 end entity register_file;
 
@@ -102,9 +102,5 @@ begin
                 reg_h when (read_enable = '1' and enable_h = '1') else
                 reg_l when (read_enable = '1' and enable_l = '1') else
                 (others => '0');
-
-    -- Direct outputs for H and L (always available to AHL pointer)
-    h_reg_out <= reg_h;
-    l_reg_out <= reg_l;
 
 end architecture rtl;

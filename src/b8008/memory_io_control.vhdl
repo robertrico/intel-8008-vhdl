@@ -73,6 +73,7 @@ entity memory_io_control is
         instr_is_rst          : in std_logic;  -- RST instruction
         instr_writes_reg      : in std_logic;  -- Instruction writes to register
         instr_reads_reg       : in std_logic;  -- Instruction reads from register
+        instr_is_mem_indirect : in std_logic;  -- Memory indirect (SSS or DDD = "111")
 
         -- From Condition Flags
         condition_met : in std_logic;
@@ -93,10 +94,6 @@ entity memory_io_control is
         addr_select_sss : out std_logic_vector(2 downto 0);  -- Source register for address
         addr_select_ddd : out std_logic_vector(2 downto 0);  -- Destination register
 
-        -- To AHL Address Pointer
-        ahl_load   : out std_logic;  -- Load H:L into address pointer
-        ahl_output : out std_logic;  -- Output address from H:L
-
         -- To Scratchpad Multiplexer (Register File)
         scratchpad_select : out std_logic_vector(2 downto 0);  -- Which register to access
         scratchpad_read   : out std_logic;  -- Read from register
@@ -113,7 +110,6 @@ entity memory_io_control is
 
         -- To Memory Multiplexer - Address selection
         select_pc    : out std_logic;  -- Use PC for address bus
-        select_ahl   : out std_logic;  -- Use AHL for address bus (M operations)
         select_stack : out std_logic;  -- Use Stack for address bus
 
         -- To Memory Multiplexer - PC load source selection
@@ -135,10 +131,12 @@ entity memory_io_control is
         stack_read  : out std_logic;  -- Read from stack (RET)
         stack_write : out std_logic;  -- Write to stack (CALL, RST)
 
-        -- To Program Counter (CRITICAL ISSUE #1)
-        pc_increment : out std_logic;  -- Increment PC
-        pc_load      : out std_logic;  -- Load PC from data_in
-        pc_hold      : out std_logic   -- Hold PC (wait states)
+        -- To Program Counter
+        pc_increment_lower : out std_logic;  -- Increment PC lower byte (T1)
+        pc_increment_upper : out std_logic;  -- Increment PC upper byte (T2 if carry)
+        pc_carry_in        : in  std_logic;  -- Carry flag from PC
+        pc_load            : out std_logic;  -- Load PC from data_in
+        pc_hold            : out std_logic   -- Hold PC (wait states)
     );
 end entity memory_io_control;
 
@@ -178,7 +176,7 @@ begin
     -- Control signal generation (combinational based on state and cycle)
     process(state_t1, state_t2, state_t3, state_t4, state_t5, state_t1i, state_half,
             status_s0, status_s1, status_s2,
-            cycle_type, current_cycle, instr_is_io, instr_is_write,
+            cycle_type, current_cycle, instr_is_io, instr_is_write, instr_is_mem_indirect,
             condition_met, ready_status, interrupt_pending,
             instr_needs_immediate, instr_needs_address,
             instr_sss_field, instr_ddd_field, instr_is_alu,
@@ -192,8 +190,6 @@ begin
         io_buffer_direction   <= '0';
         addr_select_sss       <= (others => '0');
         addr_select_ddd       <= (others => '0');
-        ahl_load              <= '0';
-        ahl_output            <= '0';
         scratchpad_select     <= (others => '0');
         scratchpad_read       <= '0';
         scratchpad_write      <= '0';
@@ -203,7 +199,6 @@ begin
         regfile_to_bus        <= '0';
         bus_to_regfile        <= '0';
         select_pc             <= '1';  -- Default to PC
-        select_ahl            <= '0';
         select_stack          <= '0';
         pc_load_from_regs     <= '0';
         pc_load_from_stack    <= '0';
@@ -211,43 +206,54 @@ begin
         refresh_increment     <= '0';
         stack_addr_select     <= '0';
         stack_push            <= '0';
-        stack_pop             <= '0';
-        stack_read            <= '0';
-        stack_write           <= '0';
-        pc_increment          <= '0';
-        pc_load               <= '0';
-        pc_hold               <= '0';
+        stack_pop              <= '0';
+        stack_read             <= '0';
+        stack_write            <= '0';
+        pc_increment_lower     <= '0';
+        pc_increment_upper     <= '0';
+        pc_load                <= '0';
+        pc_hold                <= '0';
 
-        -- PC Control Logic
-        -- Per datasheet: "The program counter is incremented immediately after the lower order address bits are sent out."
-        -- Lower address bits are sent during T1, so PC increments during T2 (after T1 completes)
-        -- But NOT after T1I - only after regular T1
+        -- PC Control Logic (Two-stage increment per 1972 datasheet)
+        -- T1: Increment lower byte after address bits sent out
+        -- T2: If carry occurred, increment upper byte
         -- Hold PC if ready signal is low or interrupt pending
         if ready_status = '0' or interrupt_pending = '1' then
             pc_hold <= '1';
         else
-            -- Increment PC during second half of T1
+            -- T1 second half: Increment lower byte
             -- Per datasheet: "incremented immediately after the lower order address bits are sent out"
-            -- Lower address sent during T1 first half, so increment happens in T1 second half
             -- BUT NOT during T1I - PC is not advanced during interrupt acknowledge
             if state_t1 = '1' and state_half = '1' and state_t1i = '0' then
-                pc_increment <= '1';
+                pc_increment_lower <= '1';
             end if;
 
-            -- Load PC during T5 for JMP/RET/RST
-            -- CALL loads PC during T4 (different timing)
+            -- T2 first half: Increment upper byte if carry occurred
+            -- Per datasheet: "Increment program counter if there has been a carry from T1"
+            if state_t2 = '1' and state_half = '0' and pc_carry_in = '1' then
+                pc_increment_upper <= '1';
+            end if;
+
+            -- Load PC during T4/T5 for various instructions
+            -- JMP: T5 of cycle 3
+            -- CALL: T4 of cycle 3
+            -- RET: T4 of cycle 1 (pop from stack)
+            -- RST: T5 of cycle 1 (load RST vector)
             if state_t5 = '1' then
                 if current_cycle = 3 and instr_needs_address = '1' then
                     -- JMP: Load PC from Reg.a+Reg.b during T5 of cycle 3
                     pc_load <= '1';
                     report "MEM_IO: Setting pc_load at T5 cycle 3 for JMP";
-                elsif instr_is_ret = '1' or instr_is_rst = '1' then
-                    -- RET/RST: Load PC during T5
+                elsif instr_is_rst = '1' then
+                    -- RST: Load PC from RST vector during T5
                     pc_load <= '1';
                 end if;
             elsif state_t4 = '1' then
                 if current_cycle = 3 and instr_is_call = '1' then
-                    -- CALL: Load PC during T4
+                    -- CALL: Load PC during T4 of cycle 3
+                    pc_load <= '1';
+                elsif current_cycle = 1 and instr_is_ret = '1' then
+                    -- RET: Load PC from stack during T4 of cycle 1
                     pc_load <= '1';
                 end if;
             end if;
@@ -261,16 +267,30 @@ begin
             -- For RET: use stack (will implement when we decode instruction)
             stack_addr_select <= '0';  -- Default to PC
 
+            -- Special case: During cycle 2 T1/T2 of memory indirect operations,
+            -- output H/L registers to data bus for external address latch
+            if current_cycle = 2 and instr_is_mem_indirect = '1' then
+                -- Output L register during T1 (ahl_pointer selects L via final_scratchpad_addr)
+                scratchpad_read     <= '1';
+                regfile_to_bus      <= '1';  -- Register file drives internal bus
+                io_buffer_enable    <= '1';
+                io_buffer_direction <= '1';  -- Internal bus drives data bus (write direction)
+            end if;
+
         elsif state_t2 = '1' then
             -- T2: Output address high byte + cycle type on D[7:6]
             -- S2=1, S1=0, S0=0
             -- Cycle type encoding is handled by machine_cycle_control
             -- D[7:6] driven from cycle_type signal
 
-            -- Load AHL pointer from H:L registers before memory operations
-            -- This happens during cycle 2 T2 for instructions that use M addressing
-            if current_cycle = 2 and (cycle_type = CYCLE_PCR or cycle_type = CYCLE_PCW) and instr_needs_address = '0' then
-                ahl_load <= '1';  -- Load H:L into AHL pointer for memory operation in T3
+            -- Special case: During cycle 2 T1/T2 of memory indirect operations,
+            -- output H/L registers to data bus for external address latch
+            if current_cycle = 2 and instr_is_mem_indirect = '1' then
+                -- Output H register during T2 (ahl_pointer selects H via final_scratchpad_addr)
+                scratchpad_read     <= '1';
+                regfile_to_bus      <= '1';  -- Register file drives internal bus
+                io_buffer_enable    <= '1';
+                io_buffer_direction <= '1';  -- Internal bus drives data bus (write direction)
             end if;
 
         elsif state_t3 = '1' then
@@ -307,19 +327,15 @@ begin
                     io_buffer_enable    <= '1';
                     io_buffer_direction <= '0';  -- Read from external
                     memory_read         <= '1';
-                    -- For JMP/CALL address fetching (cycles 2-3), use PC not AHL
-                    -- For normal memory reads (LrM), use AHL
-                    if instr_needs_address = '0' then
-                        select_ahl <= '1';  -- Use AHL for address (normal memory read)
-                    end if;
-                    -- Otherwise use PC (default) for address byte fetching
+                    -- Note: Address selection (PC vs H:L) is handled by b8008.vhdl
+                    -- based on whether we're in cycle 2 of a memory operation
 
                 when CYCLE_PCW =>
                     -- Memory write: write data to memory
                     io_buffer_enable    <= '1';
                     io_buffer_direction <= '1';  -- Write to external
                     memory_write        <= '1';
-                    select_ahl          <= '1';  -- Use AHL for address
+                    -- Note: Address selection (PC vs H:L) is handled by b8008.vhdl
                     -- Data on internal bus comes from register file
                     scratchpad_select <= instr_sss_field;
                     scratchpad_read   <= '1';
@@ -348,7 +364,23 @@ begin
             -- S2=0, S1=1, S0=1
             -- Used for multi-cycle instructions
 
-            if current_cycle = 2 then
+            if current_cycle = 1 then
+                -- First cycle T4: Handle RET/RST instructions
+                if instr_is_ret = '1' then
+                    -- RET/RFc/RTc: Pop stack during T4 (only if condition met for conditional returns)
+                    -- The condition_met signal is already handled by machine_cycle_control
+                    -- which only enables T4/T5 if the condition is met
+                    stack_pop           <= '1';
+                    stack_read          <= '1';  -- Read from stack
+                    pc_load_from_stack  <= '1';  -- Load PC from stack
+                    select_stack        <= '1';  -- Use stack for address
+                elsif instr_is_rst = '1' then
+                    -- RST: Push current PC to stack during T4, load RST vector during T5
+                    stack_push         <= '1';
+                    stack_write        <= '1';  -- Write PC to stack
+                end if;
+
+            elsif current_cycle = 2 then
                 -- Second cycle: data has been read in T3, now write to destination
                 if instr_writes_reg = '1' then
                     -- Instructions like LrI, LrM, INP - write to register
@@ -378,16 +410,9 @@ begin
                 report "MEM_IO: Setting pc_load_from_regs at T5 cycle 3 for JMP";
             end if;
 
-            -- RET: pop return address from stack and load PC
-            -- RST: push current PC to stack and load RST vector
-            if instr_is_ret = '1' then
-                stack_pop           <= '1';
-                stack_read          <= '1';  -- Read from stack
-                pc_load_from_stack  <= '1';  -- Load PC from stack
-                select_stack        <= '1';  -- Use stack for address
-            elsif instr_is_rst = '1' then
-                stack_push          <= '1';
-                stack_write         <= '1';  -- Write PC to stack
+            -- RST: Load PC from RST vector during T5 (stack push happened in T4)
+            -- RET is handled in T4, not T5
+            if instr_is_rst = '1' then
                 pc_load_from_rst    <= '1';  -- Load PC from RST vector
             end if;
 
@@ -398,7 +423,8 @@ begin
             -- Read instruction from external data bus and load into IR
             io_buffer_enable    <= '1';
             io_buffer_direction <= '0';  -- Read from external
-            ir_load             <= '1';  -- Load interrupt instruction into IR
+            -- Load IR during second half of T1I (state_half='1') to allow data to stabilize
+            ir_load             <= state_half;  -- Load interrupt instruction into IR
 
         end if;
 

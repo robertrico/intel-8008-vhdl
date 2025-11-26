@@ -68,7 +68,6 @@ architecture structural of b8008_top is
             reset          : in std_logic;
             phi1_out       : out std_logic;
             phi2_out       : out std_logic;
-            address_bus    : out std_logic_vector(13 downto 0);
             data_bus       : inout std_logic_vector(7 downto 0);
             sync_out       : out std_logic;
             s0_out         : out std_logic;
@@ -212,7 +211,6 @@ begin
             reset       => reset,
             phi1_out    => phi1,
             phi2_out    => phi2,
-            address_bus => address_bus,
             data_bus    => data_bus,
             sync_out    => sync_out,
             s0_out      => s0_out,
@@ -305,7 +303,7 @@ begin
 
     phi1_out    <= phi1;
     phi2_out    <= phi2;
-    address_out <= address_bus;
-    data_out    <= data_bus when data_bus /= "ZZZZZZZZ" else (others => '0');
+    address_out <= latched_address;  -- Latched from data bus during T1/T2
+    data_out    <= data_bus;  -- Debug output: pass through as-is (may contain 'Z', 'X', etc.)
 
 end architecture structural;

@@ -74,8 +74,6 @@ begin
             if load_reg_b = '1' then
                 reg_b <= internal_bus;
                 report "TEMP_REG: Loading Reg.b from internal_bus = 0x" & to_hstring(unsigned(internal_bus));
-            else
-                report "TEMP_REG: phi2 rising but load_reg_b = 0";
             end if;
         end if;
     end process;
