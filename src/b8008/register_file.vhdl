@@ -46,7 +46,10 @@ entity register_file is
 
         -- Read/Write control (from scratchpad decoder)
         read_enable  : in std_logic;
-        write_enable : in std_logic
+        write_enable : in std_logic;
+
+        -- Debug outputs
+        debug_reg_a : out std_logic_vector(7 downto 0)
     );
 end entity register_file;
 
@@ -76,7 +79,10 @@ begin
             reg_l <= (others => '0');
         elsif rising_edge(phi2) then
             if write_enable = '1' then
-                if enable_a = '1' then reg_a <= data_in; end if;
+                if enable_a = '1' then
+                    reg_a <= data_in;
+                    report "REGFILE: Writing A register = 0x" & to_hstring(unsigned(data_in));
+                end if;
                 if enable_b = '1' then reg_b <= data_in; end if;
                 if enable_c = '1' then reg_c <= data_in; end if;
                 if enable_d = '1' then reg_d <= data_in; end if;
@@ -102,5 +108,8 @@ begin
                 reg_h when (read_enable = '1' and enable_h = '1') else
                 reg_l when (read_enable = '1' and enable_l = '1') else
                 (others => '0');
+
+    -- Debug output: always output accumulator value
+    debug_reg_a <= reg_a;
 
 end architecture rtl;

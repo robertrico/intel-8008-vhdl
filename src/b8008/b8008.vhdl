@@ -366,7 +366,8 @@ architecture structural of b8008 is
             enable_h     : in std_logic;
             enable_l     : in std_logic;
             read_enable  : in std_logic;
-            write_enable : in std_logic
+            write_enable : in std_logic;
+            debug_reg_a  : out std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -565,8 +566,9 @@ architecture structural of b8008 is
     signal regfile_write_enable : std_logic;
 
     -- Temp register signals
-    signal reg_a_out : std_logic_vector(7 downto 0);
-    signal reg_b_out : std_logic_vector(7 downto 0);
+    signal reg_a_out : std_logic_vector(7 downto 0);  -- Temp register A (for ALU)
+    signal reg_b_out : std_logic_vector(7 downto 0);  -- Temp register B (for ALU)
+    signal debug_reg_a_actual : std_logic_vector(7 downto 0);  -- Actual accumulator from register file
 
     -- ALU signals
     signal alu_result      : std_logic_vector(8 downto 0);  -- 9 bits: carry + result
@@ -676,7 +678,7 @@ begin
                 (others => 'Z');
 
     -- Debug outputs
-    debug_reg_a         <= reg_a_out;
+    debug_reg_a         <= debug_reg_a_actual;  -- Show accumulator from register file, not temp reg
     debug_reg_b         <= reg_b_out;
     debug_cycle         <= current_cycle;
     debug_pc            <= std_logic_vector(pc_addr);
@@ -992,7 +994,8 @@ begin
             enable_h     => regfile_enable_h,
             enable_l     => regfile_enable_l,
             read_enable  => regfile_read_enable,
-            write_enable => regfile_write_enable
+            write_enable => regfile_write_enable,
+            debug_reg_a  => debug_reg_a_actual
         );
 
     -- ------------------------------------------------------------------------

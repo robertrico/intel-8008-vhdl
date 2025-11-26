@@ -388,6 +388,11 @@ begin
                     scratchpad_write  <= '1';
                     bus_to_regfile    <= '1';  -- Bus writes to register file
                     report "MEM_IO: T4 cycle 2, writing to register DDD=" & integer'image(to_integer(unsigned(instr_ddd_field)));
+                    -- For memory read (LrM), keep io_buffer enabled to transfer data from external bus
+                    if cycle_type = CYCLE_PCR then
+                        io_buffer_enable    <= '1';
+                        io_buffer_direction <= '0';  -- Read from external
+                    end if;
                 end if;
 
             elsif current_cycle = 3 then
