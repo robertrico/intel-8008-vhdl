@@ -224,7 +224,10 @@ begin
             -- T1 second half: Increment lower byte
             -- Per datasheet: "incremented immediately after the lower order address bits are sent out"
             -- BUT NOT during T1I - PC is not advanced during interrupt acknowledge
-            if state_t1 = '1' and state_half = '1' and state_t1i = '0' then
+            -- ALSO NOT during cycle 2+ of memory-indirect instructions (PC stays at next instruction)
+            -- For address instructions (JMP/CALL), PC increments in cycles 2 and 3 to fetch address bytes
+            if state_t1 = '1' and state_half = '1' and state_t1i = '0' and
+               (current_cycle = 1 or instr_needs_address = '1') then
                 pc_increment_lower <= '1';
             end if;
 
