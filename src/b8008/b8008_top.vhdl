@@ -134,7 +134,55 @@ architecture structural of b8008_top is
     -- Bootstrap flag: jam RST 0 only during first T1I after reset
     signal bootstrap_done : std_logic := '0';
 
+    -- External address latches (like real 8008 external hardware)
+    signal latched_address : std_logic_vector(13 downto 0) := (others => '0');
+
+    -- T-state decode from S[2:0]
+    signal is_t1  : std_logic;
+    signal is_t2  : std_logic;
+    signal is_t3  : std_logic;
+
 begin
+
+    -- ========================================================================
+    -- EXTERNAL ADDRESS LATCHING (Real 8008 Hardware Behavior)
+    -- ========================================================================
+    -- In real 8008, address is output on 8 bidirectional pins during T1/T2
+    -- External latches capture the address so data can use same pins during T3
+    -- Here we simulate this with internal latches
+
+    -- Decode T-states from status signals
+    -- T1: S2=0, S1=1, S0=0 (binary 010)
+    -- T2: S2=1, S1=0, S0=0 (binary 100)
+    -- T3: S2=0, S1=0, S0=1 (binary 001)
+    is_t1 <= '1' when (s2_out = '0' and s1_out = '1' and s0_out = '0') else '0';
+    is_t2 <= '1' when (s2_out = '1' and s1_out = '0' and s0_out = '0') else '0';
+    is_t3 <= '1' when (s2_out = '0' and s1_out = '0' and s0_out = '1') else '0';
+
+    -- Latch address during T1 and T2 (when CPU outputs address on data bus)
+    -- Real 8008 behavior: address is time-multiplexed on 8-bit data bus
+    -- T1: Lower 8 bits on data bus (latch only during SYNC high - first half of T1)
+    -- T2: Upper 6 bits on D[5:0], cycle type on D[7:6] (latch only during SYNC high)
+    -- CRITICAL: Only latch during SYNC=1 (first half) to avoid re-latching after PC increments
+    -- Hold latched address stable during T3 (when data bus used for data transfer)
+    process(phi1, reset)
+    begin
+        if reset = '1' then
+            latched_address <= (others => '0');
+        elsif rising_edge(phi1) then
+            if is_t1 = '1' and sync_out = '1' then
+                -- T1 first half (SYNC high): Latch lower 8 bits from data bus
+                latched_address(7 downto 0) <= data_bus;
+                report "ADDR_LATCH: T1 lower byte = 0x" & to_hstring(unsigned(data_bus));
+            elsif is_t2 = '1' and sync_out = '1' then
+                -- T2 first half (SYNC high): Latch upper 6 bits from data bus D[5:0]
+                latched_address(13 downto 8) <= data_bus(5 downto 0);
+                report "ADDR_LATCH: T2 upper byte = 0x" & to_hstring(unsigned(data_bus(5 downto 0))) &
+                       " Full address = 0x" & to_hstring(unsigned(data_bus(5 downto 0) & latched_address(7 downto 0)));
+            end if;
+            -- During T3+: Hold latched value stable
+        end if;
+    end process;
 
     -- ========================================================================
     -- BOOTSTRAP CONTROL
@@ -186,21 +234,23 @@ begin
     -- ========================================================================
 
     -- ROM: 4KB at 0x0000-0x0FFF
+    -- Uses LATCHED address (stable during T3 data transfer)
     u_rom : rom_4kx8
         generic map (
             ROM_FILE => ROM_FILE
         )
         port map (
-            ADDR     => address_bus(11 downto 0),
+            ADDR     => latched_address(11 downto 0),
             DATA_OUT => rom_data,
             CS_N     => rom_cs_n
         );
 
     -- RAM: 1KB at 0x1000-0x13FF
+    -- Uses LATCHED address (stable during T3 data transfer)
     u_ram : ram_1kx8
         port map (
             CLK          => phi1,
-            ADDR         => address_bus(9 downto 0),
+            ADDR         => latched_address(9 downto 0),
             DATA_IN      => ram_data_in,
             DATA_OUT     => ram_data_out,
             RW_N         => ram_rw_n,
@@ -213,10 +263,12 @@ begin
     -- ========================================================================
 
     -- ROM selected: address 0x0000-0x0FFF (top 2 bits = 00)
-    rom_selected <= '1' when address_bus(13 downto 12) = "00" else '0';
+    -- Use LATCHED address for decode
+    rom_selected <= '1' when latched_address(13 downto 12) = "00" else '0';
 
     -- RAM selected: address 0x1000-0x13FF (bits 13:12 = 01, bit 11:10 = 00)
-    ram_selected <= '1' when address_bus(13 downto 10) = "0100" else '0';
+    -- Use LATCHED address for decode
+    ram_selected <= '1' when latched_address(13 downto 10) = "0100" else '0';
 
     -- Chip selects (active low)
     rom_cs_n <= not rom_selected;
@@ -236,13 +288,16 @@ begin
     ram_data_in <= data_bus;
 
     -- Connect memory data to CPU data bus
+    -- Real 8008 behavior:
+    --   T1: CPU outputs address lower byte on data bus (external hardware latches it)
+    --   T2: CPU outputs address upper byte on data bus (external hardware latches it)
+    --   T3: External hardware (ROM/RAM) drives data bus for CPU to read
     -- During T1I (interrupt acknowledge), jam RST 0 instruction (0x05) for bootstrap
     -- Only jam during FIRST T1I after reset (bootstrap), then let ROM take over
-    -- Otherwise, ROM or RAM drives the bus, CPU io_buffer will tri-state when reading
     data_bus <= x"05" when (s2_out = '1' and s1_out = '1' and s0_out = '0' and bootstrap_done = '0') else  -- T1I bootstrap: jam RST 0
-                rom_data when rom_selected = '1' else
-                ram_data_out when ram_selected = '1' else
-                (others => 'Z');
+                rom_data when (rom_selected = '1' and is_t3 = '1') else  -- ROM drives bus only during T3
+                ram_data_out when (ram_selected = '1' and is_t3 = '1') else  -- RAM drives bus only during T3
+                (others => 'Z');  -- Tri-state during T1/T2 (CPU drives address)
 
     -- ========================================================================
     -- DEBUG OUTPUTS

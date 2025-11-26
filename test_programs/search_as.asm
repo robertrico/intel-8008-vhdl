@@ -14,7 +14,10 @@
 
 ; Start at address 0x0000 to execute from reset
         org     0000h
-        JMP     MAIN            ; Jump to main program
+STARTUP:
+        MOV A,A                 ; PC = 0x0000; this should be on PC twice, one for T1I and another for T1 next
+        MOV A,A                 ; PC = 0x0001
+        JMP     MAIN            ; PC = 0x0002
 
 ; Test string data at location 200 (0xC8)
 ; Search range is 200-220, so max 20 characters
