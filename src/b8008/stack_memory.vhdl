@@ -61,8 +61,14 @@ begin
             stack <= (others => (others => '0'));
         elsif rising_edge(phi1) then
             if stack_write = '1' then
-                if enable_level_0 = '1' then stack(0) <= addr_in; end if;
-                if enable_level_1 = '1' then stack(1) <= addr_in; end if;
+                if enable_level_0 = '1' then
+                    stack(0) <= addr_in;
+                    report "STACK: Writing level 0 = 0x" & to_hstring(unsigned(addr_in));
+                end if;
+                if enable_level_1 = '1' then
+                    stack(1) <= addr_in;
+                    report "STACK: Writing level 1 = 0x" & to_hstring(unsigned(addr_in));
+                end if;
                 if enable_level_2 = '1' then stack(2) <= addr_in; end if;
                 if enable_level_3 = '1' then stack(3) <= addr_in; end if;
                 if enable_level_4 = '1' then stack(4) <= addr_in; end if;
@@ -83,5 +89,17 @@ begin
                 stack(6) when (stack_read = '1' and enable_level_6 = '1') else
                 stack(7) when (stack_read = '1' and enable_level_7 = '1') else
                 (others => '0');
+
+    -- Monitor reads
+    process(stack_read, enable_level_0, enable_level_1, stack)
+    begin
+        if stack_read = '1' then
+            if enable_level_0 = '1' then
+                report "STACK: Reading level 0 = 0x" & to_hstring(unsigned(stack(0)));
+            elsif enable_level_1 = '1' then
+                report "STACK: Reading level 1 = 0x" & to_hstring(unsigned(stack(1)));
+            end if;
+        end if;
+    end process;
 
 end architecture rtl;

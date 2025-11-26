@@ -122,10 +122,11 @@ begin
     -- This is checked by state_timing_generator to decide when to return to T1
     --
     -- Key insight: advance_state should ONLY be set when we're DONE with the cycle
-    -- - Short cycles: Set at T3 (last state)
+    -- - Short cycles: Set at T3 (last state) for cycles 2-3
+    -- - Cycle 1: Set at T4 (short) or T5 (extended) - need decoded instruction to decide
     -- - Extended cycles: Set at T5 (last state)
     -- - Never set between T3 and T5 for extended cycles!
-    process(state_t3, state_t5, state_t1, instr_is_hlt, needs_t4t5_this_cycle, cycle_count, needs_cycle_2, needs_cycle_3)
+    process(state_t3, state_t4, state_t5, state_t1, instr_is_hlt, needs_t4t5_this_cycle, cycle_count, needs_cycle_2, needs_cycle_3)
     begin
         if rising_edge(state_t1) then
             -- Clear at start of new cycle
@@ -133,14 +134,27 @@ begin
 
         elsif rising_edge(state_t3) then
             -- Only set if this is a SHORT cycle (no T4/T5) AND cycle is complete
+            -- NOTE: For cycle 1, we can't check needs_t4t5_this at T3 rising because
+            -- the instruction hasn't been decoded yet. So we skip setting advance_latch
+            -- for cycle 1 and let it be set at T5 if needed.
             report "MCycle: T3 rising, cycle=" & integer'image(cycle_count) &
                    " needs_t4t5_this=" & std_logic'image(needs_t4t5_this_cycle);
             if instr_is_hlt = '0' and needs_t4t5_this_cycle = '0' and
-               ((cycle_count = 1 and needs_cycle_2 = '0') or      -- Single-cycle done
-                (cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done
+               ((cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done (skip cycle 1!)
                 (cycle_count = 3)) then                           -- Three-cycle done
                 advance_latch <= '1';
                 report "MCycle: Setting advance_latch at T3 (short cycle complete)";
+            end if;
+
+        elsif rising_edge(state_t4) then
+            -- For cycle 1 instructions that DON'T need T5, set advance_latch at T4
+            -- By T4, instruction has been decoded so we can check instr_needs_t4t5
+            report "MCycle: T4 rising, cycle=" & integer'image(cycle_count) &
+                   " needs_t4t5_this=" & std_logic'image(needs_t4t5_this_cycle);
+            if instr_is_hlt = '0' and cycle_count = 1 and needs_t4t5_this_cycle = '0' and needs_cycle_2 = '0' then
+                -- Single-cycle instruction that doesn't need T5 - complete at T4
+                advance_latch <= '1';
+                report "MCycle: Setting advance_latch at T4 (short single-cycle complete)";
             end if;
 
         elsif rising_edge(state_t5) then

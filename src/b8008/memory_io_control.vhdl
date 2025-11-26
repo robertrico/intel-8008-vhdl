@@ -238,25 +238,24 @@ begin
             end if;
 
             -- Load PC during T4/T5 for various instructions
-            -- JMP: T5 of cycle 3
-            -- CALL: T4 of cycle 3
-            -- RET: T4 of cycle 1 (pop from stack)
-            -- RST: T5 of cycle 1 (load RST vector)
+            -- JMP/CALL: T5 of cycle 3
+            -- RET/RST: T5 of cycle 1
             if state_t5 = '1' then
                 if current_cycle = 3 and instr_needs_address = '1' then
-                    -- JMP: Load PC from Reg.a+Reg.b during T5 of cycle 3
+                    -- JMP/CALL: Load PC from Reg.a+Reg.b during T5 of cycle 3
                     pc_load <= '1';
-                    report "MEM_IO: Setting pc_load at T5 cycle 3 for JMP";
+                    if instr_is_call = '1' then
+                        report "MEM_IO: Setting pc_load at T5 cycle 3 for CALL";
+                    else
+                        report "MEM_IO: Setting pc_load at T5 cycle 3 for JMP";
+                    end if;
+                elsif instr_is_ret = '1' then
+                    -- RET: Load PC from stack during T5 of cycle 1
+                    -- T4 reads from stack, T5 loads PC to avoid timing issues
+                    pc_load <= '1';
+                    report "MEM_IO: Setting pc_load at T5 cycle 1 for RET";
                 elsif instr_is_rst = '1' then
                     -- RST: Load PC from RST vector during T5
-                    pc_load <= '1';
-                end if;
-            elsif state_t4 = '1' then
-                if current_cycle = 3 and instr_is_call = '1' then
-                    -- CALL: Load PC during T4 of cycle 3
-                    pc_load <= '1';
-                elsif current_cycle = 1 and instr_is_ret = '1' then
-                    -- RET: Load PC from stack during T4 of cycle 1
                     pc_load <= '1';
                 end if;
             end if;
@@ -377,6 +376,7 @@ begin
                     stack_read          <= '1';  -- Read from stack
                     pc_load_from_stack  <= '1';  -- Load PC from stack
                     select_stack        <= '1';  -- Use stack for address
+                    report "MEM_IO: T4 cycle 1 RET - popping from stack and loading PC";
                 elsif instr_is_rst = '1' then
                     -- RST: Push current PC to stack during T4, load RST vector during T5
                     stack_push         <= '1';
@@ -399,23 +399,34 @@ begin
                 end if;
 
             elsif current_cycle = 3 then
-                -- Third cycle of CALL - load PC from temp registers during T4
+                -- Third cycle of CALL - push to stack during T4
                 if instr_is_call = '1' then
                     stack_push         <= '1';
                     stack_write        <= '1';  -- Write PC to stack
-                    pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
+                    report "MEM_IO: T4 cycle 3 CALL - pushing return address to stack";
                 end if;
                 -- JMP loads PC during T5, handled below
+                -- CALL loads PC during T5, handled below
             end if;
 
         elsif state_t5 = '1' then
             -- T5: Final extended cycle processing
             -- S2=1, S1=0, S0=1
 
-            -- JMP: Load PC from temp registers during T5 of cycle 3
-            if current_cycle = 3 and instr_needs_address = '1' and instr_is_call = '0' then
+            -- JMP/CALL: Load PC from temp registers during T5 of cycle 3
+            if current_cycle = 3 and instr_needs_address = '1' then
                 pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
-                report "MEM_IO: Setting pc_load_from_regs at T5 cycle 3 for JMP";
+                if instr_is_call = '1' then
+                    report "MEM_IO: Setting pc_load_from_regs at T5 cycle 3 for CALL";
+                else
+                    report "MEM_IO: Setting pc_load_from_regs at T5 cycle 3 for JMP";
+                end if;
+            end if;
+
+            -- RET: Keep pc_load_from_stack set during T5 (was set during T4)
+            if instr_is_ret = '1' then
+                pc_load_from_stack <= '1';  -- Load PC from stack
+                select_stack       <= '1';  -- Use stack for address
             end if;
 
             -- RST: Load PC from RST vector during T5 (stack push happened in T4)
