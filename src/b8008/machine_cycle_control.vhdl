@@ -79,12 +79,11 @@ begin
 
     -- Determine if current cycle needs T4/T5 states
     -- This depends on both the instruction type AND which cycle we're in
-    -- NOTE: Cycle 1 always fetches the opcode, so we can't use instruction decoder
-    --       signals during cycle 1 (they reflect the PREVIOUS instruction).
-    --       Therefore, cycle 1 is always short (T1-T2-T3).
-    --       T4/T5 are only needed in cycles 2-3 for certain instructions.
+    -- Cycle 1: Use instr_needs_t4t5 for 1-cycle extended instructions (RET, RST, ALU ops)
+    -- Cycle 2+: Use instr_needs_t4t5 for multi-cycle instructions (JMP, CALL, LrM, etc.)
     -- SPECIAL: In cycle 3 of conditional branches, T4/T5 only execute if condition is met
-    needs_t4t5_this_cycle <= '1' when (cycle_count = 2 and instr_needs_t4t5 = '1') else  -- Cycle 2: always if decoder says so
+    needs_t4t5_this_cycle <= '1' when (cycle_count = 1 and instr_needs_t4t5 = '1') else  -- Cycle 1: for extended 1-cycle instructions
+                             '1' when (cycle_count = 2 and instr_needs_t4t5 = '1') else  -- Cycle 2: always if decoder says so
                              '1' when (cycle_count = 3 and instr_needs_t4t5 = '1' and
                                       (condition_met = '1' or eval_condition = '0')) else  -- Cycle 3: only if condition met (or unconditional)
                              '0';
