@@ -140,6 +140,8 @@ architecture structural of b8008_top is
     signal is_t1  : std_logic;
     signal is_t2  : std_logic;
     signal is_t3  : std_logic;
+    signal is_t4  : std_logic;
+    signal is_t5  : std_logic;
 
 begin
 
@@ -154,9 +156,13 @@ begin
     -- T1: S2=0, S1=1, S0=0 (binary 010)
     -- T2: S2=1, S1=0, S0=0 (binary 100)
     -- T3: S2=0, S1=0, S0=1 (binary 001)
+    -- T4: S2=1, S1=1, S0=1 (binary 111)
+    -- T5: S2=1, S1=0, S0=1 (binary 101)
     is_t1 <= '1' when (s2_out = '0' and s1_out = '1' and s0_out = '0') else '0';
     is_t2 <= '1' when (s2_out = '1' and s1_out = '0' and s0_out = '0') else '0';
     is_t3 <= '1' when (s2_out = '0' and s1_out = '0' and s0_out = '1') else '0';
+    is_t4 <= '1' when (s2_out = '1' and s1_out = '1' and s0_out = '1') else '0';
+    is_t5 <= '1' when (s2_out = '1' and s1_out = '0' and s0_out = '1') else '0';
 
     -- Latch address during T1 and T2 (when CPU outputs address on data bus)
     -- Real 8008 behavior: address is time-multiplexed on 8-bit data bus
@@ -289,12 +295,12 @@ begin
     -- Real 8008 behavior:
     --   T1: CPU outputs address lower byte on data bus (external hardware latches it)
     --   T2: CPU outputs address upper byte on data bus (external hardware latches it)
-    --   T3: External hardware (ROM/RAM) drives data bus for CPU to read
+    --   T3-T5: External hardware (ROM/RAM) drives data bus for CPU to read
     -- During T1I (interrupt acknowledge), jam RST 0 instruction (0x05) for bootstrap
     -- Only jam during FIRST T1I after reset (bootstrap), then let ROM take over
     data_bus <= x"05" when (s2_out = '1' and s1_out = '1' and s0_out = '0' and bootstrap_done = '0') else  -- T1I bootstrap: jam RST 0
-                rom_data when (rom_selected = '1' and is_t3 = '1') else  -- ROM drives bus only during T3
-                ram_data_out when (ram_selected = '1' and is_t3 = '1') else  -- RAM drives bus only during T3
+                rom_data when (rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM drives bus during T3/T4/T5
+                ram_data_out when (ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM drives bus during T3/T4/T5
                 (others => 'Z');  -- Tri-state during T1/T2 (CPU drives address)
 
     -- ========================================================================

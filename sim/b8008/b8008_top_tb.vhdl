@@ -206,24 +206,7 @@ begin
                 end if;
             end if;
 
-            -- Check for HLT (stuck in T3 state with same address for many cycles)
-            if s2_out = '0' and s1_out = '0' and s0_out = '1' then
-                -- In T3 state
-                if unsigned(address_out) = last_address then
-                    stuck_counter <= stuck_counter + 1;
-                    -- Only declare halt if stuck for 500+ iterations (50us) - increased for debugging
-                    if stuck_counter > 500 then
-                        report "========================================";
-                        report "CPU HALTED!";
-                        report "  Final PC address: 0x" & to_hstring(unsigned(address_out));
-                        report "  Data bus: 0x" & to_hstring(unsigned(data_out));
-                        report "========================================";
-                        exit;
-                    end if;
-                else
-                    stuck_counter <= 0;
-                end if;
-            end if;
+            -- Removed halt detection logic - was misleading during debugging
         end loop;
 
         wait for 1 us;
