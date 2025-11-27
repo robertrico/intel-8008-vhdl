@@ -97,8 +97,9 @@ begin
         transition_to_stopped <= '0';  -- Default: don't stop
 
         -- Detect memory indirect operations (M register access)
-        -- This happens when SSS or DDD field = "111"
-        if op_210 = "111" or op_543 = "111" then
+        -- This happens when SSS or DDD field = "111" for move (11) or ALU register (10) ops
+        -- NOT for ALU immediate (00PPP100) where PPP might be "111"
+        if (op_210 = "111" or op_543 = "111") and op_76 /= "00" then
             instr_is_mem_indirect <= '1';
         end if;
 
