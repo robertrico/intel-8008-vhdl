@@ -153,7 +153,10 @@ begin
                         -- 00 PPP 100 - ALU OP I (immediate) - 2 cycles
                         instr_needs_immediate <= '1';
                         instr_is_alu <= '1';
-                        instr_uses_temp_regs <= '1';
+                        -- NOTE: DON'T set instr_uses_temp_regs for immediate ops!
+                        -- Immediate ops load the immediate byte into Reg.b during cycle 2 T3,
+                        -- NOT from a source register during cycle 1 T4 like register ALU ops do.
+                        instr_uses_temp_regs <= '0';
                         instr_reads_reg <= '1';   -- Read A
                         instr_writes_reg <= '1';  -- Write A
                         instr_sss_field <= "000"; -- A register
@@ -175,11 +178,14 @@ begin
                             instr_needs_address <= '1';
                             instr_is_write <= '1';
                         else
-                            -- LrI - needs 2 cycles, needs T4 to write register
+                            -- LrI (MVI) - needs 2 cycles, needs T4 to write register
                             instr_needs_immediate <= '1';
                             instr_writes_reg <= '1';
                             instr_needs_t4t5 <= '1';  -- Need T4 to write result to register
-                            instr_uses_temp_regs <= '1';  -- Need Reg.b to hold immediate byte
+                            -- NOTE: DON'T set instr_uses_temp_regs for MVI!
+                            -- MVI loads immediate byte into Reg.b during cycle 2 T3,
+                            -- NOT from a source register during cycle 1 T4.
+                            instr_uses_temp_regs <= '0';
                         end if;
 
                     when "111" =>

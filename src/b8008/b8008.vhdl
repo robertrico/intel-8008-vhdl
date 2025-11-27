@@ -388,23 +388,24 @@ architecture structural of b8008 is
     -- Phase 8: ALU and Flags
     component register_alu_control is
         port (
-            phi2                 : in std_logic;
-            status_s0            : in std_logic;
-            status_s1            : in std_logic;
-            status_s2            : in std_logic;
-            instr_is_alu_op      : in std_logic;
-            instr_uses_temp_regs : in std_logic;
-            instr_writes_reg     : in std_logic;
-            current_cycle        : in integer range 1 to 3;
-            interrupt            : in std_logic;
-            load_reg_a           : out std_logic;
-            load_reg_b           : out std_logic;
-            alu_enable           : out std_logic;
-            update_flags         : out std_logic;
-            output_reg_a         : out std_logic;
-            output_reg_b         : out std_logic;
-            output_result        : out std_logic;
-            output_flags         : out std_logic
+            phi2                  : in std_logic;
+            status_s0             : in std_logic;
+            status_s1             : in std_logic;
+            status_s2             : in std_logic;
+            instr_is_alu_op       : in std_logic;
+            instr_uses_temp_regs  : in std_logic;
+            instr_needs_immediate : in std_logic;
+            instr_writes_reg      : in std_logic;
+            current_cycle         : in integer range 1 to 3;
+            interrupt             : in std_logic;
+            load_reg_a            : out std_logic;
+            load_reg_b            : out std_logic;
+            alu_enable            : out std_logic;
+            update_flags          : out std_logic;
+            output_reg_a          : out std_logic;
+            output_reg_b          : out std_logic;
+            output_result         : out std_logic;
+            output_flags          : out std_logic
         );
     end component;
 
@@ -1004,23 +1005,24 @@ begin
 
     u_register_alu_control : register_alu_control
         port map (
-            phi2                 => phi2,
-            status_s0            => status_s0,
-            status_s1            => status_s1,
-            status_s2            => status_s2,
-            instr_is_alu_op      => instr_is_alu,
-            instr_uses_temp_regs => instr_uses_temp_regs,
-            instr_writes_reg     => instr_writes_reg,
-            current_cycle        => current_cycle,
-            interrupt            => interrupt_pending,
-            load_reg_a           => load_reg_a,
-            load_reg_b           => load_reg_b,
-            alu_enable           => alu_enable,
-            update_flags         => update_flags,
-            output_reg_a         => output_reg_a,
-            output_reg_b         => output_reg_b,
-            output_result        => output_result,
-            output_flags         => output_flags
+            phi2                  => phi2,
+            status_s0             => status_s0,
+            status_s1             => status_s1,
+            status_s2             => status_s2,
+            instr_is_alu_op       => instr_is_alu,
+            instr_uses_temp_regs  => instr_uses_temp_regs,
+            instr_needs_immediate => instr_needs_immediate,
+            instr_writes_reg      => instr_writes_reg,
+            current_cycle         => current_cycle,
+            interrupt             => interrupt_pending,
+            load_reg_a            => load_reg_a,
+            load_reg_b            => load_reg_b,
+            alu_enable            => alu_enable,
+            update_flags          => update_flags,
+            output_reg_a          => output_reg_a,
+            output_reg_b          => output_reg_b,
+            output_result         => output_result,
+            output_flags          => output_flags
         );
 
     u_temp_registers : temp_registers
