@@ -60,8 +60,15 @@ entity b8008 is
         -- ====================================================================
         -- DEBUG OUTPUTS
         -- ====================================================================
+        -- CPU Registers (A, B, C, D, E, H, L)
         debug_reg_a           : out std_logic_vector(7 downto 0);
         debug_reg_b           : out std_logic_vector(7 downto 0);
+        debug_reg_c           : out std_logic_vector(7 downto 0);
+        debug_reg_d           : out std_logic_vector(7 downto 0);
+        debug_reg_e           : out std_logic_vector(7 downto 0);
+        debug_reg_h           : out std_logic_vector(7 downto 0);
+        debug_reg_l           : out std_logic_vector(7 downto 0);
+        -- Control state
         debug_cycle           : out integer range 1 to 3;
         debug_pc              : out std_logic_vector(13 downto 0);
         debug_ir              : out std_logic_vector(7 downto 0);
@@ -367,7 +374,13 @@ architecture structural of b8008 is
             enable_l     : in std_logic;
             read_enable  : in std_logic;
             write_enable : in std_logic;
-            debug_reg_a  : out std_logic_vector(7 downto 0)
+            debug_reg_a  : out std_logic_vector(7 downto 0);
+            debug_reg_b  : out std_logic_vector(7 downto 0);
+            debug_reg_c  : out std_logic_vector(7 downto 0);
+            debug_reg_d  : out std_logic_vector(7 downto 0);
+            debug_reg_e  : out std_logic_vector(7 downto 0);
+            debug_reg_h  : out std_logic_vector(7 downto 0);
+            debug_reg_l  : out std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -569,7 +582,14 @@ architecture structural of b8008 is
     -- Temp register signals
     signal reg_a_out : std_logic_vector(7 downto 0);  -- Temp register A (for ALU)
     signal reg_b_out : std_logic_vector(7 downto 0);  -- Temp register B (for ALU)
-    signal debug_reg_a_actual : std_logic_vector(7 downto 0);  -- Actual accumulator from register file
+    -- Debug signals from register file
+    signal debug_reg_a_actual : std_logic_vector(7 downto 0);
+    signal debug_reg_b_actual : std_logic_vector(7 downto 0);
+    signal debug_reg_c_actual : std_logic_vector(7 downto 0);
+    signal debug_reg_d_actual : std_logic_vector(7 downto 0);
+    signal debug_reg_e_actual : std_logic_vector(7 downto 0);
+    signal debug_reg_h_actual : std_logic_vector(7 downto 0);
+    signal debug_reg_l_actual : std_logic_vector(7 downto 0);
 
     -- ALU signals
     signal alu_result      : std_logic_vector(8 downto 0);  -- 9 bits: carry + result
@@ -679,8 +699,13 @@ begin
                 (others => 'Z');
 
     -- Debug outputs
-    debug_reg_a         <= debug_reg_a_actual;  -- Show accumulator from register file, not temp reg
-    debug_reg_b         <= reg_b_out;
+    debug_reg_a         <= debug_reg_a_actual;
+    debug_reg_b         <= debug_reg_b_actual;
+    debug_reg_c         <= debug_reg_c_actual;
+    debug_reg_d         <= debug_reg_d_actual;
+    debug_reg_e         <= debug_reg_e_actual;
+    debug_reg_h         <= debug_reg_h_actual;
+    debug_reg_l         <= debug_reg_l_actual;
     debug_cycle         <= current_cycle;
     debug_pc            <= std_logic_vector(pc_addr);
     debug_ir            <= instr_byte;
@@ -996,7 +1021,13 @@ begin
             enable_l     => regfile_enable_l,
             read_enable  => regfile_read_enable,
             write_enable => regfile_write_enable,
-            debug_reg_a  => debug_reg_a_actual
+            debug_reg_a  => debug_reg_a_actual,
+            debug_reg_b  => debug_reg_b_actual,
+            debug_reg_c  => debug_reg_c_actual,
+            debug_reg_d  => debug_reg_d_actual,
+            debug_reg_e  => debug_reg_e_actual,
+            debug_reg_h  => debug_reg_h_actual,
+            debug_reg_l  => debug_reg_l_actual
         );
 
     -- ------------------------------------------------------------------------

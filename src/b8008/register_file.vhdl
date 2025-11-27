@@ -48,8 +48,14 @@ entity register_file is
         read_enable  : in std_logic;
         write_enable : in std_logic;
 
-        -- Debug outputs
-        debug_reg_a : out std_logic_vector(7 downto 0)
+        -- Debug outputs (all registers)
+        debug_reg_a : out std_logic_vector(7 downto 0);
+        debug_reg_b : out std_logic_vector(7 downto 0);
+        debug_reg_c : out std_logic_vector(7 downto 0);
+        debug_reg_d : out std_logic_vector(7 downto 0);
+        debug_reg_e : out std_logic_vector(7 downto 0);
+        debug_reg_h : out std_logic_vector(7 downto 0);
+        debug_reg_l : out std_logic_vector(7 downto 0)
     );
 end entity register_file;
 
@@ -109,7 +115,13 @@ begin
                 reg_l when (read_enable = '1' and enable_l = '1') else
                 (others => '0');
 
-    -- Debug output: always output accumulator value
+    -- Debug outputs: always output all register values
     debug_reg_a <= reg_a;
+    debug_reg_b <= reg_b;
+    debug_reg_c <= reg_c;
+    debug_reg_d <= reg_d;
+    debug_reg_e <= reg_e;
+    debug_reg_h <= reg_h;
+    debug_reg_l <= reg_l;
 
 end architecture rtl;

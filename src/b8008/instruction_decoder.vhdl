@@ -118,6 +118,8 @@ begin
                                 instr_uses_temp_regs <= '1';
                                 instr_reads_reg <= '1';
                                 instr_writes_reg <= '1';
+                                instr_sss_field <= "000";   -- ALU opcode: ADD
+                                instr_ddd_field <= op_543;  -- Write to DDD field (which register to increment)
                                 instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
                             end if;
 
@@ -127,6 +129,8 @@ begin
                         instr_uses_temp_regs <= '1';
                         instr_reads_reg <= '1';
                         instr_writes_reg <= '1';
+                        instr_sss_field <= "010";   -- ALU opcode: SUB
+                        instr_ddd_field <= op_543;  -- Write to DDD field (which register to decrement)
                         instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
 
                     when "010" =>

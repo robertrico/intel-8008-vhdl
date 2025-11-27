@@ -300,15 +300,18 @@ begin
             -- S2=0, S1=0, S0=1
 
             -- Register file access for single-cycle instructions
-            if current_cycle = 1 then
+            -- NOTE: During PCI (instruction fetch), don't access register file at T3!
+            -- The instruction is still being loaded, so decoder signals aren't stable yet.
+            if current_cycle = 1 and cycle_type /= CYCLE_PCI then
                 if instr_reads_reg = '1' then
                     -- ALU operations, MOV, etc. - read source register
                     scratchpad_select <= instr_sss_field;
                     scratchpad_read   <= '1';
                     regfile_to_bus    <= '1';  -- Register file drives internal bus
                 end if;
-                if instr_writes_reg = '1' and instr_needs_immediate = '0' then
-                    -- Single-cycle register write (MOV, ALU result)
+                if instr_writes_reg = '1' and instr_needs_immediate = '0' and instr_is_alu = '0' then
+                    -- Single-cycle register write (MOV only, NOT ALU!)
+                    -- ALU results are written at T4/T5, not T3
                     scratchpad_select <= instr_ddd_field;
                     scratchpad_write  <= '1';
                     bus_to_regfile    <= '1';  -- Bus writes to register file
@@ -367,8 +370,22 @@ begin
             -- Used for multi-cycle instructions
 
             if current_cycle = 1 then
-                -- First cycle T4: Handle RET/RST instructions
-                if instr_is_ret = '1' then
+                -- First cycle T4: Handle single-cycle ALU ops, RET/RST instructions
+                if instr_is_alu = '1' and instr_needs_immediate = '0' and instr_reads_reg = '1' then
+                    -- Single-cycle ALU operations (INR, DCR, rotate, binary ALU with register)
+                    -- Read source register onto bus so Reg.b can load it
+                    -- For INR/DCR: source == destination, so use DDD field
+                    -- For binary ALU (ADD r, SUB r, etc.): source is SSS, destination is A
+                    if instr_writes_reg = '1' and instr_ddd_field /= "000" then
+                        -- Unary operations (INR/DCR) - read from DDD field
+                        scratchpad_select <= instr_ddd_field;
+                    else
+                        -- Binary operations or rotate (dest is A) - read from SSS field
+                        scratchpad_select <= instr_sss_field;
+                    end if;
+                    scratchpad_read   <= '1';
+                    regfile_to_bus    <= '1';
+                elsif instr_is_ret = '1' then
                     -- RET/RFc/RTc: Pop stack during T4 (only if condition met for conditional returns)
                     -- The condition_met signal is already handled by machine_cycle_control
                     -- which only enables T4/T5 if the condition is met
@@ -412,6 +429,14 @@ begin
         elsif state_t5 = '1' then
             -- T5: Final extended cycle processing
             -- S2=1, S1=0, S0=1
+
+            -- Single-cycle ALU operations: Write result back to register
+            if current_cycle = 1 and instr_is_alu = '1' and instr_writes_reg = '1' and instr_needs_immediate = '0' then
+                -- INR, DCR, rotate, binary ALU ops - write ALU result to destination register
+                scratchpad_select <= instr_ddd_field;  -- Destination register
+                scratchpad_write  <= '1';
+                bus_to_regfile    <= '1';  -- ALU result (on internal bus) writes to register
+            end if;
 
             -- JMP/CALL: Load PC from temp registers during T5 of cycle 3
             if current_cycle = 3 and instr_needs_address = '1' then

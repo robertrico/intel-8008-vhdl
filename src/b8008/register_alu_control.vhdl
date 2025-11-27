@@ -119,8 +119,9 @@ begin
                   '0';
 
     -- ALU enable: T5 during ALU operations
-    -- ALU executes on phi2 falling edge (start of phi1.2 period)
-    alu_enable <= state_is_t5 and instr_is_alu_op and phi2;
+    -- ALU is combinational, so enable it for the entire T5 state
+    -- Result will be stable and ready when register samples at phi2 rising edge
+    alu_enable <= state_is_t5 and instr_is_alu_op;
 
     -- Update flags: Same timing as ALU enable (flags updated after ALU operation)
     update_flags <= state_is_t5 and instr_is_alu_op and phi2;
@@ -135,9 +136,9 @@ begin
     output_reg_b  <= '1' when (state_is_t4 = '1' and current_cycle = 2 and instr_writes_reg = '1' and instr_is_alu_op = '0') else
                      '0';
 
-    -- ALU result drives bus after ALU execution completes
-    -- This happens when the ALU result needs to be written to accumulator
-    output_result <= state_is_t5 and instr_is_alu_op and phi2;
+    -- ALU result drives bus during T5 for ALU operations
+    -- Keep it on the bus for the entire T5 state so it's stable when register samples
+    output_result <= state_is_t5 and instr_is_alu_op;
 
     -- Flags never drive the internal bus in Intel 8008
     -- Flags are tested internally by condition_flags module

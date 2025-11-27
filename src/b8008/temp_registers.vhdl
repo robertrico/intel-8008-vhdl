@@ -57,12 +57,22 @@ begin
     internal_bus <= reg_b when output_reg_b = '1' else (others => 'Z');
 
     -- Latch Reg.a on phi2 rising edge when enabled
+    -- For unary ALU operations (INR/DCR), load constant 0x01 instead of from bus
     process(phi2)
     begin
         if rising_edge(phi2) then
             if load_reg_a = '1' then
-                reg_a <= internal_bus;
-                report "TEMP_REG: Loading Reg.a from internal_bus = 0x" & to_hstring(unsigned(internal_bus));
+                -- For INR/DCR: load constant 0x01 for increment/decrement
+                -- Detect by checking if load_reg_b is also active (unary ops load both at same time at T4)
+                if load_reg_b = '1' then
+                    -- Unary operation: load constant 1
+                    reg_a <= x"01";
+                    report "TEMP_REG: Loading Reg.a with constant 0x01 for INR/DCR";
+                else
+                    -- Normal operation: load from bus
+                    reg_a <= internal_bus;
+                    report "TEMP_REG: Loading Reg.a from internal_bus = 0x" & to_hstring(unsigned(internal_bus));
+                end if;
             end if;
         end if;
     end process;
