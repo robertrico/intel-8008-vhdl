@@ -165,6 +165,7 @@ architecture structural of b8008 is
             instr_reads_reg       : out std_logic;
             instr_is_mem_indirect : out std_logic;
             instr_uses_temp_regs  : out std_logic;
+            instr_is_inr_dcr      : out std_logic;
             instr_needs_t4t5      : out std_logic;
             rst_vector            : out std_logic_vector(2 downto 0);
             condition_code        : out std_logic_vector(1 downto 0);
@@ -395,14 +396,15 @@ architecture structural of b8008 is
     -- Phase 7: Temp Registers
     component temp_registers is
         port (
-            phi2         : in std_logic;
-            load_reg_a   : in std_logic;
-            load_reg_b   : in std_logic;
-            output_reg_a : in std_logic;
-            output_reg_b : in std_logic;
-            internal_bus : inout std_logic_vector(7 downto 0);
-            reg_a_out    : out std_logic_vector(7 downto 0);
-            reg_b_out    : out std_logic_vector(7 downto 0)
+            phi2             : in std_logic;
+            load_reg_a       : in std_logic;
+            load_reg_b       : in std_logic;
+            output_reg_a     : in std_logic;
+            output_reg_b     : in std_logic;
+            instr_is_inr_dcr : in std_logic;
+            internal_bus     : inout std_logic_vector(7 downto 0);
+            reg_a_out        : out std_logic_vector(7 downto 0);
+            reg_b_out        : out std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -547,6 +549,7 @@ architecture structural of b8008 is
     signal instr_reads_reg       : std_logic;
     signal instr_is_mem_indirect : std_logic;
     signal instr_uses_temp_regs  : std_logic;
+    signal instr_is_inr_dcr      : std_logic;
     signal instr_needs_t4t5      : std_logic;
     signal rst_vector            : std_logic_vector(2 downto 0);
     signal condition_code        : std_logic_vector(1 downto 0);
@@ -836,6 +839,7 @@ begin
             instr_reads_reg       => instr_reads_reg,
             instr_is_mem_indirect => instr_is_mem_indirect,
             instr_uses_temp_regs  => instr_uses_temp_regs,
+            instr_is_inr_dcr      => instr_is_inr_dcr,
             instr_needs_t4t5      => instr_needs_t4t5,
             rst_vector            => rst_vector,
             condition_code        => condition_code,
@@ -1077,14 +1081,15 @@ begin
 
     u_temp_registers : temp_registers
         port map (
-            phi2         => phi2,
-            load_reg_a   => load_reg_a,
-            load_reg_b   => load_reg_b,
-            output_reg_a => output_reg_a,
-            output_reg_b => output_reg_b,
-            internal_bus => internal_bus,
-            reg_a_out    => reg_a_out,
-            reg_b_out    => reg_b_out
+            phi2             => phi2,
+            load_reg_a       => load_reg_a,
+            load_reg_b       => load_reg_b,
+            output_reg_a     => output_reg_a,
+            output_reg_b     => output_reg_b,
+            instr_is_inr_dcr => instr_is_inr_dcr,
+            internal_bus     => internal_bus,
+            reg_a_out        => reg_a_out,
+            reg_b_out        => reg_b_out
         );
 
     -- ------------------------------------------------------------------------

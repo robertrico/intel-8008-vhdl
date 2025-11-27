@@ -107,14 +107,14 @@ begin
                   '1' when (state_is_t4 = '1' and current_cycle = 1 and instr_is_alu_op = '1' and instr_uses_temp_regs = '1') else
                   '0';
 
-    -- Load Reg.a: T4 (cycle 1) OR T3 (cycle 2 or 3) for instructions using temp regs
-    -- Cycle 1 T4: accumulator (for register ALU operations ONLY, not immediate!)
-    -- Cycle 2 T3: accumulator (for immediate ALU operations like CPI)
+    -- Load Reg.a: T4 (cycle 1 or 2) OR T3 (cycle 3) for instructions using temp regs
+    -- Cycle 1 T4: accumulator (for register ALU operations)
+    -- Cycle 2 T4: accumulator (for immediate ALU operations like CPI) - NOT T3 because immediate byte loads then!
     -- Cycle 3 T3: address high byte (for JMP/CALL)
     -- For JMP/CALL: only load Reg.a in cycle 3 (high byte), not cycle 2
     -- NOTE: Don't gate on phi2 here - let the temp registers sample on phi2 rising edge
     load_reg_a <= '1' when (state_is_t4 = '1' and current_cycle = 1 and instr_is_alu_op = '1' and instr_uses_temp_regs = '1') else
-                  '1' when (state_is_t3 = '1' and current_cycle = 2 and instr_is_alu_op = '1' and instr_needs_immediate = '1') else
+                  '1' when (state_is_t4 = '1' and current_cycle = 2 and instr_is_alu_op = '1' and instr_needs_immediate = '1') else
                   '1' when (state_is_t3 = '1' and current_cycle = 3 and instr_uses_temp_regs = '1') else
                   '0';
 
@@ -124,7 +124,18 @@ begin
     alu_enable <= state_is_t5 and instr_is_alu_op;
 
     -- Update flags: Same timing as ALU enable (flags updated after ALU operation)
-    update_flags <= state_is_t5 and instr_is_alu_op and phi2;
+    -- NOTE: Don't gate with phi2 here - the condition_flags module latches on phi2 rising edge
+    update_flags <= state_is_t5 and instr_is_alu_op;
+
+    -- Debug: Report when we're trying to update flags
+    process(phi2)
+    begin
+        if rising_edge(phi2) then
+            if state_is_t5 = '1' and instr_is_alu_op = '1' then
+                report "REG_ALU_CTRL: At T5 with ALU op, update_flags should pulse";
+            end if;
+        end if;
+    end process;
 
     -- Output Enable Signals
     --

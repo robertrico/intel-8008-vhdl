@@ -99,6 +99,10 @@ begin
                 zero_ff   <= flag_zero_in;
                 sign_ff   <= flag_sign_in;
                 parity_ff <= flag_parity_in;
+                report "COND_FLAGS: Updating flags - C=" & std_logic'image(flag_carry_in) &
+                       " Z=" & std_logic'image(flag_zero_in) &
+                       " S=" & std_logic'image(flag_sign_in) &
+                       " P=" & std_logic'image(flag_parity_in);
             end if;
         end if;
     end process;

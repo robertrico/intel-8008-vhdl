@@ -30,6 +30,9 @@ entity temp_registers is
         output_reg_a : in std_logic;  -- Enable Reg.a to drive internal bus
         output_reg_b : in std_logic;  -- Enable Reg.b to drive internal bus
 
+        -- Instruction type signal (from instruction decoder)
+        instr_is_inr_dcr : in std_logic;  -- '1' for INR/DCR instructions (load constant 0x01 into Reg.a)
+
         -- Internal data bus (bidirectional)
         internal_bus : inout std_logic_vector(7 downto 0);
 
@@ -63,9 +66,9 @@ begin
         if rising_edge(phi2) then
             if load_reg_a = '1' then
                 -- For INR/DCR: load constant 0x01 for increment/decrement
-                -- Detect by checking if load_reg_b is also active (unary ops load both at same time at T4)
-                if load_reg_b = '1' then
-                    -- Unary operation: load constant 1
+                -- Instruction decoder tells us if this is INR/DCR
+                if instr_is_inr_dcr = '1' then
+                    -- Unary operation (INR/DCR): load constant 1
                     reg_a <= x"01";
                     report "TEMP_REG: Loading Reg.a with constant 0x01 for INR/DCR";
                 else

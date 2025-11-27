@@ -44,6 +44,7 @@ entity instruction_decoder is
 
         -- For Register & ALU Control (temp register loading)
         instr_uses_temp_regs  : out std_logic;  -- Instruction uses Reg.a/Reg.b (ALU ops, JMP, CALL)
+        instr_is_inr_dcr      : out std_logic;  -- INR/DCR instruction (load constant 0x01 into Reg.a)
 
         -- For Machine Cycle Control (extended states T4/T5)
         instr_needs_t4t5      : out std_logic;  -- Instruction needs T4/T5 states (JMP, CALL, RET, RST, ALU ops)
@@ -89,6 +90,7 @@ begin
         instr_reads_reg <= '0';
         instr_is_mem_indirect <= '0';  -- Default: not memory indirect
         instr_uses_temp_regs <= '0';  -- Default: doesn't use temp registers
+        instr_is_inr_dcr <= '0';  -- Default: not INR/DCR
         instr_needs_t4t5 <= '0';  -- Default: doesn't need T4/T5
         rst_vector <= (others => '0');  -- Default RST vector
         condition_code <= "00";  -- Default condition code
@@ -122,6 +124,7 @@ begin
                             if op_543 /= "000" then
                                 instr_is_alu <= '1';
                                 instr_uses_temp_regs <= '1';
+                                instr_is_inr_dcr <= '1';  -- Load constant 0x01 into Reg.a
                                 instr_reads_reg <= '1';
                                 instr_writes_reg <= '1';
                                 instr_sss_field <= "000";   -- ALU opcode: ADD
@@ -133,6 +136,7 @@ begin
                         -- 00 DDD 001 - DCr (decrement) - 1 cycle
                         instr_is_alu <= '1';
                         instr_uses_temp_regs <= '1';
+                        instr_is_inr_dcr <= '1';  -- Load constant 0x01 into Reg.a
                         instr_reads_reg <= '1';
                         instr_writes_reg <= '1';
                         instr_sss_field <= "010";   -- ALU opcode: SUB
@@ -174,8 +178,8 @@ begin
                         else
                             instr_writes_reg <= '1';  -- ADD/SUB/AND/XOR/OR write A
                         end if;
-                        instr_sss_field <= "000"; -- A register
-                        instr_ddd_field <= "000"; -- A register
+                        instr_sss_field <= op_543;  -- ALU opcode from PPP field (bits 5:3)
+                        instr_ddd_field <= "000"; -- A register (destination)
                         instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
 
                     when "101" =>

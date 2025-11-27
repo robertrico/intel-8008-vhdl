@@ -429,6 +429,15 @@ begin
                     end if;
                 end if;
 
+                -- For ALU immediate operations (CPI, ADI, etc.), read accumulator to internal bus
+                -- so temp register A can load it at T4 (Reg.b already loaded immediate at T3)
+                if instr_is_alu = '1' and instr_needs_immediate = '1' then
+                    scratchpad_select <= "000";  -- A register (accumulator)
+                    scratchpad_read   <= '1';
+                    regfile_to_bus    <= '1';  -- Register file drives internal bus
+                    report "MEM_IO: T4 cycle 2 ALU immediate, reading accumulator to bus for Reg.a";
+                end if;
+
             elsif current_cycle = 3 then
                 -- Third cycle of CALL - push to stack during T4
                 if instr_is_call = '1' then
