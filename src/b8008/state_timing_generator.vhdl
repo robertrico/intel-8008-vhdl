@@ -24,10 +24,11 @@ entity state_timing_generator is
         phi2 : in std_logic;
 
         -- Control inputs
-        advance_state      : in std_logic;  -- Advance to next state
-        interrupt_pending  : in std_logic;  -- Interrupt waiting to be serviced
-        ready              : in std_logic;  -- Ready signal (1=ready, 0=wait)
-        instr_is_hlt_flag  : in std_logic;  -- Latched HLT flag (halt at T3)
+        advance_state         : in std_logic;  -- Advance to next state
+        interrupt_pending     : in std_logic;  -- Interrupt waiting to be serviced
+        ready                 : in std_logic;  -- Ready signal (1=ready, 0=wait)
+        instr_is_hlt_flag     : in std_logic;  -- Latched HLT flag (for interrupt wake)
+        transition_to_stopped : in std_logic;  -- From decoder: transition to STOPPED at T3
 
         -- State outputs (one-hot)
         state_t1      : out std_logic;
@@ -86,7 +87,7 @@ begin
     status_s2 <= '1' when (current_state = S_T2 or current_state = S_T4 or current_state = S_T5 or current_state = S_T1I) else '0';
 
     -- State advancement logic (combinational)
-    process(current_state, advance_state, interrupt_pending, instr_is_hlt_flag, cycle_count)
+    process(current_state, advance_state, interrupt_pending, instr_is_hlt_flag, transition_to_stopped, cycle_count)
     begin
         -- Default: stay in current state
         next_state <= current_state;
@@ -121,16 +122,18 @@ begin
             when S_T3 =>
                 -- T3 can go to T4, back to T1/T1I, or to STOPPED based on control
                 if cycle_count = '1' then
-                    if advance_state = '1' then
-                        -- Instruction complete at T3 (short 1-cycle instruction)
-                        if instr_is_hlt_flag = '1' then
-                            -- HLT instruction - enter stopped state
-                            next_state <= S_STOPPED;
-                        elsif interrupt_pending = '1' then
+                    -- Priority 1: HLT stops immediately (combinatorial from decoder)
+                    if transition_to_stopped = '1' then
+                        next_state <= S_STOPPED;
+                    -- Priority 2: Instruction complete at T3
+                    elsif advance_state = '1' then
+                        -- Short 1-cycle instruction complete
+                        if interrupt_pending = '1' then
                             next_state <= S_T1I;
                         else
                             next_state <= S_T1;
                         end if;
+                    -- Priority 3: Continue to T4
                     else
                         -- Continue to T4 (needs T4/T5 or multi-cycle)
                         next_state <= S_T4;

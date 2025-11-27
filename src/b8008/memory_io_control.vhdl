@@ -183,7 +183,7 @@ begin
             instr_needs_immediate, instr_needs_address,
             instr_sss_field, instr_ddd_field, instr_is_alu,
             instr_is_call, instr_is_ret, instr_is_rst,
-            instr_writes_reg, instr_reads_reg, instr_is_hlt_flag)
+            instr_writes_reg, instr_reads_reg)
     begin
         -- Defaults: all outputs inactive
         ir_load               <= '0';
@@ -324,16 +324,15 @@ begin
                 when CYCLE_PCI =>
                     -- Instruction fetch: read from external memory and load IR
                     -- Cycle type PCI only occurs during cycle 1 (machine_cycle_control ensures this)
-                    -- IMPORTANT: Do not load IR if CPU is stopped OR executing HLT
+                    -- IMPORTANT: Do not load IR if CPU is stopped
                     io_buffer_enable    <= '1';
                     io_buffer_direction <= '0';  -- Read from external
                     memory_read         <= '1';
-                    if state_stopped = '0' and instr_is_hlt_flag = '0' then
+                    if state_stopped = '0' then
                         ir_load <= '1';  -- Load instruction into IR
                     else
-                        ir_load <= '0';  -- Don't load IR when stopped or halting
-                        report "MEM_IO: Blocking ir_load - stopped=" & std_logic'image(state_stopped) &
-                               " hlt_flag=" & std_logic'image(instr_is_hlt_flag);
+                        ir_load <= '0';  -- Don't load IR when stopped
+                        report "MEM_IO: Blocking ir_load - CPU is stopped";
                     end if;
 
                 when CYCLE_PCR =>

@@ -54,7 +54,10 @@ entity instruction_decoder is
         -- Condition evaluation (for condition_flags module)
         condition_code        : out std_logic_vector(1 downto 0);  -- CC field: 00=C, 01=Z, 10=S, 11=P
         test_true             : out std_logic;  -- 1=test true, 0=test false
-        eval_condition        : out std_logic   -- 1=conditional instruction, evaluate condition
+        eval_condition        : out std_logic;  -- 1=conditional instruction, evaluate condition
+
+        -- State transition control (for state_timing_generator)
+        transition_to_stopped : out std_logic   -- 1=transition to STOPPED state at T3 (HLT instruction)
     );
 end entity instruction_decoder;
 
@@ -91,6 +94,7 @@ begin
         condition_code <= "00";  -- Default condition code
         test_true <= '0';  -- Default test false
         eval_condition <= '0';  -- Default no condition evaluation
+        transition_to_stopped <= '0';  -- Default: don't stop
 
         -- Detect memory indirect operations (M register access)
         -- This happens when SSS or DDD field = "111"
@@ -107,6 +111,7 @@ begin
                 if op_543 = "000" and op_210(2 downto 1) = "00" then
                     -- HLT: 0x00 or 0x01 (bit 0 is don't care)
                     instr_is_hlt <= '1';  -- Signal that this is HLT
+                    transition_to_stopped <= '1';  -- Transition to STOPPED state at T3
 
                 else
                     case op_210 is
@@ -290,6 +295,7 @@ begin
                 if instruction_byte = "11111111" then
                     -- 11 111 111 - HLT - 1 cycle
                     instr_is_hlt <= '1';
+                    transition_to_stopped <= '1';  -- Transition to STOPPED state at T3
                 elsif op_210 = "111" then
                     -- 11 DDD 111 - LrM (load register from memory) - 2 cycles
                     instr_needs_immediate <= '1';

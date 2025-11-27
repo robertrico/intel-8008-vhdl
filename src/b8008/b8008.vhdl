@@ -99,23 +99,24 @@ architecture structural of b8008 is
 
     component state_timing_generator is
         port (
-            phi1              : in std_logic;
-            phi2              : in std_logic;
-            advance_state     : in std_logic;
-            interrupt_pending : in std_logic;
-            ready             : in std_logic;
-            instr_is_hlt_flag : in std_logic;
-            state_t1          : out std_logic;
-            state_t2          : out std_logic;
-            state_t3          : out std_logic;
-            state_t4          : out std_logic;
-            state_t5          : out std_logic;
-            state_t1i         : out std_logic;
-            state_stopped     : out std_logic;
-            state_half        : out std_logic;
-            status_s0         : out std_logic;
-            status_s1         : out std_logic;
-            status_s2         : out std_logic
+            phi1                  : in std_logic;
+            phi2                  : in std_logic;
+            advance_state         : in std_logic;
+            interrupt_pending     : in std_logic;
+            ready                 : in std_logic;
+            instr_is_hlt_flag     : in std_logic;
+            transition_to_stopped : in std_logic;
+            state_t1              : out std_logic;
+            state_t2              : out std_logic;
+            state_t3              : out std_logic;
+            state_t4              : out std_logic;
+            state_t5              : out std_logic;
+            state_t1i             : out std_logic;
+            state_stopped         : out std_logic;
+            state_half            : out std_logic;
+            status_s0             : out std_logic;
+            status_s1             : out std_logic;
+            status_s2             : out std_logic
         );
     end component;
 
@@ -168,7 +169,8 @@ architecture structural of b8008 is
             rst_vector            : out std_logic_vector(2 downto 0);
             condition_code        : out std_logic_vector(1 downto 0);
             test_true             : out std_logic;
-            eval_condition        : out std_logic
+            eval_condition        : out std_logic;
+            transition_to_stopped : out std_logic
         );
     end component;
 
@@ -549,6 +551,7 @@ architecture structural of b8008 is
     signal condition_code        : std_logic_vector(1 downto 0);
     signal test_true             : std_logic;
     signal eval_condition        : std_logic;
+    signal transition_to_stopped : std_logic;
 
     -- Condition flags
     signal condition_met : std_logic;
@@ -757,23 +760,24 @@ begin
 
     u_state_timing : state_timing_generator
         port map (
-            phi1              => phi1,
-            phi2              => phi2,
-            advance_state     => advance_state,
-            interrupt_pending => interrupt_pending,
-            ready             => ready_status,
-            instr_is_hlt_flag => instr_is_hlt_flag,
-            state_t1          => state_t1,
-            state_t2          => state_t2,
-            state_t3          => state_t3,
-            state_t4          => state_t4,
-            state_t5          => state_t5,
-            state_t1i         => state_t1i,
-            state_stopped     => state_stopped,
-            state_half        => state_half,
-            status_s0         => status_s0,
-            status_s1         => status_s1,
-            status_s2         => status_s2
+            phi1                  => phi1,
+            phi2                  => phi2,
+            advance_state         => advance_state,
+            interrupt_pending     => interrupt_pending,
+            ready                 => ready_status,
+            instr_is_hlt_flag     => instr_is_hlt_flag,
+            transition_to_stopped => transition_to_stopped,
+            state_t1              => state_t1,
+            state_t2              => state_t2,
+            state_t3              => state_t3,
+            state_t4              => state_t4,
+            state_t5              => state_t5,
+            state_t1i             => state_t1i,
+            state_stopped         => state_stopped,
+            state_half            => state_half,
+            status_s0             => status_s0,
+            status_s1             => status_s1,
+            status_s2             => status_s2
         );
 
     -- ------------------------------------------------------------------------
@@ -835,7 +839,8 @@ begin
             rst_vector            => rst_vector,
             condition_code        => condition_code,
             test_true             => test_true,
-            eval_condition        => eval_condition
+            eval_condition        => eval_condition,
+            transition_to_stopped => transition_to_stopped
         );
 
     u_memory_io_control : memory_io_control

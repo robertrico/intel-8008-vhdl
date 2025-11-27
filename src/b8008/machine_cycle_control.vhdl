@@ -153,9 +153,11 @@ begin
                 advance_latch <= '1';
                 report "MCycle: Setting advance_latch at T3 (short cycle complete)";
             -- Special case: HLT instruction completes at T3 cycle 1
+            -- Set advance_latch for machine_cycle_control advance tracking, but
+            -- state transition is handled by transition_to_stopped signal
             elsif instr_is_hlt = '1' and cycle_count = 1 then
                 advance_latch <= '1';
-                instr_is_hlt_latch <= '1';  -- Latch HLT flag for state machine
+                instr_is_hlt_latch <= '1';  -- Latch HLT flag for interrupt wake
                 report "MCycle: Setting advance_latch at T3 for HLT";
             end if;
 
@@ -192,6 +194,9 @@ begin
             -- T1I is interrupt acknowledge - this is the cycle 1 instruction fetch
             -- Set cycle counter to 1 (it should already be, but ensure it)
             cycle_count <= 1;
+            -- Clear HLT flag when exiting stopped state via interrupt
+            instr_is_hlt_latch <= '0';
+            advance_latch <= '0';
         elsif rising_edge(state_t1) then
             -- We're entering T1 (start of new cycle or new instruction)
             report "MCycle: T1 rising, cycle=" & integer'image(cycle_count) &
