@@ -38,6 +38,8 @@ architecture testbench of b8008_top_tb is
             ram_byte_0  : out std_logic_vector(7 downto 0);
             debug_reg_a         : out std_logic_vector(7 downto 0);
             debug_reg_b         : out std_logic_vector(7 downto 0);
+            debug_reg_h         : out std_logic_vector(7 downto 0);
+            debug_reg_l         : out std_logic_vector(7 downto 0);
             debug_cycle         : out integer range 1 to 3;
             debug_pc            : out std_logic_vector(13 downto 0);
             debug_ir            : out std_logic_vector(7 downto 0);
@@ -61,6 +63,8 @@ architecture testbench of b8008_top_tb is
     signal ram_byte_0  : std_logic_vector(7 downto 0);
     signal debug_reg_a         : std_logic_vector(7 downto 0);
     signal debug_reg_b         : std_logic_vector(7 downto 0);
+    signal debug_reg_h         : std_logic_vector(7 downto 0);
+    signal debug_reg_l         : std_logic_vector(7 downto 0);
     signal debug_cycle         : integer range 1 to 3;
     signal debug_pc            : std_logic_vector(13 downto 0);
     signal debug_ir            : std_logic_vector(7 downto 0);
@@ -101,6 +105,8 @@ begin
             ram_byte_0  => ram_byte_0,
             debug_reg_a         => debug_reg_a,
             debug_reg_b         => debug_reg_b,
+            debug_reg_h         => debug_reg_h,
+            debug_reg_l         => debug_reg_l,
             debug_cycle         => debug_cycle,
             debug_pc            => debug_pc,
             debug_ir            => debug_ir,
@@ -167,19 +173,24 @@ begin
         for i in 1 to 100000 loop
             wait for 100 ns;
 
-            -- Report state periodically with debug info
+            -- Report state periodically with debug info in clear format
             if i mod 100 = 0 then
-                report "  @" & time'image(now) & " i=" & integer'image(i) &
-                       " Addr=0x" & to_hstring(unsigned(address_out)) &
-                       " Data=0x" & to_hstring(unsigned(data_out)) &
-                       " S=" & std_logic'image(s2_out) & std_logic'image(s1_out) & std_logic'image(s0_out) &
-                       " Cyc=" & integer'image(debug_cycle) &
-                       " PC=0x" & to_hstring(unsigned(debug_pc)) &
-                       " IR=0x" & to_hstring(unsigned(debug_ir)) &
-                       " needs_addr=" & std_logic'image(debug_needs_address) &
-                       " INT=" & std_logic'image(debug_int_pending) &
-                       " RegA=0x" & to_hstring(unsigned(debug_reg_a)) &
-                       " RegB=0x" & to_hstring(unsigned(debug_reg_b));
+                report "========================================";
+                report "Cycle " & integer'image(i) & " @ " & time'image(now);
+                report "  PC = 0x" & to_hstring(unsigned(debug_pc)) &
+                       " | IR = 0x" & to_hstring(unsigned(debug_ir)) &
+                       " | MCycle = " & integer'image(debug_cycle);
+                report "CPU Registers (scratchpad):";
+                report "  Reg.A = 0x" & to_hstring(unsigned(debug_reg_a)) &
+                       " | Reg.B = 0x" & to_hstring(unsigned(debug_reg_b));
+                report "  Reg.H = 0x" & to_hstring(unsigned(debug_reg_h)) &
+                       " | Reg.L = 0x" & to_hstring(unsigned(debug_reg_l)) &
+                       "  (H:L ptr = " & integer'image(to_integer(unsigned(debug_reg_h & debug_reg_l))) & ")";
+                report "External Bus:";
+                report "  Addr = 0x" & to_hstring(unsigned(address_out)) &
+                       " | Data = 0x" & to_hstring(unsigned(data_out)) &
+                       " | State = " & std_logic'image(s2_out) &
+                       std_logic'image(s1_out) & std_logic'image(s0_out);
             end if;
 
             -- Check if address changed (new instruction fetch)
@@ -213,6 +224,25 @@ begin
 
         report "========================================";
         report "TEST COMPLETE";
+        report "========================================";
+        report " ";
+        report "Search Program Test Summary:";
+        report "  - String at address 200 (0xC8): 'Hello, world. 8008!!'";
+        report "  - Program loads L=200 (0xC8), searches for period character";
+        report "  - Uses INR L to increment through string";
+        report "  - Jumps to FOUND (0x0113) when period is found";
+        report " ";
+        report "What to look for in the output above:";
+        report "  1. MVI L,200 loads Reg.L with 0xC8";
+        report "  2. INR L increments: 0xC8 -> 0xC9 -> 0xCA -> 0xCB ...";
+        report "  3. MOV A,M reads characters from memory at H:L address";
+        report "  4. CPI 2Eh compares with period character";
+        report "  5. JZ FOUND jumps to 0x0113 when period found";
+        report " ";
+        report "Key Success Indicators:";
+        report "  - Reg.L starts at 0xC8 and increments correctly";
+        report "  - Program reaches PC=0x0113 (FOUND label)";
+        report "  - INR L instruction successfully increments L register";
         report "========================================";
 
         -- End simulation

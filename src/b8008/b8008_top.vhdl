@@ -48,9 +48,11 @@ entity b8008_top is
         -- RAM debug output (location 0 for verification)
         ram_byte_0  : out std_logic_vector(7 downto 0);
 
-        -- Debug outputs for JMP debugging
-        debug_reg_a         : out std_logic_vector(7 downto 0);
-        debug_reg_b         : out std_logic_vector(7 downto 0);
+        -- Debug outputs: CPU state and key registers
+        debug_reg_a         : out std_logic_vector(7 downto 0);  -- A register
+        debug_reg_b         : out std_logic_vector(7 downto 0);  -- B register
+        debug_reg_h         : out std_logic_vector(7 downto 0);  -- H register
+        debug_reg_l         : out std_logic_vector(7 downto 0);  -- L register
         debug_cycle         : out integer range 1 to 3;
         debug_pc            : out std_logic_vector(13 downto 0);
         debug_ir            : out std_logic_vector(7 downto 0);
@@ -78,6 +80,11 @@ architecture structural of b8008_top is
             -- Debug
             debug_reg_a         : out std_logic_vector(7 downto 0);
             debug_reg_b         : out std_logic_vector(7 downto 0);
+            debug_reg_c         : out std_logic_vector(7 downto 0);
+            debug_reg_d         : out std_logic_vector(7 downto 0);
+            debug_reg_e         : out std_logic_vector(7 downto 0);
+            debug_reg_h         : out std_logic_vector(7 downto 0);
+            debug_reg_l         : out std_logic_vector(7 downto 0);
             debug_cycle         : out integer range 1 to 3;
             debug_pc            : out std_logic_vector(13 downto 0);
             debug_ir            : out std_logic_vector(7 downto 0);
@@ -226,6 +233,11 @@ begin
             interrupt           => interrupt,
             debug_reg_a         => debug_reg_a,
             debug_reg_b         => debug_reg_b,
+            debug_reg_c         => open,  -- Not used in top-level yet
+            debug_reg_d         => open,  -- Not used in top-level yet
+            debug_reg_e         => open,  -- Not used in top-level yet
+            debug_reg_h         => debug_reg_h,
+            debug_reg_l         => debug_reg_l,
             debug_cycle         => debug_cycle,
             debug_pc            => debug_pc,
             debug_ir            => debug_ir,
