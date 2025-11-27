@@ -111,6 +111,7 @@ architecture structural of b8008 is
             state_t4          : out std_logic;
             state_t5          : out std_logic;
             state_t1i         : out std_logic;
+            state_stopped     : out std_logic;
             state_half        : out std_logic;
             status_s0         : out std_logic;
             status_s1         : out std_logic;
@@ -181,6 +182,7 @@ architecture structural of b8008 is
             state_t4              : in std_logic;
             state_t5              : in std_logic;
             state_t1i             : in std_logic;
+            state_stopped         : in std_logic;
             state_half            : in std_logic;
             status_s0             : in std_logic;
             status_s1             : in std_logic;
@@ -188,6 +190,7 @@ architecture structural of b8008 is
             cycle_type            : in std_logic_vector(1 downto 0);
             current_cycle         : in integer range 1 to 3;
             advance_state         : in std_logic;
+            instr_is_hlt_flag     : in std_logic;
             instr_needs_immediate : in std_logic;
             instr_needs_address   : in std_logic;
             instr_is_io           : in std_logic;
@@ -505,17 +508,18 @@ architecture structural of b8008 is
     signal internal_bus : std_logic_vector(7 downto 0);
 
     -- State timing signals (from state_timing_generator)
-    signal state_t1    : std_logic;
-    signal state_t2    : std_logic;
-    signal state_t3    : std_logic;
-    signal state_t4    : std_logic;
-    signal state_t5    : std_logic;
-    signal state_t1i   : std_logic;
-    signal state_half  : std_logic;  -- Which half of 2-cycle state (0=first, 1=second)
-    signal status_s0   : std_logic;
-    signal status_s1   : std_logic;
-    signal status_s2   : std_logic;
-    signal sync        : std_logic;
+    signal state_t1      : std_logic;
+    signal state_t2      : std_logic;
+    signal state_t3      : std_logic;
+    signal state_t4      : std_logic;
+    signal state_t5      : std_logic;
+    signal state_t1i     : std_logic;
+    signal state_stopped : std_logic;
+    signal state_half    : std_logic;  -- Which half of 2-cycle state (0=first, 1=second)
+    signal status_s0     : std_logic;
+    signal status_s1     : std_logic;
+    signal status_s2     : std_logic;
+    signal sync          : std_logic;
 
     -- Machine cycle control signals
     signal cycle_type       : std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
@@ -765,6 +769,7 @@ begin
             state_t4          => state_t4,
             state_t5          => state_t5,
             state_t1i         => state_t1i,
+            state_stopped     => state_stopped,
             state_half        => state_half,
             status_s0         => status_s0,
             status_s1         => status_s1,
@@ -843,6 +848,7 @@ begin
             state_t4              => state_t4,
             state_t5              => state_t5,
             state_t1i             => state_t1i,
+            state_stopped         => state_stopped,
             state_half            => state_half,
             status_s0             => status_s0,
             status_s1             => status_s1,
@@ -850,6 +856,7 @@ begin
             cycle_type            => cycle_type,
             current_cycle         => current_cycle,
             advance_state         => advance_state,
+            instr_is_hlt_flag     => instr_is_hlt_flag,
             instr_needs_immediate => instr_needs_immediate,
             instr_needs_address   => instr_needs_address,
             instr_is_io           => instr_is_io,

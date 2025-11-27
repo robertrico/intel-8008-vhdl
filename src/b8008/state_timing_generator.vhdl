@@ -30,12 +30,13 @@ entity state_timing_generator is
         instr_is_hlt_flag  : in std_logic;  -- Latched HLT flag (halt at T3)
 
         -- State outputs (one-hot)
-        state_t1  : out std_logic;
-        state_t2  : out std_logic;
-        state_t3  : out std_logic;
-        state_t4  : out std_logic;
-        state_t5  : out std_logic;
-        state_t1i : out std_logic;
+        state_t1      : out std_logic;
+        state_t2      : out std_logic;
+        state_t3      : out std_logic;
+        state_t4      : out std_logic;
+        state_t5      : out std_logic;
+        state_t1i     : out std_logic;
+        state_stopped : out std_logic;
 
         -- State half indicator (which cycle of the 2-cycle state)
         state_half : out std_logic;  -- 0 = first cycle, 1 = second cycle
@@ -60,12 +61,13 @@ architecture rtl of state_timing_generator is
 begin
 
     -- Output current state (one-hot)
-    state_t1  <= '1' when current_state = S_T1  else '0';
-    state_t2  <= '1' when current_state = S_T2  else '0';
-    state_t3  <= '1' when current_state = S_T3  else '0';
-    state_t4  <= '1' when current_state = S_T4  else '0';
-    state_t5  <= '1' when current_state = S_T5  else '0';
-    state_t1i <= '1' when current_state = S_T1I else '0';
+    state_t1      <= '1' when current_state = S_T1      else '0';
+    state_t2      <= '1' when current_state = S_T2      else '0';
+    state_t3      <= '1' when current_state = S_T3      else '0';
+    state_t4      <= '1' when current_state = S_T4      else '0';
+    state_t5      <= '1' when current_state = S_T5      else '0';
+    state_t1i     <= '1' when current_state = S_T1I     else '0';
+    state_stopped <= '1' when current_state = S_STOPPED else '0';
 
     -- Output which half of state we're in
     state_half <= cycle_count;

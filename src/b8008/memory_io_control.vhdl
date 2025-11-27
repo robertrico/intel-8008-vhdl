@@ -44,21 +44,23 @@ entity memory_io_control is
         reset : in std_logic;
 
         -- From State Timing Generator
-        state_t1  : in std_logic;
-        state_t2  : in std_logic;
-        state_t3  : in std_logic;
-        state_t4  : in std_logic;
-        state_t5  : in std_logic;
-        state_t1i : in std_logic;
-        state_half : in std_logic;  -- Which half of 2-cycle state (0=first, 1=second)
-        status_s0 : in std_logic;
-        status_s1 : in std_logic;
-        status_s2 : in std_logic;
+        state_t1      : in std_logic;
+        state_t2      : in std_logic;
+        state_t3      : in std_logic;
+        state_t4      : in std_logic;
+        state_t5      : in std_logic;
+        state_t1i     : in std_logic;
+        state_stopped : in std_logic;
+        state_half    : in std_logic;  -- Which half of 2-cycle state (0=first, 1=second)
+        status_s0     : in std_logic;
+        status_s1     : in std_logic;
+        status_s2     : in std_logic;
 
         -- From Machine Cycle Control
-        cycle_type     : in std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
-        current_cycle  : in integer range 1 to 3;
-        advance_state  : in std_logic;
+        cycle_type        : in std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
+        current_cycle     : in integer range 1 to 3;
+        advance_state     : in std_logic;
+        instr_is_hlt_flag : in std_logic;
 
         -- From Instruction Decoder
         instr_needs_immediate : in std_logic;
@@ -174,14 +176,14 @@ begin
     end process;
 
     -- Control signal generation (combinational based on state and cycle)
-    process(state_t1, state_t2, state_t3, state_t4, state_t5, state_t1i, state_half,
+    process(state_t1, state_t2, state_t3, state_t4, state_t5, state_t1i, state_stopped, state_half,
             status_s0, status_s1, status_s2,
             cycle_type, current_cycle, instr_is_io, instr_is_write, instr_is_mem_indirect,
             condition_met, ready_status, interrupt_pending,
             instr_needs_immediate, instr_needs_address,
             instr_sss_field, instr_ddd_field, instr_is_alu,
             instr_is_call, instr_is_ret, instr_is_rst,
-            instr_writes_reg, instr_reads_reg)
+            instr_writes_reg, instr_reads_reg, instr_is_hlt_flag)
     begin
         -- Defaults: all outputs inactive
         ir_load               <= '0';
@@ -322,10 +324,17 @@ begin
                 when CYCLE_PCI =>
                     -- Instruction fetch: read from external memory and load IR
                     -- Cycle type PCI only occurs during cycle 1 (machine_cycle_control ensures this)
+                    -- IMPORTANT: Do not load IR if CPU is stopped OR executing HLT
                     io_buffer_enable    <= '1';
                     io_buffer_direction <= '0';  -- Read from external
                     memory_read         <= '1';
-                    ir_load             <= '1';  -- Load instruction into IR
+                    if state_stopped = '0' and instr_is_hlt_flag = '0' then
+                        ir_load <= '1';  -- Load instruction into IR
+                    else
+                        ir_load <= '0';  -- Don't load IR when stopped or halting
+                        report "MEM_IO: Blocking ir_load - stopped=" & std_logic'image(state_stopped) &
+                               " hlt_flag=" & std_logic'image(instr_is_hlt_flag);
+                    end if;
 
                 when CYCLE_PCR =>
                     -- Memory read: read data from memory
