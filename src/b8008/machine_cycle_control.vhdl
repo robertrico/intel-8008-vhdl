@@ -38,7 +38,8 @@ entity machine_cycle_control is
         condition_met         : in std_logic;  -- Condition result (1=met, 0=not met)
 
         -- Outputs to State Timing Generator
-        advance_state : out std_logic;  -- Signal to skip to next instruction
+        advance_state     : out std_logic;  -- Signal to skip to next instruction
+        instr_is_hlt_flag : out std_logic;  -- Latched HLT flag for state machine
 
         -- Outputs to Memory & I/O Control (cycle type)
         cycle_type : out std_logic_vector(1 downto 0);  -- D6, D7 (only valid during T2)
@@ -62,6 +63,9 @@ architecture rtl of machine_cycle_control is
 
     -- Latched cycle type signal
     signal cycle_type_latch : std_logic_vector(1 downto 0) := "00";
+
+    -- Latched HLT signal (captured at T3 for state machine)
+    signal instr_is_hlt_latch : std_logic := '0';
 
     -- Determine if current cycle needs T4/T5 (computed based on instruction and cycle)
     signal needs_t4t5_this_cycle : std_logic;
@@ -93,6 +97,9 @@ begin
 
     -- Output latched advance signal
     advance_state <= advance_latch;
+
+    -- Output latched HLT flag
+    instr_is_hlt_flag <= instr_is_hlt_latch;
 
     -- Cycle type latch - latch value during T2 rising edge
     process(state_t2)
@@ -131,6 +138,7 @@ begin
         if rising_edge(state_t1) then
             -- Clear at start of new cycle
             advance_latch <= '0';
+            instr_is_hlt_latch <= '0';
 
         elsif rising_edge(state_t3) then
             -- Only set if this is a SHORT cycle (no T4/T5) AND cycle is complete
@@ -139,11 +147,16 @@ begin
             -- for cycle 1 and let it be set at T5 if needed.
             report "MCycle: T3 rising, cycle=" & integer'image(cycle_count) &
                    " needs_t4t5_this=" & std_logic'image(needs_t4t5_this_cycle);
-            if instr_is_hlt = '0' and needs_t4t5_this_cycle = '0' and
+            if needs_t4t5_this_cycle = '0' and
                ((cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done (skip cycle 1!)
                 (cycle_count = 3)) then                           -- Three-cycle done
                 advance_latch <= '1';
                 report "MCycle: Setting advance_latch at T3 (short cycle complete)";
+            -- Special case: HLT instruction completes at T3 cycle 1
+            elsif instr_is_hlt = '1' and cycle_count = 1 then
+                advance_latch <= '1';
+                instr_is_hlt_latch <= '1';  -- Latch HLT flag for state machine
+                report "MCycle: Setting advance_latch at T3 for HLT";
             end if;
 
         elsif rising_edge(state_t4) then

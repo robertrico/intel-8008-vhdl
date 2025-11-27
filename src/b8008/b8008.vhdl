@@ -104,6 +104,7 @@ architecture structural of b8008 is
             advance_state     : in std_logic;
             interrupt_pending : in std_logic;
             ready             : in std_logic;
+            instr_is_hlt_flag : in std_logic;
             state_t1          : out std_logic;
             state_t2          : out std_logic;
             state_t3          : out std_logic;
@@ -138,6 +139,7 @@ architecture structural of b8008 is
             eval_condition        : in std_logic;
             condition_met         : in std_logic;
             advance_state         : out std_logic;
+            instr_is_hlt_flag     : out std_logic;
             cycle_type            : out std_logic_vector(1 downto 0);
             current_cycle         : out integer range 1 to 3
         );
@@ -516,9 +518,10 @@ architecture structural of b8008 is
     signal sync        : std_logic;
 
     -- Machine cycle control signals
-    signal cycle_type    : std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
-    signal current_cycle : integer range 1 to 3;
-    signal advance_state : std_logic;
+    signal cycle_type       : std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
+    signal current_cycle    : integer range 1 to 3;
+    signal advance_state    : std_logic;
+    signal instr_is_hlt_flag : std_logic;  -- Latched HLT flag from machine_cycle_control
 
     -- Instruction decoder outputs
     signal instr_byte           : std_logic_vector(7 downto 0);
@@ -755,6 +758,7 @@ begin
             advance_state     => advance_state,
             interrupt_pending => interrupt_pending,
             ready             => ready_status,
+            instr_is_hlt_flag => instr_is_hlt_flag,
             state_t1          => state_t1,
             state_t2          => state_t2,
             state_t3          => state_t3,
@@ -799,6 +803,7 @@ begin
             eval_condition        => eval_condition,
             condition_met         => condition_met,
             advance_state         => advance_state,
+            instr_is_hlt_flag     => instr_is_hlt_flag,
             cycle_type            => cycle_type,
             current_cycle         => current_cycle
         );
