@@ -168,7 +168,12 @@ begin
                         -- NOT from a source register during cycle 1 T4 like register ALU ops do.
                         instr_uses_temp_regs <= '0';
                         instr_reads_reg <= '1';   -- Read A
-                        instr_writes_reg <= '1';  -- Write A
+                        -- Write A for all ALU ops EXCEPT compare (PPP=111)
+                        if op_543 = "111" then
+                            instr_writes_reg <= '0';  -- Compare doesn't write
+                        else
+                            instr_writes_reg <= '1';  -- ADD/SUB/AND/XOR/OR write A
+                        end if;
                         instr_sss_field <= "000"; -- A register
                         instr_ddd_field <= "000"; -- A register
                         instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
@@ -277,7 +282,12 @@ begin
                 instr_is_alu <= '1';
                 instr_uses_temp_regs <= '1';
                 instr_reads_reg <= '1';   -- Read source (SSS or memory)
-                instr_writes_reg <= '1';  -- Write to A
+                -- Write A for all ALU ops EXCEPT compare (PPP=111)
+                if op_543 = "111" then
+                    instr_writes_reg <= '0';  -- Compare doesn't write
+                else
+                    instr_writes_reg <= '1';  -- ADD/SUB/AND/XOR/OR write A
+                end if;
                 instr_ddd_field <= "000"; -- A register
                 instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
                 if op_210 = "111" then

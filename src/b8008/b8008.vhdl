@@ -206,6 +206,7 @@ architecture structural of b8008 is
             instr_writes_reg      : in std_logic;
             instr_reads_reg       : in std_logic;
             instr_is_mem_indirect : in std_logic;
+            eval_condition        : in std_logic;
             condition_met         : in std_logic;
             interrupt_pending     : in std_logic;
             ready_status          : in std_logic;
@@ -875,6 +876,7 @@ begin
             instr_writes_reg      => instr_writes_reg,
             instr_reads_reg       => instr_reads_reg,
             instr_is_mem_indirect => instr_is_mem_indirect,
+            eval_condition        => eval_condition,
             condition_met         => condition_met,
             interrupt_pending     => interrupt_pending,
             ready_status          => ready_status,

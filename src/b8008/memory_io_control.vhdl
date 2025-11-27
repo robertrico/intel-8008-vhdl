@@ -76,6 +76,7 @@ entity memory_io_control is
         instr_writes_reg      : in std_logic;  -- Instruction writes to register
         instr_reads_reg       : in std_logic;  -- Instruction reads from register
         instr_is_mem_indirect : in std_logic;  -- Memory indirect (SSS or DDD = "111")
+        eval_condition        : in std_logic;  -- Conditional instruction flag
 
         -- From Condition Flags
         condition_met : in std_logic;
@@ -179,7 +180,7 @@ begin
     process(state_t1, state_t2, state_t3, state_t4, state_t5, state_t1i, state_stopped, state_half,
             status_s0, status_s1, status_s2,
             cycle_type, current_cycle, instr_is_io, instr_is_write, instr_is_mem_indirect,
-            condition_met, ready_status, interrupt_pending,
+            condition_met, ready_status, interrupt_pending, eval_condition,
             instr_needs_immediate, instr_needs_address,
             instr_sss_field, instr_ddd_field, instr_is_alu,
             instr_is_call, instr_is_ret, instr_is_rst,
@@ -242,16 +243,19 @@ begin
             end if;
 
             -- Load PC during T4/T5 for various instructions
-            -- JMP/CALL: T5 of cycle 3
+            -- JMP/CALL: T5 of cycle 3 (only if unconditional OR condition met)
             -- RET/RST: T5 of cycle 1
             if state_t5 = '1' then
                 if current_cycle = 3 and instr_needs_address = '1' then
                     -- JMP/CALL: Load PC from Reg.a+Reg.b during T5 of cycle 3
-                    pc_load <= '1';
-                    if instr_is_call = '1' then
-                        report "MEM_IO: Setting pc_load at T5 cycle 3 for CALL";
-                    else
-                        report "MEM_IO: Setting pc_load at T5 cycle 3 for JMP";
+                    -- Only load if unconditional OR condition is met
+                    if eval_condition = '0' or condition_met = '1' then
+                        pc_load <= '1';
+                        if instr_is_call = '1' then
+                            report "MEM_IO: Setting pc_load at T5 cycle 3 for CALL";
+                        else
+                            report "MEM_IO: Setting pc_load at T5 cycle 3 for JMP";
+                        end if;
                     end if;
                 elsif instr_is_ret = '1' then
                     -- RET: Load PC from stack during T5 of cycle 1
