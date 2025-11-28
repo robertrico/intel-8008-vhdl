@@ -317,13 +317,8 @@ begin
                     scratchpad_read   <= '1';
                     regfile_to_bus    <= '1';  -- Register file drives internal bus
                 end if;
-                if instr_writes_reg = '1' and instr_needs_immediate = '0' and instr_is_alu = '0' then
-                    -- Single-cycle register write (MOV only, NOT ALU!)
-                    -- ALU results are written at T4/T5, not T3
-                    scratchpad_select <= instr_ddd_field;
-                    scratchpad_write  <= '1';
-                    bus_to_regfile    <= '1';  -- Bus writes to register file
-                end if;
+                -- NOTE: MOV register-to-register now writes at T5, not T3 (uses T4/T5 cycle)
+                -- T3 writes removed - MOV is no longer a "single-cycle" register write
             end if;
 
             case cycle_type is
@@ -412,6 +407,14 @@ begin
                     -- RST: Push current PC to stack during T4, load RST vector during T5
                     stack_push         <= '1';
                     stack_write        <= '1';  -- Write PC to stack
+                elsif instr_writes_reg = '1' and instr_reads_reg = '1' and instr_is_alu = '0' and instr_needs_immediate = '0' then
+                    -- MOV register-to-register: Read source register (SSS) to internal bus
+                    -- Per isa.json T4: "SSS TO REG. b"
+                    -- Source register value goes on bus so Reg.b can load it
+                    scratchpad_select <= instr_sss_field;  -- Source register
+                    scratchpad_read   <= '1';
+                    regfile_to_bus    <= '1';  -- Register file drives internal bus
+                    report "MEM_IO: T4 cycle 1 MOV, reading SSS=" & integer'image(to_integer(unsigned(instr_sss_field))) & " to bus for Reg.b";
                 end if;
 
             elsif current_cycle = 2 then
@@ -459,6 +462,17 @@ begin
                 scratchpad_select <= instr_ddd_field;  -- Destination register
                 scratchpad_write  <= '1';
                 bus_to_regfile    <= '1';  -- ALU result (on internal bus) writes to register
+            end if;
+
+            -- MOV register-to-register: Write Reg.b to destination register
+            -- Per isa.json T5: "REG. b TO DDD"
+            if current_cycle = 1 and instr_writes_reg = '1' and instr_reads_reg = '1' and
+               instr_is_alu = '0' and instr_needs_immediate = '0' then
+                -- MOV DDD,SSS - Reg.b (loaded at T4 from SSS) now writes to DDD
+                scratchpad_select <= instr_ddd_field;  -- Destination register
+                scratchpad_write  <= '1';
+                bus_to_regfile    <= '1';  -- Reg.b (via internal bus) writes to destination
+                report "MEM_IO: T5 MOV instruction, writing Reg.b to DDD=" & integer'image(to_integer(unsigned(instr_ddd_field)));
             end if;
 
             -- JMP/CALL: Load PC from temp registers during T5 of cycle 3

@@ -324,9 +324,12 @@ begin
                     instr_reads_reg <= '1';
                     -- SSS field already set by default
                 else
-                    -- 11 DDD SSS - Lr_1r_2 (MOV register to register) - 1 cycle
+                    -- 11 DDD SSS - Lr_1r_2 (MOV register to register) - 1 cycle, needs T4/T5
+                    -- Per isa.json: T4 = "SSS TO REG. b", T5 = "REG. b TO DDD"
                     instr_reads_reg <= '1';
                     instr_writes_reg <= '1';
+                    instr_needs_t4t5 <= '1';  -- Need T4/T5 to transfer register value
+                    instr_uses_temp_regs <= '1';  -- Uses Reg.b to transfer value
                     -- SSS and DDD fields already set by default
                 end if;
 

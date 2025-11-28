@@ -97,14 +97,14 @@ begin
     --   - ALU OP r: C1 T5
     --   - ALU OP I/M: C2 T5
 
-    -- Load Reg.b: T3 (cycles 1-2) OR T4 (cycle 1 only, for register ALU ops)
+    -- Load Reg.b: T3 (cycles 1-2) OR T4 (cycle 1 only, for register ALU ops and MOV)
     -- Cycle 1 T3: opcode byte (all instructions) - NOT useful, ignore
     -- Cycle 2 T3: immediate/address low byte (for immediate ALU ops, JMP, CALL, MVI)
     -- Cycle 3 T3: address high byte goes to Reg.a, NOT Reg.b!
-    -- Cycle 1 T4: source register operand (ONLY for register ALU operations, NOT immediate/JMP/CALL!)
+    -- Cycle 1 T4: source register operand (for register ALU operations AND MOV register-to-register)
     -- NOTE: Don't gate on phi2 here - let the temp registers sample on phi2 rising edge
     load_reg_b <= '1' when (state_is_t3 = '1' and current_cycle = 2 and (instr_uses_temp_regs = '1' or instr_needs_immediate = '1')) else
-                  '1' when (state_is_t4 = '1' and current_cycle = 1 and instr_is_alu_op = '1' and instr_uses_temp_regs = '1') else
+                  '1' when (state_is_t4 = '1' and current_cycle = 1 and instr_uses_temp_regs = '1' and instr_needs_immediate = '0') else
                   '0';
 
     -- Debug: Report Reg.b loading (combinational, triggers whenever signals change)
@@ -150,11 +150,14 @@ begin
     -- Output Enable Signals
     --
     -- Temp registers normally don't drive the internal bus - they hold operands for ALU.
-    -- EXCEPTION: For MVI (load register immediate), Reg.b must drive the bus during T4
-    -- so the register file can read the immediate value from Reg.b.
+    -- EXCEPTIONS:
+    -- 1. MVI (load register immediate): Reg.b drives bus at T4 cycle 2
+    -- 2. MOV (register-to-register): Reg.b drives bus at T5 cycle 1 (per isa.json)
     --
     output_reg_a  <= '0';  -- Reg.a never needs to drive bus
     output_reg_b  <= '1' when (state_is_t4 = '1' and current_cycle = 2 and instr_writes_reg = '1' and instr_is_alu_op = '0') else
+                     '1' when (state_is_t5 = '1' and current_cycle = 1 and instr_writes_reg = '1' and instr_uses_temp_regs = '1' and
+                               instr_is_alu_op = '0' and instr_needs_immediate = '0') else
                      '0';
 
     -- ALU result drives bus during T5 for ALU operations
