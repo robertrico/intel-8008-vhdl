@@ -157,6 +157,9 @@ architecture rtl of memory_io_control is
     signal state_t2_edge : std_logic;
     signal state_t5_edge : std_logic;
 
+    -- Track when PC was loaded (JMP/CALL/RET/RST) to prevent increment at next T1
+    signal pc_was_loaded : std_logic := '0';
+
 begin
 
     -- Detect rising edges of state signals
@@ -169,10 +172,30 @@ begin
         if reset = '1' then
             prev_state_t2 <= '0';
             prev_state_t5 <= '0';
+            pc_was_loaded <= '0';
         elsif rising_edge(phi1) then
             -- Update previous state values for edge detection
             prev_state_t2 <= state_t2;
             prev_state_t5 <= state_t5;
+
+            -- Track when PC is loaded during T5 (JMP/CALL/RET/RST)
+            -- Set flag when PC is loaded, clear it after T1 completes (at T2)
+            if state_t5 = '1' then
+                -- PC loaded for JMP/CALL (cycle 3), RET/RST (cycle 1)
+                if (current_cycle = 3 and instr_needs_address = '1') or instr_is_ret = '1' or instr_is_rst = '1' then
+                    if (instr_is_ret = '1' or instr_is_rst = '1') or
+                       (eval_condition = '0' or condition_met = '1') then
+                        pc_was_loaded <= '1';
+                        report "MEM_IO: Setting pc_was_loaded flag (PC will be loaded)";
+                    end if;
+                end if;
+            elsif state_t2 = '1' then
+                -- Clear flag at T2 (after T1 increment was suppressed)
+                if pc_was_loaded = '1' then
+                    pc_was_loaded <= '0';
+                    report "MEM_IO: Clearing pc_was_loaded flag (T2 - after T1 increment suppressed)";
+                end if;
+            end if;
         end if;
     end process;
 
@@ -184,7 +207,7 @@ begin
             instr_needs_immediate, instr_needs_address,
             instr_sss_field, instr_ddd_field, instr_is_alu,
             instr_is_call, instr_is_ret, instr_is_rst,
-            instr_writes_reg, instr_reads_reg)
+            instr_writes_reg, instr_reads_reg, pc_was_loaded)
     begin
         -- Defaults: all outputs inactive
         ir_load               <= '0';
@@ -232,7 +255,8 @@ begin
             -- ALSO NOT during cycle 2+ of memory-indirect instructions (PC stays at next instruction)
             -- For address instructions (JMP/CALL), PC increments in cycles 2 and 3 to fetch address bytes
             -- For immediate instructions (LrI, ALU I, LMI), PC increments in cycle 2 to fetch data byte
-            if state_t1 = '1' and state_half = '0' and state_t1i = '0' and
+            -- ALSO NOT when PC was just loaded by JMP/CALL/RET/RST (pc_was_loaded flag set)
+            if state_t1 = '1' and state_half = '0' and state_t1i = '0' and pc_was_loaded = '0' and
                (current_cycle = 1 or instr_needs_address = '1' or
                 (instr_needs_immediate = '1' and instr_is_mem_indirect = '0')) then
                 pc_increment_lower <= '1';
