@@ -89,7 +89,7 @@ begin
 
     dut : b8008_top
         generic map (
-            ROM_FILE => "test_programs/ram_intensive_as.mem"
+            ROM_FILE => "test_programs/search_as.mem"
         )
         port map (
             clk_in      => clk_in,

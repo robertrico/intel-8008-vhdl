@@ -317,13 +317,15 @@ begin
                     transition_to_stopped <= '1';  -- Transition to STOPPED state at T3
                 elsif op_210 = "111" then
                     -- 11 DDD 111 - LrM (load register from memory) - 2 cycles
-                    instr_needs_immediate <= '1';
+                    -- NOTE: This is memory-indirect, NOT immediate
+                    -- instr_is_mem_indirect is already set by line 107
                     instr_writes_reg <= '1';
                     instr_needs_t4t5 <= '1';  -- Need T4 to write result to register
                     -- DDD field already set by default
                 elsif op_543 = "111" then
                     -- 11 111 SSS - LMr (load memory from register) - 2 cycles, write
-                    instr_needs_immediate <= '1';
+                    -- NOTE: This is memory-indirect, NOT immediate
+                    -- instr_is_mem_indirect is already set by line 107
                     instr_is_write <= '1';
                     instr_reads_reg <= '1';
                     -- SSS field already set by default
