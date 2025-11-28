@@ -1,8 +1,63 @@
 # Version History
 
-## Version 1.3 - Interrupt System Complete
+## Version 2.x (b8008) - Block-Based Implementation (Paused)
 
-**Release Date:** November 2025
+**Status:** ⚠️ Incomplete - Development Paused
+**Date:** November 2025
+
+Complete architectural redesign following Intel 8008 block diagram with modular "dumb module" philosophy. Development paused due to architectural degradation requiring refactoring.
+
+### Architectural Approach
+
+**Design Philosophy:**
+- **Block-based modular design** - Each component (PC, ALU, registers, etc.) is a separate, simple module
+- **"Dumb modules"** - Components have NO instruction awareness, only respond to explicit control signals
+- **Clean interfaces** - Well-defined signals between modules
+- **Testability** - Each module has individual testbench for isolation testing
+
+**Initial Success:**
+- Successfully ran `search_as.asm` program (reference code from 8008 datasheet)
+- Subset of instructions validated in simulation
+- Individual module tests passing (Program Counter, etc.)
+- Block diagram architecture proved viable
+
+### Current Issues
+
+**Architectural Degradation:**
+- Modules gaining instruction awareness despite design philosophy
+- Conditional logic creeping in: `if (is_jmp and not in_int_ack)`
+- Control signals becoming implicit rather than explicit
+- Testing infrastructure reliability declining
+- Cannot reliably run full instruction set
+
+**Why Development Paused:**
+Rather than continue adding features while the architecture degrades, development is paused to allow for future refactoring. The block-based philosophy is sound but requires stricter discipline in implementation.
+
+### Path Forward
+
+When development resumes:
+1. Audit each module for instruction awareness
+2. Refactor instruction-aware modules - move intelligence to control unit only
+3. Restore explicit control signals - replace boolean logic with simple checks
+4. Fix one module at a time while maintaining tests
+5. Re-establish reliable regression testing
+
+### Code Location
+
+- Core modules: `src/b8008/` (26+ VHDL files)
+- Testbenches: `sim/b8008/`
+- Test programs: `test_programs/` (subset working: search_as.asm)
+
+**Note:** This is NOT a complete rewrite from s8008. This is cleanup/refactoring work to restore architectural purity.
+
+---
+
+## Version 1.3 (s8008) - Interrupt System Complete
+
+**Status:** ✅ Working (with timing limitations)
+**Date:** November 2025
+
+**Note:** Version 1.3 is the **last working version** of the s8008 (monolithic) implementation. While it has timing model limitations and hardware ALU issues, it successfully demonstrates all 48 instructions in simulation and runs simple programs on FPGA hardware.
 
 Interrupts are fully operational! After extensive debugging and testing, the interrupt system now correctly handles interrupt acknowledge cycles, vector addressing, and return address preservation.
 
@@ -58,9 +113,10 @@ Interrupts are fully operational! After extensive debugging and testing, the int
 
 ---
 
-## Version 1.2 - Hardware Deployment
+## Version 1.2 (s8008) - Hardware Deployment
 
-**Release Date:** Prior to interrupt fixes
+**Status:** ✅ Working
+**Date:** Prior to interrupt fixes
 
 Working FPGA deployment! The blinky project synthesizes to hardware and actually blinks LEDs on the ECP5-5G board.
 
@@ -89,9 +145,10 @@ Working FPGA deployment! The blinky project synthesizes to hardware and actually
 
 ---
 
-## Version 1.1 - Interrupt System Corrections
+## Version 1.1 (s8008) - Interrupt System Corrections
 
-**Release Date:** Initial interrupt implementation
+**Status:** ✅ Working
+**Date:** Initial interrupt implementation
 
 Corrected interrupt implementation with proper T3 sampling, interrupt synchronizer, and PC preservation per Intel 8008 Rev 2 datasheet specifications.
 
@@ -107,9 +164,10 @@ For detailed analysis of the v1.0 bugs and fixes, see [docs/interrupt_analysis_a
 
 ---
 
-## Version 1.0 - Initial Release
+## Version 1.0 (s8008) - Initial Release
 
-**Release Date:** Initial public release
+**Status:** ✅ Working
+**Date:** Initial public release
 
 Complete 8008 CPU implementation with all 48 instructions, comprehensive test suite, and simulation validation.
 

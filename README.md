@@ -1,29 +1,121 @@
-# Intel 8008 VHDL Implementation - v1.3
+# Intel 8008 VHDL Implementation - v2.x (Not Working)
 
-A complete, cycle-accurate VHDL implementation of the Intel 8008 microprocessor with **fully functional interrupt support**, interactive monitor, comprehensive test suite, and **working FPGA deployment** with real hardware validation.
+**⚠️ PROJECT STATUS: INCOMPLETE - NOT CURRENTLY FUNCTIONAL ⚠️**
 
-[![Status](https://img.shields.io/badge/status-v1.3%20interrupts%20working-brightgreen)]()
-[![FPGA](https://img.shields.io/badge/FPGA-Deployed%20%26%20Working-success)]()
+This is the **third major iteration** of implementing the Intel 8008 microprocessor in VHDL. After successfully running a subset of instructions (search algorithm from 8008 datasheet), the project has encountered architectural degradation issues that prevent further progress.
+
+[![Status](https://img.shields.io/badge/status-v2.x%20not%20working-red)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE.txt)
 
-> **New in v1.3:** Interrupts are fully operational! After extensive debugging and testing, the interrupt system now correctly handles interrupt acknowledge cycles, vector addressing, and return address preservation. The implementation includes new core system components (generic I/O controller, memory controller, interrupt controller with debouncing) and multiple interrupt-driven demonstration projects including a button-triggered Cylon LED effect. See [VERSIONS.md](VERSIONS.md) for complete version history.
+## Critical Issues (Why This Version Doesn't Work)
+
+**Block Diagram Philosophy Degradation:**
+- **Initial Design (b8008):** Modular, "dumb" blocks following Intel 8008 block diagram architecture
+  - Program Counter: Simple increment/load/hold logic (~66 lines)
+  - Each module does ONE job with explicit control signals
+  - No instruction awareness in individual modules
+
+- **Current State:** Modules becoming "instruction aware"
+  - Logic creep: Conditional guards appearing (`if is_jmp and not in_interrupt`)
+  - Instruction knowledge leaking into modules that should be generic
+  - Increasing difficulty building and running regression tests
+  - Moving away from clean block-based design
+
+**What Worked:**
+- Successfully ran `search_as.asm` program (code from 8008 datasheet)
+- Subset of instructions validated in simulation
+- Block diagram approach proved sound for initial implementation
+
+**Why Development Stopped:**
+- As instruction set expanded, modules started coupling
+- Behavioral logic replacing explicit control signals
+- Test infrastructure becoming unreliable
+- Design philosophy compromised beyond recovery
+
+> **Developer Note:** This has been a difficult project. Rather than continue down a degraded architectural path, I'm stepping away to return when a cleaner approach presents itself. The fundamental block-based philosophy is sound, but the execution needs a fresh start. - Robert Rico, November 2025
 
 > **Platform Note:** This project has been developed and tested exclusively on **macOS Sequoia 15.6.1**. Compatibility with other operating systems has not been verified.
 
-## Overview
+## Project Evolution: Three Major Iterations
 
-This project implements the Intel 8008 microprocessor (introduced April 1972) in VHDL, providing:
+### s8008 - v1.x (Legacy - Working but Flawed)
+**Status:** ✅ Functional in simulation and hardware, but improper timing
 
-- **Complete 8008 CPU core** - All 48 instructions with cycle-accurate behavior
-- **Fully functional interrupts** - Hardware-accurate interrupt handling with T1I acknowledge cycle, vector addressing, and return address preservation (v1.3)
-- **Interactive monitor** - Real-time assembly program execution via VHPIDIRECT
-- **Memory subsystem** - 2KB ROM + 1KB RAM with unified memory controller
-- **Comprehensive test suite** - 13+ validated programs with assertion-based verification
-- **FPGA deployment** - Running on real hardware! Multiple projects deploy to Lattice ECP5-5G including interrupt-driven I/O
+Located in: `src/components/s8008.vhdl`, `projects/legacy_projects/`
 
-Multiple demonstration projects showcase the system capabilities: from simple LED blink to interrupt-driven button input with debouncing. The interactive monitor provides a command-line interface for experimenting with 8008 assembly programs in simulation.
+- **Single-cycle implementation** - Monolithic VHDL design
+- **What worked:** All 48 instructions, I/O operations, interrupt support
+- **What didn't:** Improper timing cycles, ALU operations failed on hardware
+- **FPGA deployment:** Blinky demo and other simple programs ran successfully
+- **Why moved on:** Timing model didn't match real 8008 behavior, wanted modular block-based design
 
-## Quick Start
+This version achieved:
+- Complete instruction set implementation
+- Working FPGA deployment (Lattice ECP5-5G)
+- Interactive monitor via VHPIDIRECT
+- Comprehensive test suite (13+ programs)
+- Hardware-validated interrupts
+
+See `VERSIONS.md` for detailed version history.
+
+### v8008 - Attempted Rewrite (Never Completed)
+**Status:** ❌ Abandoned mid-development
+
+Located in: `src/components/v8008.vhdl`
+
+- **Multi-cycle implementation attempt** - Behavioral state machine approach
+- **What went wrong:**
+  - Too much behavioral logic instead of structural design
+  - Over-utilization of conditional statements
+  - Became complex and unmaintainable
+  - Never reached working state
+- **Why abandoned:** Design became too convoluted, couldn't debug effectively
+
+### b8008 - v2.x (Current - Block-Based but Degraded)
+**Status:** ⚠️ Partially working, architecturally compromised
+
+Located in: `src/b8008/`, `sim/b8008/`
+
+- **Block-diagram approach** - Modular components following Intel architecture
+- **Initial philosophy:** "Dumb modules" with explicit control signals
+  - Program Counter: increment/load/hold only
+  - ALU: operations only, no instruction knowledge
+  - Register File: read/write only
+  - Clean interfaces between modules
+
+- **What worked:**
+  - Successfully ran `search_as.asm` (8008 datasheet reference program)
+  - Subset of instructions validated
+  - Block-based architecture proved viable
+  - Individual module tests passing
+
+- **What degraded:**
+  - Modules gaining instruction awareness
+  - Conditional logic creeping in: `if (is_jmp and not in_int_ack)`
+  - Control signals becoming less explicit
+  - Testing infrastructure reliability declining
+  - Build complexity increasing
+
+- **Current state:**
+  - Some modules still clean (Program Counter)
+  - Others becoming behavioral (instruction awareness)
+  - Cannot reliably run full instruction set
+  - Regression testing difficult
+
+**Why development paused:** The core philosophy of simple, modular blocks is being compromised. Rather than continue adding features while the architecture degrades, stepping away to return and refactor the instruction-aware modules back to clean "dumb module" design.
+
+## Current State
+
+**This README documents the project's evolution and current incomplete state.**
+
+- **Working version (s8008):** Code in `src/components/s8008.vhdl` - monolithic implementation with timing issues but functionally complete
+- **Current development (b8008):** Code in `src/b8008/` - block-based modular implementation that needs architectural cleanup
+
+**Path forward:** Revisit instruction-aware modules in b8008 and refactor them back to "dumb module" philosophy. The architecture is sound; it needs disciplined cleanup of the modules that have accumulated instruction awareness.
+
+---
+
+## Quick Start (s8008 - Legacy Working Version)
 
 ### Prerequisites
 
@@ -890,26 +982,65 @@ To add a new test:
 3. Add stop time: `STOP_TIME_my_test_tb = 500us`
 4. Run: `make sim TEST=my_test_tb`
 
-### Design Evolution
+### Design Evolution and Lessons Learned
 
-This project evolved through several architectural approaches:
+This project evolved through several architectural approaches, each teaching valuable lessons:
 
-**Early Iterations** (in `src/iss/`):
-- Modular glue-logic approach
-- Separate components for address latching (8212), timing, etc.
-- Designed to interface with **real 8008 silicon**
+### Approach 1: s8008 (Monolithic - Working)
+**Philosophy:** Single-file, behavioral design optimized for FPGA
 
-**Current v1.0** (in `src/components/`):
-- **Monolithic softcore** design
-- All logic integrated into `s8008.vhdl`
-- Optimized for FPGA synthesis
-- Easier to simulate and validate
+**Pros:**
+- Easy to simulate and debug
+- All logic in one place
+- Successfully synthesized to hardware
+- Complete feature set achieved
 
-**Future** (stretch goal):
-- Return to glue-logic approach for **real silicon interfacing**
-- The 8008 uses PMOS technology (-9V/0V logic levels)
-- Requires custom level shifter PCB (3.3V FPGA ↔ -9V 8008)
-- Design to begin now that FPGA validation is complete
+**Cons:**
+- Timing model didn't match real 8008
+- ALU operations had hardware issues
+- Difficult to understand block-level architecture
+- Not suitable for learning 8008 internal design
+
+### Approach 2: v8008 (Multi-cycle Behavioral - Failed)
+**Philosophy:** State machine with behavioral descriptions
+
+**Pros:**
+- Attempted proper multi-cycle timing
+- Better timing model than s8008
+
+**Cons:**
+- Too much conditional logic: `if (state = X and flag = Y and not interrupt)`
+- Became unmaintainable
+- Over-utilized behavioral constructs
+- Never reached working state
+
+### Approach 3: b8008 (Block-based - Partially Successful)
+**Philosophy:** "Dumb modules" following Intel block diagram
+
+**Pros:**
+- Clean architecture initially
+- Individual modules simple and testable
+- Matches Intel 8008 block diagram
+- Subset of instructions validated
+- Educational value - shows how 8008 actually worked
+
+**Cons:**
+- As instruction set grew, modules coupled
+- Instruction awareness leaked into "dumb" blocks
+- Control signal complexity increased
+- Lost architectural purity
+
+**Key Lesson:** Block-based design is sound, but requires **strict discipline** to prevent logic creep. Any conditional based on instruction type in a low-level module (PC, ALU, registers) is a red flag.
+
+### Path Forward for b8008
+**Approach:** Refactor existing b8008 modules back to clean architecture:
+1. **Audit each module** - Identify which ones have instruction awareness
+2. **Refactor instruction-aware modules** - Move intelligence to control unit
+3. **Restore explicit control signals** - Replace boolean logic with simple signal checks
+4. **Fix one module at a time** - Maintain working tests during cleanup
+5. **Re-establish regression testing** - Ensure each refactor maintains functionality
+
+The block-based philosophy is correct. The modules that have drifted need to be brought back in line with the original "dumb module" principle. This is cleanup work, not a rewrite.
 
 ---
 
@@ -986,19 +1117,30 @@ When contributing:
 
 ## Status Summary
 
+### s8008 (v1.x - Legacy Working Version)
 | Component | Status |
 |-----------|--------|
 | CPU Core (all 48 instructions) | ✅ Complete (simulation & hardware) |
-| ALU Operations | ✅ Complete (simulation & hardware) |
+| ALU Operations | ⚠️ Working in simulation, issues on hardware |
 | Memory (ROM + RAM) | ✅ Complete (simulation & hardware) |
 | I/O System | ✅ Complete (simulation & hardware) |
-| **Interrupt System** | ✅ **Complete (v1.3 - hardware validated!)** |
+| Interrupt System | ✅ Complete (v1.3 - hardware validated) |
 | Interactive Monitor | ✅ Complete (VHPIDIRECT simulation) |
 | Test Suite | ✅ Complete (13+ tests pass) |
-| Simulation Verification | ✅ Validated |
 | FPGA Synthesis | ✅ Verified (ECP5) |
-| Hardware Deployment | ✅ Complete (Multiple projects working!) |
-| Real Silicon Interface | 🔜 Future Work |
+| Hardware Deployment | ✅ Working (blinky, monitor, interrupts) |
+
+### b8008 (v2.x - Current Incomplete Version)
+| Component | Status |
+|-----------|--------|
+| Block-based Architecture | ⚠️ Designed but degrading |
+| Program Counter | ✅ Complete and clean |
+| Instruction Decoder | ⚠️ Becoming instruction-aware |
+| Register File | ⚠️ Partial implementation |
+| ALU | 🔜 Planned integration |
+| Full Instruction Set | ❌ Subset only (search program works) |
+| Regression Testing | ❌ Unreliable |
+| Overall Status | ❌ **Not Working - Paused** |
 
 ---
 
