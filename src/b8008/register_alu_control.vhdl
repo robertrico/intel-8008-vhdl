@@ -107,6 +107,16 @@ begin
                   '1' when (state_is_t4 = '1' and current_cycle = 1 and instr_is_alu_op = '1' and instr_uses_temp_regs = '1') else
                   '0';
 
+    -- Debug: Report Reg.b loading (combinational, triggers whenever signals change)
+    process(state_is_t3, current_cycle, instr_uses_temp_regs, instr_needs_immediate, load_reg_b)
+    begin
+        if state_is_t3 = '1' and current_cycle = 2 then
+            report "REG_ALU_CTRL: Cycle 2 T3 - instr_uses_temp_regs=" & std_logic'image(instr_uses_temp_regs) &
+                   " instr_needs_immediate=" & std_logic'image(instr_needs_immediate) &
+                   " load_reg_b=" & std_logic'image(load_reg_b);
+        end if;
+    end process;
+
     -- Load Reg.a: T4 (cycle 1 or 2) OR T3 (cycle 3) for instructions using temp regs
     -- Cycle 1 T4: accumulator (for register ALU operations)
     -- Cycle 2 T4: accumulator (for immediate ALU operations like CPI) - NOT T3 because immediate byte loads then!

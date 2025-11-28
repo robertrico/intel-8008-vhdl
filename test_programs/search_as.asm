@@ -57,6 +57,8 @@ LOOP:   MOV     A,M             ; Load A from memory[H:L]
 
 ; Found: Save location and Halt
 FOUND:  MOV     H,L             ; Copy L to H for verification
+        MOV     L,H
+        MOV     H,A
         HLT                     ; HLT - Found the period!
 
 ; INCR: Increment H&L subroutine (at location 60 decimal = 0x003C)
