@@ -268,6 +268,14 @@ begin
                 pc_increment_upper <= '1';
             end if;
 
+            -- CALL: Increment PC one more time at cycle 3 T3 (before stack push at T4)
+            -- At cycle 3 T1, PC points to address high byte (e.g. 0x0104 for CALL at 0x0102)
+            -- We need PC to point to the NEXT instruction (0x0105) before pushing to stack
+            if state_t3 = '1' and current_cycle = 3 and instr_is_call = '1' then
+                pc_increment_lower <= '1';
+                report "MEM_IO: Incrementing PC at T3 cycle 3 for CALL (to compute return address)";
+            end if;
+
             -- Load PC during T4/T5 for various instructions
             -- JMP/CALL: T5 of cycle 3 (only if unconditional OR condition met)
             -- RET/RST: T5 of cycle 1
