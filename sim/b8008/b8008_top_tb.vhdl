@@ -1,9 +1,10 @@
 --------------------------------------------------------------------------------
 -- b8008_top_tb.vhdl
 --------------------------------------------------------------------------------
--- Testbench for b8008_top - Complete system test
+-- Generic testbench for b8008_top - Complete system test
 --
--- Tests the search program from the Intel 8008 User's Manual
+-- ROM-agnostic: Runs any program loaded via ROM_FILE generic
+-- Outputs detailed register and state information for post-processing
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -21,7 +22,7 @@ architecture testbench of b8008_top_tb is
     -- Component declaration
     component b8008_top is
         generic (
-            ROM_FILE : string := "test_programs/search_as.mem"
+            ROM_FILE : string := "test_programs/ram_intensive_as.mem"
         );
         port (
             clk_in      : in  std_logic;
@@ -88,7 +89,7 @@ begin
 
     dut : b8008_top
         generic map (
-            ROM_FILE => "test_programs/search_as.mem"
+            ROM_FILE => "test_programs/ram_intensive_as.mem"
         )
         port map (
             clk_in      => clk_in,
@@ -223,26 +224,12 @@ begin
         wait for 1 us;
 
         report "========================================";
-        report "TEST COMPLETE";
+        report "SIMULATION COMPLETE";
         report "========================================";
+        report "Simulation time: 20ms";
         report " ";
-        report "Search Program Test Summary:";
-        report "  - String at address 200 (0xC8): 'Hello, world. 8008!!'";
-        report "  - Program loads L=200 (0xC8), searches for period character";
-        report "  - Uses INR L to increment through string";
-        report "  - Jumps to FOUND (0x0113) when period is found";
-        report " ";
-        report "What to look for in the output above:";
-        report "  1. MVI L,200 loads Reg.L with 0xC8";
-        report "  2. INR L increments: 0xC8 -> 0xC9 -> 0xCA -> 0xCB ...";
-        report "  3. MOV A,M reads characters from memory at H:L address";
-        report "  4. CPI 2Eh compares with period character";
-        report "  5. JZ FOUND jumps to 0x0113 when period found";
-        report " ";
-        report "Key Success Indicators:";
-        report "  - Reg.L starts at 0xC8 and increments correctly";
-        report "  - Program reaches PC=0x0113 (FOUND label)";
-        report "  - INR L instruction successfully increments L register";
+        report "Use external verification scripts to validate results.";
+        report "Output above contains cycle-by-cycle register state.";
         report "========================================";
 
         -- End simulation

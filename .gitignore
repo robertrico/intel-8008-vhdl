@@ -49,3 +49,5 @@ sim/output.txt
 nohup.out
 
 b8008_test.log
+
+ram_test.log
