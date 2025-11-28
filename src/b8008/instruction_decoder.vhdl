@@ -45,6 +45,7 @@ entity instruction_decoder is
         -- For Register & ALU Control (temp register loading)
         instr_uses_temp_regs  : out std_logic;  -- Instruction uses Reg.a/Reg.b (ALU ops, JMP, CALL)
         instr_is_inr_dcr      : out std_logic;  -- INR/DCR instruction (load constant 0x01 into Reg.a)
+        instr_is_binary_alu   : out std_logic;  -- Binary ALU op (ADD, SUB, etc. - load A register into Reg.a)
 
         -- For Machine Cycle Control (extended states T4/T5)
         instr_needs_t4t5      : out std_logic;  -- Instruction needs T4/T5 states (JMP, CALL, RET, RST, ALU ops)
@@ -91,6 +92,7 @@ begin
         instr_is_mem_indirect <= '0';  -- Default: not memory indirect
         instr_uses_temp_regs <= '0';  -- Default: doesn't use temp registers
         instr_is_inr_dcr <= '0';  -- Default: not INR/DCR
+        instr_is_binary_alu <= '0';  -- Default: not binary ALU
         instr_needs_t4t5 <= '0';  -- Default: doesn't need T4/T5
         rst_vector <= (others => '0');  -- Default RST vector
         condition_code <= "00";  -- Default condition code
@@ -167,6 +169,7 @@ begin
                         -- 00 PPP 100 - ALU OP I (immediate) - 2 cycles
                         instr_needs_immediate <= '1';
                         instr_is_alu <= '1';
+                        instr_is_binary_alu <= '1';  -- Binary ALU (Reg.a loads from A register, Reg.b loads from immediate byte)
                         -- NOTE: DON'T set instr_uses_temp_regs for immediate ops!
                         -- Immediate ops load the immediate byte into Reg.b during cycle 2 T3,
                         -- NOT from a source register during cycle 1 T4 like register ALU ops do.
@@ -286,6 +289,7 @@ begin
                 instr_is_alu <= '1';
                 instr_uses_temp_regs <= '1';
                 instr_reads_reg <= '1';   -- Read source (SSS or memory)
+                instr_is_binary_alu <= '1';  -- Binary ALU (Reg.a loads from A register, Reg.b loads from SSS/memory)
                 -- Write A for all ALU ops EXCEPT compare (PPP=111)
                 if op_543 = "111" then
                     instr_writes_reg <= '0';  -- Compare doesn't write

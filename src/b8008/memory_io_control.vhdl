@@ -224,13 +224,15 @@ begin
         if ready_status = '0' or interrupt_pending = '1' then
             pc_hold <= '1';
         else
-            -- T1 second half: Increment lower byte
-            -- Per datasheet: "incremented immediately after the lower order address bits are sent out"
+            -- T1 FIRST half: Increment lower byte BEFORE sending address
+            -- CRITICAL FIX: PC must increment BEFORE T1 outputs the address, so that
+            -- the address latched by external logic is PC (the next instruction to fetch).
+            -- Original code incremented at T1 second half, causing fetch from PC-1.
             -- BUT NOT during T1I - PC is not advanced during interrupt acknowledge
             -- ALSO NOT during cycle 2+ of memory-indirect instructions (PC stays at next instruction)
             -- For address instructions (JMP/CALL), PC increments in cycles 2 and 3 to fetch address bytes
             -- For immediate instructions (LrI, ALU I, LMI), PC increments in cycle 2 to fetch data byte
-            if state_t1 = '1' and state_half = '1' and state_t1i = '0' and
+            if state_t1 = '1' and state_half = '0' and state_t1i = '0' and
                (current_cycle = 1 or instr_needs_address = '1' or
                 (instr_needs_immediate = '1' and instr_is_mem_indirect = '0')) then
                 pc_increment_lower <= '1';

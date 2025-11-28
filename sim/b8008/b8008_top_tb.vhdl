@@ -171,7 +171,7 @@ begin
         -- Expected: Program should find '.' at position 213 (0xD5) and halt
 
         -- Monitor for much longer to let program complete
-        for i in 1 to 60000 loop
+        for i in 1 to 200000 loop
             wait for 100 ns;
 
             -- Report state periodically with debug info in clear format
