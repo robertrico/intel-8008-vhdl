@@ -44,8 +44,9 @@ architecture test of instruction_register_tb is
     signal output_ir : std_logic := '0';
 
     -- Bidirectional bus
-    signal internal_bus : std_logic_vector(7 downto 0);
-    signal bus_driver   : std_logic_vector(7 downto 0) := (others => 'Z');
+    signal internal_bus     : std_logic_vector(7 downto 0);
+    signal bus_driver       : std_logic_vector(7 downto 0) := (others => 'Z');
+    signal bus_drive_enable : std_logic := '0';
 
     -- Outputs
     signal ir_bit_7 : std_logic;
@@ -65,8 +66,8 @@ begin
     -- Clock generation
     phi1 <= not phi1 after phi1_period / 2;
 
-    -- Drive internal bus from testbench when needed
-    internal_bus <= bus_driver;
+    -- Drive internal bus from testbench when needed (conditional to avoid bus conflicts)
+    internal_bus <= bus_driver when bus_drive_enable = '1' else (others => 'Z');
 
     -- Reconstruct IR byte from individual bits
     ir_byte <= ir_bit_7 & ir_bit_6 & ir_bit_5 & ir_bit_4 &
@@ -113,15 +114,17 @@ begin
         end if;
 
         -- Test 2: Load from internal bus
+        -- Note: IR latches on falling_edge(phi1)
         report "";
         report "Test 2: Load 0x42 from internal bus";
 
-        bus_driver <= x"42";
-        load_ir    <= '1';
-        wait until rising_edge(phi1);
+        bus_driver       <= x"42";
+        bus_drive_enable <= '1';
+        load_ir          <= '1';
+        wait until falling_edge(phi1);  -- IR latches on falling edge
         wait for 10 ns;
-        load_ir    <= '0';
-        bus_driver <= (others => 'Z');
+        load_ir          <= '0';
+        bus_drive_enable <= '0';
 
         if ir_byte /= x"42" then
             report "  ERROR: IR should be 0x42, got 0x" & to_hstring(ir_byte) severity error;
@@ -163,12 +166,13 @@ begin
         report "";
         report "Test 5: Load 0xAA from internal bus";
 
-        bus_driver <= x"AA";
-        load_ir    <= '1';
-        wait until rising_edge(phi1);
+        bus_driver       <= x"AA";
+        bus_drive_enable <= '1';
+        load_ir          <= '1';
+        wait until falling_edge(phi1);  -- IR latches on falling edge
         wait for 10 ns;
-        load_ir    <= '0';
-        bus_driver <= (others => 'Z');
+        load_ir          <= '0';
+        bus_drive_enable <= '0';
 
         if ir_byte /= x"AA" then
             report "  ERROR: IR should be 0xAA, got 0x" & to_hstring(ir_byte) severity error;
@@ -181,11 +185,12 @@ begin
         report "";
         report "Test 6: IR holds 0xAA when load_ir=0";
 
-        bus_driver <= x"FF";
-        load_ir    <= '0';
-        wait until rising_edge(phi1);
+        bus_driver       <= x"FF";
+        bus_drive_enable <= '1';
+        load_ir          <= '0';
+        wait until falling_edge(phi1);
         wait for phi1_period;
-        bus_driver <= (others => 'Z');
+        bus_drive_enable <= '0';
 
         if ir_byte /= x"AA" then
             report "  ERROR: IR should hold 0xAA, got 0x" & to_hstring(ir_byte) severity error;

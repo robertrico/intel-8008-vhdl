@@ -243,19 +243,20 @@ begin
             report "  PASS: JTc correctly met";
         end if;
 
-        -- Test 9: Disable condition evaluation
+        -- Test 9: Unconditional instruction (eval_condition=0)
+        -- When eval_condition='0', condition_met should be '1' (unconditional always proceeds)
         report "";
-        report "Test 9: Disable condition evaluation (eval_condition=0)";
+        report "Test 9: Unconditional instruction (eval_condition=0)";
 
-        condition_code <= COND_ZERO;  -- Z=1, would normally be met
+        condition_code <= COND_ZERO;  -- Z=1, but doesn't matter - unconditional
         eval_condition <= '0';
         wait for 50 ns;
 
-        if condition_met /= '0' then
-            report "  ERROR: Condition should not be evaluated when disabled" severity error;
+        if condition_met /= '1' then
+            report "  ERROR: Unconditional instructions should always have condition_met='1'" severity error;
             errors := errors + 1;
         else
-            report "  PASS: Condition evaluation disabled correctly";
+            report "  PASS: Unconditional instruction correctly proceeds (condition_met='1')";
         end if;
 
         -- Test 10: Update flags during operation and test
