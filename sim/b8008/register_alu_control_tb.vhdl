@@ -28,20 +28,29 @@ architecture test of register_alu_control_tb is
             status_s1 : in std_logic;
             status_s2 : in std_logic;
 
-            -- Instruction decoder input
-            instr_is_alu_op : in std_logic;
+            -- Instruction decoder inputs
+            instr_is_alu_op       : in std_logic;
+            instr_uses_temp_regs  : in std_logic;
+            instr_needs_immediate : in std_logic;
+            instr_writes_reg      : in std_logic;
 
             -- Machine cycle control input
-            cycle_is_2 : in std_logic;  -- 0=cycle 1, 1=cycle 2
+            current_cycle : in integer range 1 to 3;
 
             -- Interrupt input
             interrupt : in std_logic;
 
-            -- Control outputs
-            load_reg_a   : out std_logic;  -- Latch data into temp Reg.a
-            load_reg_b   : out std_logic;  -- Latch data into temp Reg.b
-            alu_enable   : out std_logic;  -- Enable ALU execution
-            update_flags : out std_logic   -- Latch condition flags
+            -- Control outputs (load signals)
+            load_reg_a   : out std_logic;
+            load_reg_b   : out std_logic;
+            alu_enable   : out std_logic;
+            update_flags : out std_logic;
+
+            -- Output enable signals
+            output_reg_a  : out std_logic;
+            output_reg_b  : out std_logic;
+            output_result : out std_logic;
+            output_flags  : out std_logic
         );
     end component;
 
@@ -53,8 +62,11 @@ architecture test of register_alu_control_tb is
     signal status_s0 : std_logic := '0';
     signal status_s1 : std_logic := '0';
     signal status_s2 : std_logic := '0';
-    signal instr_is_alu_op : std_logic := '0';
-    signal cycle_is_2 : std_logic := '0';
+    signal instr_is_alu_op       : std_logic := '0';
+    signal instr_uses_temp_regs  : std_logic := '0';
+    signal instr_needs_immediate : std_logic := '0';
+    signal instr_writes_reg      : std_logic := '0';
+    signal current_cycle : integer range 1 to 3 := 1;
     signal interrupt : std_logic := '0';
 
     -- Outputs
@@ -62,14 +74,18 @@ architecture test of register_alu_control_tb is
     signal load_reg_b   : std_logic;
     signal alu_enable   : std_logic;
     signal update_flags : std_logic;
+    signal output_reg_a  : std_logic;
+    signal output_reg_b  : std_logic;
+    signal output_result : std_logic;
+    signal output_flags  : std_logic;
 
     -- Test control
     signal done : boolean := false;
 
     -- Helper procedure to set status signals for a given T-state
-    -- Status signal encoding (S2, S1, S0):
-    -- T1:  010, T2:  100, T3:  001
-    -- T4:  011, T5:  101, T1I: 110
+    -- Status signal encoding (S2, S1, S0) from state_timing_generator.vhdl:
+    -- STOPPED: 011, T1:  010, T2:  100, T3:  001
+    -- T4:  111, T5:  101, T1I: 110
     procedure set_state(
         signal s0, s1, s2 : out std_logic;
         constant state : in string(1 to 3)
@@ -83,7 +99,7 @@ architecture test of register_alu_control_tb is
             when "T3 " =>
                 s2 <= '0'; s1 <= '0'; s0 <= '1';  -- 001
             when "T4 " =>
-                s2 <= '0'; s1 <= '1'; s0 <= '1';  -- 011
+                s2 <= '1'; s1 <= '1'; s0 <= '1';  -- 111 (was 011, wrong!)
             when "T5 " =>
                 s2 <= '1'; s1 <= '0'; s0 <= '1';  -- 101
             when "T1I" =>
@@ -97,17 +113,24 @@ begin
 
     uut : register_alu_control
         port map (
-            phi2              => phi2,
-            status_s0         => status_s0,
-            status_s1         => status_s1,
-            status_s2         => status_s2,
-            instr_is_alu_op   => instr_is_alu_op,
-            cycle_is_2        => cycle_is_2,
-            interrupt         => interrupt,
-            load_reg_a        => load_reg_a,
-            load_reg_b        => load_reg_b,
-            alu_enable        => alu_enable,
-            update_flags      => update_flags
+            phi2                  => phi2,
+            status_s0             => status_s0,
+            status_s1             => status_s1,
+            status_s2             => status_s2,
+            instr_is_alu_op       => instr_is_alu_op,
+            instr_uses_temp_regs  => instr_uses_temp_regs,
+            instr_needs_immediate => instr_needs_immediate,
+            instr_writes_reg      => instr_writes_reg,
+            current_cycle         => current_cycle,
+            interrupt             => interrupt,
+            load_reg_a            => load_reg_a,
+            load_reg_b            => load_reg_b,
+            alu_enable            => alu_enable,
+            update_flags          => update_flags,
+            output_reg_a          => output_reg_a,
+            output_reg_b          => output_reg_b,
+            output_result         => output_result,
+            output_flags          => output_flags
         );
 
     -- Clock generation
@@ -133,13 +156,15 @@ begin
         wait for 100 ns;
 
         -- Test 1: ALU OP r (single cycle, register operand)
-        -- Pattern: C1 T3 (load IR), T4 (load operands), T5 (execute)
+        -- Pattern: C1 T4 (load operands), T5 (execute)
         report "";
         report "Test 1: ALU OP r (single cycle)";
-        report "  Expected: Load Reg.b at T3 and T4, execute at T5";
+        report "  Expected: Load Reg.a and Reg.b at T4, execute at T5";
 
         instr_is_alu_op <= '1';
-        cycle_is_2 <= '0';  -- Cycle 1
+        instr_uses_temp_regs <= '1';
+        instr_needs_immediate <= '0';
+        current_cycle <= 1;
         interrupt <= '0';
 
         -- T1: Address output (not relevant to ALU)
@@ -150,15 +175,15 @@ begin
         set_state(status_s0, status_s1, status_s2, "T2 ");
         wait for phi2_period;
 
-        -- T3: Fetch instruction to IR and Reg.b
+        -- T3: For register ALU ops, no temp reg loading at T3 (that's for immediate ops)
         set_state(status_s0, status_s1, status_s2, "T3 ");
         wait until phi2 = '1';  -- Wait for phi2 high
         wait for 10 ns;  -- Small delay for signals to settle
-        if load_reg_b /= '1' then
-            report "  ERROR: load_reg_b should be high at T3" severity error;
+        if load_reg_b = '1' then
+            report "  ERROR: load_reg_b should NOT be high at T3 for register ALU op" severity error;
             errors := errors + 1;
         else
-            report "  PASS: load_reg_b asserted at T3";
+            report "  PASS: load_reg_b not asserted at T3 (register ALU ops load at T4)";
         end if;
         wait until phi2 = '0';  -- Wait for phi2 to go low
         wait for phi2_period / 2;  -- Wait for next state
@@ -201,46 +226,63 @@ begin
         wait for phi2_period / 2;
 
         -- Test 2: ALU OP I (two cycles, immediate operand)
-        -- Pattern: C1 T3 (load IR), C2 T3 (load immediate), C2 T5 (execute)
+        -- Pattern: C2 T3 (load immediate to Reg.b), C2 T4 (load A to Reg.a), C2 T5 (execute)
         report "";
         report "Test 2: ALU OP I (two cycles, immediate)";
-        report "  Expected: Load Reg.b at C1 T3 and C2 T3, execute at C2 T5";
+        report "  Expected: Load Reg.b at C2 T3, load Reg.a at C2 T4, execute at C2 T5";
 
         instr_is_alu_op <= '1';
-        cycle_is_2 <= '0';  -- Start with Cycle 1
+        instr_uses_temp_regs <= '0';  -- Immediate ops don't use temp_regs at C1 T4
+        instr_needs_immediate <= '1';
+        current_cycle <= 1;
         wait for 100 ns;
 
-        -- Cycle 1, T3: Fetch instruction
+        -- Cycle 1, T3: Fetch instruction (no temp reg loading for immediate ops at C1)
         set_state(status_s0, status_s1, status_s2, "T3 ");
         wait until phi2 = '1';
         wait for 10 ns;
-        if load_reg_b /= '1' then
-            report "  ERROR: load_reg_b should be high at C1 T3" severity error;
+        if load_reg_b = '1' then
+            report "  ERROR: load_reg_b should NOT be high at C1 T3 for immediate ALU op" severity error;
             errors := errors + 1;
         else
-            report "  PASS: load_reg_b asserted at C1 T3";
+            report "  PASS: load_reg_b not asserted at C1 T3";
         end if;
         wait until phi2 = '0';
         wait for phi2_period / 2;
 
         -- Move to Cycle 2
-        cycle_is_2 <= '1';
+        current_cycle <= 2;
         wait for 100 ns;
 
-        -- Cycle 2, T3: Fetch immediate data
+        -- Cycle 2, T3: Fetch immediate data into Reg.b
         set_state(status_s0, status_s1, status_s2, "T3 ");
         wait until phi2 = '1';
         wait for 10 ns;
         if load_reg_b /= '1' then
             report "  ERROR: load_reg_b should be high at C2 T3" severity error;
             errors := errors + 1;
+        else
+            report "  PASS: load_reg_b asserted at C2 T3";
         end if;
-        if load_reg_a /= '1' then
-            report "  ERROR: load_reg_a should be high at C2 T3" severity error;
+        -- Reg.a is loaded at T4 for immediate ops, not T3
+        if load_reg_a = '1' then
+            report "  ERROR: load_reg_a should NOT be high at C2 T3 (loads at T4)" severity error;
             errors := errors + 1;
+        else
+            report "  PASS: load_reg_a not asserted at C2 T3 (will load at T4)";
         end if;
-        if load_reg_a = '1' and load_reg_b = '1' then
-            report "  PASS: Both load_reg_a and load_reg_b asserted at C2 T3";
+        wait until phi2 = '0';
+        wait for phi2_period / 2;
+
+        -- Cycle 2, T4: Load accumulator to Reg.a
+        set_state(status_s0, status_s1, status_s2, "T4 ");
+        wait until phi2 = '1';
+        wait for 10 ns;
+        if load_reg_a /= '1' then
+            report "  ERROR: load_reg_a should be high at C2 T4" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: load_reg_a asserted at C2 T4";
         end if;
         wait until phi2 = '0';
         wait for phi2_period / 2;
@@ -264,7 +306,9 @@ begin
         report "  Expected: No ALU control signals";
 
         instr_is_alu_op <= '0';  -- Not an ALU operation
-        cycle_is_2 <= '0';
+        instr_uses_temp_regs <= '1';  -- MOV uses temp regs
+        instr_needs_immediate <= '0';
+        current_cycle <= 1;
         wait for 100 ns;
 
         set_state(status_s0, status_s1, status_s2, "T5 ");
