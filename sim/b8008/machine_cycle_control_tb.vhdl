@@ -17,7 +17,6 @@ end entity machine_cycle_control_tb;
 
 architecture test of machine_cycle_control_tb is
 
-    -- Component declaration will be added after we design the module
     component machine_cycle_control is
         port (
             -- State inputs from State Timing Generator
@@ -33,9 +32,14 @@ architecture test of machine_cycle_control_tb is
             instr_needs_address   : in std_logic;  -- Instruction needs 14-bit address (2 bytes)
             instr_is_io           : in std_logic;  -- I/O operation
             instr_is_write        : in std_logic;  -- Memory write operation
+            instr_is_hlt          : in std_logic;  -- HLT (halt) instruction
+            instr_needs_t4t5      : in std_logic;  -- Instruction needs T4/T5 extended states
+            eval_condition        : in std_logic;  -- Conditional instruction
+            condition_met         : in std_logic;  -- Condition result
 
             -- Outputs to State Timing Generator
-            advance_state : out std_logic;  -- Signal to skip to next instruction
+            advance_state     : out std_logic;  -- Signal to skip to next instruction
+            instr_is_hlt_flag : out std_logic;  -- Latched HLT flag for state machine
 
             -- Outputs to Memory & I/O Control (cycle type)
             cycle_type : out std_logic_vector(1 downto 0);  -- D6, D7 (only valid during T2)
@@ -57,16 +61,36 @@ architecture test of machine_cycle_control_tb is
     signal instr_needs_address   : std_logic := '0';
     signal instr_is_io           : std_logic := '0';
     signal instr_is_write        : std_logic := '0';
+    signal instr_is_hlt          : std_logic := '0';
+    signal instr_needs_t4t5      : std_logic := '0';
+    signal eval_condition        : std_logic := '0';
+    signal condition_met         : std_logic := '0';
 
     -- Outputs
-    signal advance_state : std_logic;
-    signal cycle_type    : std_logic_vector(1 downto 0);
-    signal current_cycle : integer range 1 to 3;
+    signal advance_state     : std_logic;
+    signal instr_is_hlt_flag : std_logic;
+    signal cycle_type        : std_logic_vector(1 downto 0);
+    signal current_cycle     : integer range 1 to 3;
 
     -- Test control
     signal done : boolean := false;
 
-    -- Helper procedure to simulate one complete state (2 clock cycles)
+    -- Helper procedure to simulate one complete state
+    -- Returns state high, then caller checks, then we drop state
+    procedure enter_state(signal st: out std_logic) is
+    begin
+        st <= '1';
+        wait for 50 ns;  -- Wait for rising edge to be processed
+    end procedure;
+
+    procedure exit_state(signal st: out std_logic) is
+    begin
+        wait for 50 ns;  -- Finish state duration
+        st <= '0';
+        wait for 10 ns;  -- Gap between states
+    end procedure;
+
+    -- Legacy procedure for compatibility
     procedure simulate_state(signal st: out std_logic) is
     begin
         st <= '1';
@@ -89,7 +113,12 @@ begin
             instr_needs_address   => instr_needs_address,
             instr_is_io           => instr_is_io,
             instr_is_write        => instr_is_write,
+            instr_is_hlt          => instr_is_hlt,
+            instr_needs_t4t5      => instr_needs_t4t5,
+            eval_condition        => eval_condition,
+            condition_met         => condition_met,
             advance_state         => advance_state,
+            instr_is_hlt_flag     => instr_is_hlt_flag,
             cycle_type            => cycle_type,
             current_cycle         => current_cycle
         );
@@ -104,16 +133,18 @@ begin
 
         wait for 50 ns;
 
-        -- Test 1: Single-cycle instruction (5 states: T1-T2-T3)
+        -- Test 1: Single-cycle instruction (T1-T2-T3-T4)
         report "";
         report "Test 1: Single-cycle instruction (e.g., MOV A,B)";
-        report "  Should: Cycle 1 (PCI), then advance_state after T3";
+        report "  Should: Cycle 1 (PCI), advance_state during T4 (short cycle)";
 
-        -- Setup: instruction needs nothing extra
+        -- Setup: instruction needs nothing extra, no T4/T5 extended
         instr_needs_immediate <= '0';
         instr_needs_address <= '0';
         instr_is_io <= '0';
         instr_is_write <= '0';
+        instr_is_hlt <= '0';
+        instr_needs_t4t5 <= '0';
 
         -- Simulate Cycle 1: PCI
         simulate_state(state_t1);
@@ -132,12 +163,25 @@ begin
         end if;
 
         simulate_state(state_t3);
-        if advance_state /= '1' then
-            report "  ERROR: Should signal advance_state after T3" severity error;
+        -- advance_state should NOT be set yet for cycle 1 (waits for T4)
+        if advance_state = '1' then
+            report "  ERROR: advance_state should not be set at T3 for cycle 1" severity error;
             errors := errors + 1;
         else
-            report "  PASS: advance_state signaled after T3";
+            report "  PASS: advance_state not set at T3 (cycle 1 continues to T4)";
         end if;
+
+        -- Use enter/exit to check DURING T4
+        enter_state(state_t4);
+        -- Check during T4 (after rising edge has been processed)
+        if advance_state /= '1' then
+            report "  ERROR: Should signal advance_state during T4, got " &
+                   std_logic'image(advance_state) severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: advance_state signaled during T4";
+        end if;
+        exit_state(state_t4);
 
         -- Test 2: Two-cycle instruction (8 states: needs immediate byte)
         report "";

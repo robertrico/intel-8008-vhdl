@@ -137,9 +137,14 @@ begin
     -- - Cycle 1: Set at T4 (short) or T5 (extended) - need decoded instruction to decide
     -- - Extended cycles: Set at T5 (last state)
     -- - Never set between T3 and T5 for extended cycles!
-    process(state_t3, state_t4, state_t5, state_t1, instr_is_hlt, needs_t4t5_this_cycle, cycle_count, needs_cycle_2, needs_cycle_3)
+    process(state_t3, state_t4, state_t5, state_t1, state_t1i, instr_is_hlt, needs_t4t5_this_cycle, cycle_count, needs_cycle_2, needs_cycle_3)
     begin
-        if rising_edge(state_t1) then
+        if rising_edge(state_t1i) then
+            -- Clear when entering interrupt acknowledge (new instruction cycle)
+            advance_latch <= '0';
+            instr_is_hlt_latch <= '0';
+
+        elsif rising_edge(state_t1) then
             -- Clear at start of new cycle
             advance_latch <= '0';
             instr_is_hlt_latch <= '0';
@@ -198,9 +203,6 @@ begin
             -- T1I is interrupt acknowledge - this is the cycle 1 instruction fetch
             -- Set cycle counter to 1 (it should already be, but ensure it)
             cycle_count <= 1;
-            -- Clear HLT flag when exiting stopped state via interrupt
-            instr_is_hlt_latch <= '0';
-            advance_latch <= '0';
         elsif rising_edge(state_t1) then
             -- We're entering T1 (start of new cycle or new instruction)
             report "MCycle: T1 rising, cycle=" & integer'image(cycle_count) &
