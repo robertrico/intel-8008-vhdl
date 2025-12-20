@@ -20,14 +20,17 @@ architecture test of temp_registers_tb is
     -- Component declaration
     component temp_registers is
         port (
-            phi2         : in std_logic;
-            load_reg_a   : in std_logic;
-            load_reg_b   : in std_logic;
-            output_reg_a : in std_logic;
-            output_reg_b : in std_logic;
-            internal_bus : inout std_logic_vector(7 downto 0);
-            reg_a_out    : out std_logic_vector(7 downto 0);
-            reg_b_out    : out std_logic_vector(7 downto 0)
+            phi2                : in std_logic;
+            load_reg_a          : in std_logic;
+            load_reg_b          : in std_logic;
+            output_reg_a        : in std_logic;
+            output_reg_b        : in std_logic;
+            instr_is_inr_dcr    : in std_logic;
+            instr_is_binary_alu : in std_logic;
+            reg_a_direct        : in std_logic_vector(7 downto 0);
+            internal_bus        : inout std_logic_vector(7 downto 0);
+            reg_a_out           : out std_logic_vector(7 downto 0);
+            reg_b_out           : out std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -36,10 +39,13 @@ architecture test of temp_registers_tb is
     constant phi2_period : time := 500 ns;
 
     -- Inputs
-    signal load_reg_a   : std_logic := '0';
-    signal load_reg_b   : std_logic := '0';
-    signal output_reg_a : std_logic := '0';
-    signal output_reg_b : std_logic := '0';
+    signal load_reg_a       : std_logic := '0';
+    signal load_reg_b       : std_logic := '0';
+    signal output_reg_a     : std_logic := '0';
+    signal output_reg_b     : std_logic := '0';
+    signal instr_is_inr_dcr : std_logic := '0';
+    signal instr_is_binary_alu : std_logic := '0';
+    signal reg_a_direct     : std_logic_vector(7 downto 0) := (others => '0');
 
     -- Bidirectional bus
     signal internal_bus : std_logic_vector(7 downto 0) := (others => 'Z');
@@ -60,14 +66,17 @@ begin
 
     uut : temp_registers
         port map (
-            phi2         => phi2,
-            load_reg_a   => load_reg_a,
-            load_reg_b   => load_reg_b,
-            output_reg_a => output_reg_a,
-            output_reg_b => output_reg_b,
-            internal_bus => internal_bus,
-            reg_a_out    => reg_a_out,
-            reg_b_out    => reg_b_out
+            phi2                => phi2,
+            load_reg_a          => load_reg_a,
+            load_reg_b          => load_reg_b,
+            output_reg_a        => output_reg_a,
+            output_reg_b        => output_reg_b,
+            instr_is_inr_dcr    => instr_is_inr_dcr,
+            instr_is_binary_alu => instr_is_binary_alu,
+            reg_a_direct        => reg_a_direct,
+            internal_bus        => internal_bus,
+            reg_a_out           => reg_a_out,
+            reg_b_out           => reg_b_out
         );
 
     -- Clock generation
