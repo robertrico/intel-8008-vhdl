@@ -31,8 +31,19 @@ architecture test of instruction_decoder_tb is
             instr_is_call         : out std_logic;
             instr_is_ret          : out std_logic;
             instr_is_rst          : out std_logic;
+            instr_is_hlt          : out std_logic;
             instr_writes_reg      : out std_logic;
-            instr_reads_reg       : out std_logic
+            instr_reads_reg       : out std_logic;
+            instr_is_mem_indirect : out std_logic;
+            instr_uses_temp_regs  : out std_logic;
+            instr_is_inr_dcr      : out std_logic;
+            instr_is_binary_alu   : out std_logic;
+            instr_needs_t4t5      : out std_logic;
+            rst_vector            : out std_logic_vector(2 downto 0);
+            condition_code        : out std_logic_vector(1 downto 0);
+            test_true             : out std_logic;
+            eval_condition        : out std_logic;
+            transition_to_stopped : out std_logic
         );
     end component;
 
@@ -47,8 +58,19 @@ architecture test of instruction_decoder_tb is
     signal instr_is_call         : std_logic;
     signal instr_is_ret          : std_logic;
     signal instr_is_rst          : std_logic;
+    signal instr_is_hlt          : std_logic;
     signal instr_writes_reg      : std_logic;
     signal instr_reads_reg       : std_logic;
+    signal instr_is_mem_indirect : std_logic;
+    signal instr_uses_temp_regs  : std_logic;
+    signal instr_is_inr_dcr      : std_logic;
+    signal instr_is_binary_alu   : std_logic;
+    signal instr_needs_t4t5      : std_logic;
+    signal rst_vector            : std_logic_vector(2 downto 0);
+    signal condition_code        : std_logic_vector(1 downto 0);
+    signal test_true             : std_logic;
+    signal eval_condition        : std_logic;
+    signal transition_to_stopped : std_logic;
 
     -- Test procedure
     procedure test_instruction(
@@ -129,8 +151,19 @@ begin
             instr_is_call         => instr_is_call,
             instr_is_ret          => instr_is_ret,
             instr_is_rst          => instr_is_rst,
+            instr_is_hlt          => instr_is_hlt,
             instr_writes_reg      => instr_writes_reg,
-            instr_reads_reg       => instr_reads_reg
+            instr_reads_reg       => instr_reads_reg,
+            instr_is_mem_indirect => instr_is_mem_indirect,
+            instr_uses_temp_regs  => instr_uses_temp_regs,
+            instr_is_inr_dcr      => instr_is_inr_dcr,
+            instr_is_binary_alu   => instr_is_binary_alu,
+            instr_needs_t4t5      => instr_needs_t4t5,
+            rst_vector            => rst_vector,
+            condition_code        => condition_code,
+            test_true             => test_true,
+            eval_condition        => eval_condition,
+            transition_to_stopped => transition_to_stopped
         );
 
     process

@@ -319,6 +319,7 @@ begin
                     -- 11 DDD 111 - LrM (load register from memory) - 2 cycles
                     -- NOTE: This is memory-indirect, NOT immediate
                     -- instr_is_mem_indirect is already set by line 107
+                    instr_needs_immediate <= '1';  -- 2-cycle instruction (memory read cycle)
                     instr_writes_reg <= '1';
                     instr_needs_t4t5 <= '1';  -- Need T4 to write result to register
                     -- DDD field already set by default
@@ -326,6 +327,7 @@ begin
                     -- 11 111 SSS - LMr (load memory from register) - 2 cycles, write
                     -- NOTE: This is memory-indirect, NOT immediate
                     -- instr_is_mem_indirect is already set by line 107
+                    instr_needs_immediate <= '1';  -- 2-cycle instruction (memory write cycle)
                     instr_is_write <= '1';
                     instr_reads_reg <= '1';
                     -- SSS field already set by default
