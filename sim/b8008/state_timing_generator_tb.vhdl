@@ -19,33 +19,45 @@ architecture test of state_timing_generator_tb is
 
     component state_timing_generator is
         port (
-            phi1              : in  std_logic;
-            phi2              : in  std_logic;
-            advance_state     : in  std_logic;
-            interrupt_pending : in  std_logic;
-            ready             : in  std_logic;
-            state_t1          : out std_logic;
-            state_t2          : out std_logic;
-            state_t3          : out std_logic;
-            state_t4          : out std_logic;
-            state_t5          : out std_logic;
-            state_t1i         : out std_logic;
-            state_half        : out std_logic
+            phi1                  : in  std_logic;
+            phi2                  : in  std_logic;
+            advance_state         : in  std_logic;
+            interrupt_pending     : in  std_logic;
+            ready                 : in  std_logic;
+            instr_is_hlt_flag     : in  std_logic;
+            transition_to_stopped : in  std_logic;
+            state_t1              : out std_logic;
+            state_t2              : out std_logic;
+            state_t3              : out std_logic;
+            state_t4              : out std_logic;
+            state_t5              : out std_logic;
+            state_t1i             : out std_logic;
+            state_stopped         : out std_logic;
+            state_half            : out std_logic;
+            status_s0             : out std_logic;
+            status_s1             : out std_logic;
+            status_s2             : out std_logic
         );
     end component;
 
-    signal phi1              : std_logic := '0';
-    signal phi2              : std_logic := '0';
-    signal advance_state     : std_logic := '0';
-    signal interrupt_pending : std_logic := '0';
-    signal ready             : std_logic := '1';
-    signal state_t1          : std_logic;
-    signal state_t2          : std_logic;
-    signal state_t3          : std_logic;
-    signal state_t4          : std_logic;
-    signal state_t5          : std_logic;
-    signal state_t1i         : std_logic;
-    signal state_half        : std_logic;
+    signal phi1                  : std_logic := '0';
+    signal phi2                  : std_logic := '0';
+    signal advance_state         : std_logic := '0';
+    signal interrupt_pending     : std_logic := '0';
+    signal ready                 : std_logic := '1';
+    signal instr_is_hlt_flag     : std_logic := '0';
+    signal transition_to_stopped : std_logic := '0';
+    signal state_t1              : std_logic;
+    signal state_t2              : std_logic;
+    signal state_t3              : std_logic;
+    signal state_t4              : std_logic;
+    signal state_t5              : std_logic;
+    signal state_t1i             : std_logic;
+    signal state_stopped         : std_logic;
+    signal state_half            : std_logic;
+    signal status_s0             : std_logic;
+    signal status_s1             : std_logic;
+    signal status_s2             : std_logic;
 
     constant CLK_PERIOD : time := 10 ns;
     constant PHI1_WIDTH : time := 80 ns;
@@ -58,18 +70,24 @@ begin
 
     uut : state_timing_generator
         port map (
-            phi1              => phi1,
-            phi2              => phi2,
-            advance_state     => advance_state,
-            interrupt_pending => interrupt_pending,
-            ready             => ready,
-            state_t1          => state_t1,
-            state_t2          => state_t2,
-            state_t3          => state_t3,
-            state_t4          => state_t4,
-            state_t5          => state_t5,
-            state_t1i         => state_t1i,
-            state_half        => state_half
+            phi1                  => phi1,
+            phi2                  => phi2,
+            advance_state         => advance_state,
+            interrupt_pending     => interrupt_pending,
+            ready                 => ready,
+            instr_is_hlt_flag     => instr_is_hlt_flag,
+            transition_to_stopped => transition_to_stopped,
+            state_t1              => state_t1,
+            state_t2              => state_t2,
+            state_t3              => state_t3,
+            state_t4              => state_t4,
+            state_t5              => state_t5,
+            state_t1i             => state_t1i,
+            state_stopped         => state_stopped,
+            state_half            => state_half,
+            status_s0             => status_s0,
+            status_s1             => status_s1,
+            status_s2             => status_s2
         );
 
     -- Clock generation process (generates phi1 and phi2 non-overlapping clocks)
@@ -102,25 +120,34 @@ begin
 
         wait for T_CY / 2;
 
-        -- Test 1: Normal T1->T2->T3->T4->T5 progression
-        report "Test 1: Full T1->T2->T3->T4->T5 cycle";
-
-        -- Should start in T1
-        if state_t1 /= '1' then
-            report "  ERROR: Should start in T1" severity error;
+        -- Test 0: Verify initial STOPPED state
+        report "Test 0: Initial STOPPED state";
+        if state_stopped /= '1' then
+            report "  ERROR: Should start in STOPPED" severity error;
             errors := errors + 1;
         else
-            report "  PASS: Started in T1";
+            report "  PASS: Started in STOPPED state";
         end if;
 
-        -- Two clock cycles in T1
-        wait for T_CY;
-        if state_t1 /= '1' then
-            report "  ERROR: Should still be in T1" severity error;
+        -- Test 1: Exit STOPPED via interrupt, then T1I->T2->T3->T4->T5->T1
+        report "";
+        report "Test 1: Exit STOPPED via interrupt, full cycle";
+
+        -- Trigger interrupt to exit STOPPED
+        interrupt_pending <= '1';
+        wait for T_CY * 2;  -- Should transition to T1I
+
+        if state_t1i /= '1' then
+            report "  ERROR: Should enter T1I from STOPPED" severity error;
             errors := errors + 1;
+        else
+            report "  PASS: Entered T1I from STOPPED";
         end if;
 
-        wait for T_CY;
+        interrupt_pending <= '0';
+
+        -- T1I -> T2
+        wait for T_CY * 2;
         if state_t2 /= '1' then
             report "  ERROR: Should advance to T2" severity error;
             errors := errors + 1;
@@ -128,7 +155,7 @@ begin
             report "  PASS: Advanced to T2";
         end if;
 
-        -- Two clock cycles in T2
+        -- T2 -> T3
         wait for T_CY * 2;
         if state_t3 /= '1' then
             report "  ERROR: Should advance to T3" severity error;
@@ -137,7 +164,7 @@ begin
             report "  PASS: Advanced to T3";
         end if;
 
-        -- Two clock cycles in T3 (no advance, go to T4)
+        -- T3 -> T4 (no advance_state, so continue to T4)
         wait for T_CY * 2;
         if state_t4 /= '1' then
             report "  ERROR: Should advance to T4" severity error;
@@ -146,7 +173,7 @@ begin
             report "  PASS: Advanced to T4";
         end if;
 
-        -- Two clock cycles in T4 (no advance, go to T5)
+        -- T4 -> T5 (no advance_state, so continue to T5)
         wait for T_CY * 2;
         if state_t5 /= '1' then
             report "  ERROR: Should advance to T5" severity error;
@@ -155,7 +182,7 @@ begin
             report "  PASS: Advanced to T5";
         end if;
 
-        -- Two clock cycles in T5, should go back to T1
+        -- T5 -> T1 (no interrupt pending)
         wait for T_CY * 2;
         if state_t1 /= '1' then
             report "  ERROR: Should return to T1" severity error;
@@ -166,13 +193,14 @@ begin
 
         -- Test 2: Skip from T3 to T1 (short instruction)
         report "";
-        report "Test 2: Skip from T3 to T1 (5-state instruction)";
+        report "Test 2: Skip from T3 to T1 (short instruction)";
 
-        -- Advance through T1, T2
-        wait for T_CY * 2;  -- T2
-        wait for T_CY * 2;  -- T3
+        -- T1 -> T2
+        wait for T_CY * 2;
+        -- T2 -> T3
+        wait for T_CY * 2;
 
-        -- Signal to advance after T3
+        -- At T3, signal advance_state to skip to T1
         advance_state <= '1';
         wait for T_CY * 2;  -- Should go to T1
 
@@ -185,17 +213,17 @@ begin
 
         advance_state <= '0';
 
-        -- Test 3: Interrupt after T5
+        -- Test 3: Interrupt after T5 (go to T1I instead of T1)
         report "";
         report "Test 3: Interrupt after T5 (go to T1I)";
 
-        -- Go through full cycle
+        -- Go through full cycle: T1->T2->T3->T4->T5
         wait for T_CY * 2;  -- T2
         wait for T_CY * 2;  -- T3
         wait for T_CY * 2;  -- T4
         wait for T_CY * 2;  -- T5
 
-        -- Set interrupt pending
+        -- Set interrupt pending before T5 ends
         interrupt_pending <= '1';
         wait for T_CY * 2;
 
@@ -209,7 +237,7 @@ begin
         interrupt_pending <= '0';
 
         -- T1I should proceed to T2
-        wait for T_CY * 2;  -- Should go to T2
+        wait for T_CY * 2;
 
         if state_t2 /= '1' then
             report "  ERROR: T1I should advance to T2" severity error;
@@ -217,6 +245,52 @@ begin
         else
             report "  PASS: T1I advanced to T2";
         end if;
+
+        -- Test 4: HLT instruction (transition_to_stopped at T3)
+        report "";
+        report "Test 4: HLT instruction (STOPPED at T3)";
+
+        -- Complete current instruction: T2->T3
+        wait for T_CY * 2;  -- T3
+
+        -- At T3, signal HLT
+        transition_to_stopped <= '1';
+        wait for T_CY * 2;  -- Should go to STOPPED
+
+        if state_stopped /= '1' then
+            report "  ERROR: Should enter STOPPED after HLT at T3" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Entered STOPPED state (HLT)";
+        end if;
+
+        transition_to_stopped <= '0';
+
+        -- Test 5: Wake from STOPPED via interrupt
+        report "";
+        report "Test 5: Wake from STOPPED via interrupt";
+
+        -- Should still be in STOPPED
+        wait for T_CY * 2;
+        if state_stopped /= '1' then
+            report "  ERROR: Should remain in STOPPED without interrupt" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Remained in STOPPED";
+        end if;
+
+        -- Trigger interrupt to wake
+        interrupt_pending <= '1';
+        wait for T_CY * 2;
+
+        if state_t1i /= '1' then
+            report "  ERROR: Should wake to T1I on interrupt" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Woke to T1I from STOPPED";
+        end if;
+
+        interrupt_pending <= '0';
 
         -- Summary
         report "";
