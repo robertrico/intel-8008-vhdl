@@ -31,8 +31,13 @@ architecture test of register_file_tb is
             enable_l     : in std_logic;
             read_enable  : in std_logic;
             write_enable : in std_logic;
-            h_reg_out    : out std_logic_vector(7 downto 0);
-            l_reg_out    : out std_logic_vector(7 downto 0)
+            debug_reg_a  : out std_logic_vector(7 downto 0);
+            debug_reg_b  : out std_logic_vector(7 downto 0);
+            debug_reg_c  : out std_logic_vector(7 downto 0);
+            debug_reg_d  : out std_logic_vector(7 downto 0);
+            debug_reg_e  : out std_logic_vector(7 downto 0);
+            debug_reg_h  : out std_logic_vector(7 downto 0);
+            debug_reg_l  : out std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -56,9 +61,14 @@ architecture test of register_file_tb is
     signal data_in  : std_logic_vector(7 downto 0) := (others => '0');
     signal data_out : std_logic_vector(7 downto 0);
 
-    -- Outputs
-    signal h_reg_out : std_logic_vector(7 downto 0);
-    signal l_reg_out : std_logic_vector(7 downto 0);
+    -- Debug outputs
+    signal debug_reg_a : std_logic_vector(7 downto 0);
+    signal debug_reg_b : std_logic_vector(7 downto 0);
+    signal debug_reg_c : std_logic_vector(7 downto 0);
+    signal debug_reg_d : std_logic_vector(7 downto 0);
+    signal debug_reg_e : std_logic_vector(7 downto 0);
+    signal debug_reg_h : std_logic_vector(7 downto 0);
+    signal debug_reg_l : std_logic_vector(7 downto 0);
 
 begin
 
@@ -80,8 +90,13 @@ begin
             enable_l     => enable_l,
             read_enable  => read_enable,
             write_enable => write_enable,
-            h_reg_out    => h_reg_out,
-            l_reg_out    => l_reg_out
+            debug_reg_a  => debug_reg_a,
+            debug_reg_b  => debug_reg_b,
+            debug_reg_c  => debug_reg_c,
+            debug_reg_d  => debug_reg_d,
+            debug_reg_e  => debug_reg_e,
+            debug_reg_h  => debug_reg_h,
+            debug_reg_l  => debug_reg_l
         );
 
     test_process : process
@@ -100,7 +115,7 @@ begin
         reset <= '0';
         wait for phi2_period;
 
-        if h_reg_out /= x"00" or l_reg_out /= x"00" then
+        if debug_reg_h /= x"00" or debug_reg_l /= x"00" then
             report "  ERROR: H and L should be zero after reset" severity error;
             errors := errors + 1;
         else
@@ -150,7 +165,7 @@ begin
         data_in   <= (others => 'Z');
         wait for 10 ns;
 
-        if h_reg_out /= x"3F" then
+        if debug_reg_h /= x"3F" then
             report "  ERROR: H output should be 0x3F" severity error;
             errors := errors + 1;
         else
@@ -171,7 +186,7 @@ begin
         data_in   <= (others => 'Z');
         wait for 10 ns;
 
-        if l_reg_out /= x"2A" then
+        if debug_reg_l /= x"2A" then
             report "  ERROR: L output should be 0x2A" severity error;
             errors := errors + 1;
         else

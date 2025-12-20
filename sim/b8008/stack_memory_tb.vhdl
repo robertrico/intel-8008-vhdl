@@ -21,7 +21,7 @@ architecture test of stack_memory_tb is
         port (
             phi1           : in std_logic;
             reset          : in std_logic;
-            addr_in        : in std_logic_vector(13 downto 0);
+            addr_in        : in address_t;
             enable_level_0 : in std_logic;
             enable_level_1 : in std_logic;
             enable_level_2 : in std_logic;
@@ -32,7 +32,7 @@ architecture test of stack_memory_tb is
             enable_level_7 : in std_logic;
             stack_read     : in std_logic;
             stack_write    : in std_logic;
-            addr_out       : out std_logic_vector(13 downto 0)
+            addr_out       : out address_t
         );
     end component;
 
@@ -42,7 +42,7 @@ architecture test of stack_memory_tb is
 
     -- Inputs
     signal reset          : std_logic := '0';
-    signal addr_in        : std_logic_vector(13 downto 0) := (others => '0');
+    signal addr_in        : address_t := (others => '0');
     signal enable_level_0 : std_logic := '0';
     signal enable_level_1 : std_logic := '0';
     signal enable_level_2 : std_logic := '0';
@@ -55,7 +55,7 @@ architecture test of stack_memory_tb is
     signal stack_write    : std_logic := '0';
 
     -- Outputs
-    signal addr_out : std_logic_vector(13 downto 0);
+    signal addr_out : address_t;
 
 begin
 
@@ -102,7 +102,7 @@ begin
         report "";
         report "Test 2: Write address 0x1234 to level 0";
 
-        addr_in        <= "00010010001101";  -- 0x1234 in 14 bits
+        addr_in        <= to_unsigned(16#1234#, 14);  -- 0x1234 in 14 bits
         enable_level_0 <= '1';
         stack_write    <= '1';
         wait until rising_edge(phi1);
@@ -115,7 +115,7 @@ begin
         stack_read     <= '1';
         wait for 10 ns;
 
-        if addr_out /= "00010010001101" then
+        if addr_out /= to_unsigned(16#1234#, 14) then
             report "  ERROR: Level 0 should contain 0x1234" severity error;
             errors := errors + 1;
         else
@@ -129,7 +129,7 @@ begin
         report "";
         report "Test 3: Write address 0x3ABC to level 3";
 
-        addr_in        <= "11101010111100";  -- 0x3ABC in 14 bits
+        addr_in        <= to_unsigned(16#3ABC#, 14);  -- 0x3ABC in 14 bits
         enable_level_3 <= '1';
         stack_write    <= '1';
         wait until rising_edge(phi1);
@@ -142,7 +142,7 @@ begin
         stack_read     <= '1';
         wait for 10 ns;
 
-        if addr_out /= "11101010111100" then
+        if addr_out /= to_unsigned(16#3ABC#, 14) then
             report "  ERROR: Level 3 should contain 0x3ABC" severity error;
             errors := errors + 1;
         else
@@ -158,7 +158,7 @@ begin
 
         -- Write unique addresses to each level
         for i in 0 to 7 loop
-            addr_in <= std_logic_vector(to_unsigned(i * 256, 14));
+            addr_in <= to_unsigned(i * 256, 14);
             stack_write <= '1';
 
             case i is
@@ -211,7 +211,7 @@ begin
 
             wait for 10 ns;
 
-            if addr_out /= std_logic_vector(to_unsigned(i * 256, 14)) then
+            if addr_out /= to_unsigned(i * 256, 14) then
                 report "  ERROR: Level " & integer'image(i) &
                        " read back incorrect value" severity error;
                 errors := errors + 1;
@@ -237,7 +237,7 @@ begin
 
         wait for 10 ns;
 
-        if addr_out /= "00000000000000" then
+        if addr_out /= to_unsigned(0, 14) then
             report "  ERROR: Output should be 0 when not reading" severity error;
             errors := errors + 1;
         else

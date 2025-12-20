@@ -138,7 +138,7 @@ test-b8008-top: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_top_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb --stop-time=20ms
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb --stop-time=60ms
 
 # ============================================================================
 # INDIVIDUAL MODULE TESTS
@@ -285,7 +285,7 @@ test-stack-pointer: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/stack_pointer_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_pointer_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_pointer_tb --stop-time=10us
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_pointer_tb --stop-time=20us
 
 test-stack-addr-decoder: $(BUILD_DIR)
 	@echo "Testing stack address decoder..."
