@@ -64,20 +64,81 @@ It has NO knowledge of:
 
 ## Key Development Commands
 
-**IMPORTANT**: Always use the Makefile commands. Never run GHDL directly.
+### CRITICAL: Always Use the Makefile
+
+**NEVER run GHDL directly.** The Makefile handles:
+- Correct compilation order and dependencies
+- Proper GHDL flags (`--std=08`, `--work=work`)
+- Build directory management
+- All toolchain paths (GHDL, ASL assembler, hex converters)
+
+```bash
+# ❌ WRONG - Never do this
+~/oss-cad-suite/bin/ghdl -a --std=08 some_file.vhdl
+ghdl -r some_tb --stop-time=1ms
+
+# ✅ CORRECT - Always use make targets
+make test-b8008-top
+make test-pc
+make assemble PROG=my_test.asm
+```
 
 ### Building and Testing
 
 ```bash
-# Test program counter module
+# Run the main system test (default program)
 make test-b8008-top
+
+# Run with a specific test program
+make test-b8008-top PROG=search_as
+
+# Test individual modules
+make test-pc              # Program counter
+make test-alu             # ALU
+make test-instr-decoder   # Instruction decoder
+
+# See all available make targets
+make help
+
+# See all available test programs
+make show-programs
 
 # Clean build artifacts
 make clean
-
-# Show available targets
-make help
 ```
+
+### Assembly Test Verification
+
+**CRITICAL: Always use verification scripts when testing assembly programs.**
+
+The `test_programs/verification_scripts/` directory contains automated verification scripts that:
+- Parse simulation output for expected values
+- Verify CPU register states and memory contents
+- Report PASS/FAIL status with detailed error messages
+
+```bash
+# Run ALL verification tests (regression suite)
+./test_programs/verification_scripts/run_all_tests.sh
+
+# Run a specific verification test
+./test_programs/verification_scripts/check_alu_test.sh
+./test_programs/verification_scripts/check_search_test.sh
+./test_programs/verification_scripts/check_ram_test.sh
+./test_programs/verification_scripts/check_rotate_test.sh
+./test_programs/verification_scripts/check_sign_parity_test.sh
+./test_programs/verification_scripts/check_conditional_call_test.sh
+./test_programs/verification_scripts/check_sign_parity_call_test.sh
+./test_programs/verification_scripts/check_memory_alu_test.sh
+./test_programs/verification_scripts/check_mvi_m_test.sh
+./test_programs/verification_scripts/check_rst_test.sh
+./test_programs/verification_scripts/check_io_test.sh
+```
+
+**Workflow for testing assembly programs:**
+1. Write/modify the assembly program in `test_programs/`
+2. Assemble with `make assemble PROG=my_test.asm`
+3. Run the verification script: `./test_programs/verification_scripts/check_my_test.sh`
+4. **NEVER** just run `make test-b8008-top` without verification - always use the scripts
 
 ## Directory Structure
 
@@ -137,6 +198,18 @@ intel-8008-vhdl/
 ├── projects/
 │   └── legacy_projects/             # ⚠️ DEPRECATED: Old s8008/v8008 FPGA projects
 ├── test_programs/                   # Assembly programs (.asm files)
+│   └── verification_scripts/        # ✅ REQUIRED: Test verification scripts
+│       ├── run_all_tests.sh         # Regression test runner
+│       ├── check_alu_test.sh        # ALU instruction verification
+│       ├── check_search_test.sh     # Memory search test verification
+│       ├── check_ram_test.sh        # RAM read/write verification
+│       ├── check_rotate_test.sh     # Rotate instruction verification
+│       ├── check_conditional_call_test.sh
+│       ├── check_sign_parity_call_test.sh
+│       ├── check_memory_alu_test.sh
+│       ├── check_mvi_m_test.sh
+│       ├── check_rst_test.sh
+│       └── check_io_test.sh
 └── docs/                            # Documentation (datasheets, guides)
 ```
 
@@ -178,11 +251,13 @@ If a test fails:
 
 ## Common Mistakes to Avoid
 
-1. **Don't add conditional logic** - If you find yourself writing `if (is_jmp and not in_interrupt)`, you're doing it wrong
-2. **Don't make modules smart** - Modules should be dumb and do what they're told
-3. **Don't skip testing** - Every module needs a testbench
-4. **Don't reference legacy code** - s8008 and v8008 are deprecated for good reasons
-5. **Don't make monolithic designs** - Keep modules small and focused
+1. **Don't run GHDL directly** - Always use `make` targets. The Makefile ensures correct compilation order, flags, and paths
+2. **Don't skip verification scripts** - When testing assembly programs, always use `./test_programs/verification_scripts/` scripts, not raw simulation output
+3. **Don't add conditional logic** - If you find yourself writing `if (is_jmp and not in_interrupt)`, you're doing it wrong
+4. **Don't make modules smart** - Modules should be dumb and do what they're told
+5. **Don't skip testing** - Every module needs a testbench
+6. **Don't reference legacy code** - s8008 and v8008 are deprecated for good reasons
+7. **Don't make monolithic designs** - Keep modules small and focused
 
 ## Questions?
 
