@@ -13,7 +13,7 @@ echo ""
 
 # Run the test
 echo "Running test (this takes a few seconds)..."
-make test-b8008-top 2>&1 > ram_test.log
+make test-b8008-top PROG=ram_intensive_as 2>&1 > ram_test.log
 
 echo ""
 echo "=== 1. Program Start - Initial C register (array size) ==="

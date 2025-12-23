@@ -15,6 +15,9 @@ library work;
 use work.b8008_types.all;
 
 entity b8008_top_tb is
+    generic (
+        ROM_FILE : string := "test_programs/alu_test_as.mem"
+    );
 end entity b8008_top_tb;
 
 architecture testbench of b8008_top_tb is
@@ -89,7 +92,7 @@ begin
 
     dut : b8008_top
         generic map (
-            ROM_FILE => "test_programs/search_as.mem"
+            ROM_FILE => ROM_FILE
         )
         port map (
             clk_in      => clk_in,

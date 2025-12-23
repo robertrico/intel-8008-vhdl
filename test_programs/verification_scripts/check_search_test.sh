@@ -13,19 +13,19 @@ echo ""
 
 # Run the test
 echo "Running test (this takes a few seconds)..."
-make test-b8008-top 2>&1 > b8008_test.log
+make test-b8008-top PROG=search_as 2>&1 > search_test.log
 
 echo ""
 echo "=== 1. L Register Progression (should be 200→225) ==="
-grep "Reg\.L = " b8008_test.log | awk -F'ptr = ' '{print $2}' | sed 's/).*//' | sort -u -n | head -30
+grep "Reg\.L = " search_test.log | awk -F'ptr = ' '{print $2}' | sed 's/).*//' | sort -u -n | head -30
 
 echo ""
 echo "=== 2. Check L starts at 200 (0xC8) ==="
-grep "Reg\.L = 0xC8" b8008_test.log | head -3
+grep "Reg\.L = 0xC8" search_test.log | head -3
 
 echo ""
 echo "=== 3. Check A register loaded with 'H' (0x48) ==="
-grep "Reg\.A = 0x48" b8008_test.log | head -3
+grep "Reg\.A = 0x48" search_test.log | head -3
 
 echo ""
 echo "=== 4. Character comparisons (CPI instruction) ==="
@@ -33,7 +33,7 @@ echo "Shows each comparison with character and L register position:"
 echo ""
 # Extract A register and L register values for each CPI instruction
 # Show only cycle 1 (when CPI is first decoded, before immediate byte fetch)
-grep "IR = 0x3C.*MCycle = 1" b8008_test.log -A3 | grep -E "(Reg\.A|Reg\.L)" | \
+grep "IR = 0x3C.*MCycle = 1" search_test.log -A3 | grep -E "(Reg\.A|Reg\.L)" | \
 while IFS= read -r line; do
     if echo "$line" | grep -q "Reg\.A"; then
         # Extract hex value of A register
@@ -57,19 +57,19 @@ done
 
 echo ""
 echo "=== 5. Verify CPI doesn't overwrite A (should stay 0x48 after CPI) ==="
-grep "IR = 0x3C" b8008_test.log -A3 | grep "Reg\.A" | head -5
+grep "IR = 0x3C" search_test.log -A3 | grep "Reg\.A" | head -5
 
 echo ""
 echo "=== 6. Check program reaches FOUND (PC=0x0113) ==="
-FOUND_COUNT=$(grep "PC = 0x0113" b8008_test.log | wc -l)
+FOUND_COUNT=$(grep "PC = 0x0113" search_test.log | wc -l)
 echo "Found label reached $FOUND_COUNT times"
-grep "PC = 0x0113" b8008_test.log | head -2
+grep "PC = 0x0113" search_test.log | head -2
 
 echo ""
 echo "=== 7. L value when period found (should be ~212) ==="
 # Look for L register value AFTER we reach FOUND, near the HLT instruction
-grep "PC = 0x0117.*IR = 0x00.*MCycle = 1" b8008_test.log | head -1
-grep "Reg\.H.*Reg\.L.*ptr = 212" b8008_test.log | head -1
+grep "PC = 0x0117.*IR = 0x00.*MCycle = 1" search_test.log | head -1
+grep "Reg\.H.*Reg\.L.*ptr = 212" search_test.log | head -1
 
 echo ""
 echo "=== 8. MOV instructions at FOUND label (0x0113-0x0116) ==="
@@ -80,10 +80,10 @@ echo "  0x0115: MOV H,A (0xE8) - Copy A to H → shown as PC=0x0116, IR=0xE8"
 echo "  0x0116: HLT (0x00) - Halt → shown as PC=0x0117, IR=0x00"
 echo ""
 echo "Actual execution:"
-grep "PC = 0x0114.*IR = 0xEE.*MCycle = 1" b8008_test.log | head -1
-grep "PC = 0x0115.*IR = 0xF5.*MCycle = 1" b8008_test.log | head -1
-grep "PC = 0x0116.*IR = 0xE8.*MCycle = 1" b8008_test.log | head -1
-grep "PC = 0x0117.*IR = 0x00.*MCycle = 1" b8008_test.log | head -1
+grep "PC = 0x0114.*IR = 0xEE.*MCycle = 1" search_test.log | head -1
+grep "PC = 0x0115.*IR = 0xF5.*MCycle = 1" search_test.log | head -1
+grep "PC = 0x0116.*IR = 0xE8.*MCycle = 1" search_test.log | head -1
+grep "PC = 0x0117.*IR = 0x00.*MCycle = 1" search_test.log | head -1
 
 echo ""
 echo "=== 9. Final Register State (at HLT) ==="
@@ -94,7 +94,7 @@ echo "  3. MOV H,A - Copied A (0x2E='.') to H"
 echo ""
 echo "Final register values:"
 # Get the last register dump at HLT
-grep "PC = 0x0117.*IR = 0x00.*MCycle = 1" b8008_test.log -A3 | head -4
+grep "PC = 0x0117.*IR = 0x00.*MCycle = 1" search_test.log -A3 | head -4
 echo ""
 echo "Analysis:"
 echo "  ✓ A = 0x2E (period character '.' - correctly loaded before FOUND)"
@@ -114,9 +114,9 @@ echo "  Final state: H=0x2E (period), L=0xD4 (position 212), A=0x2E (period)"
 
 echo ""
 echo "=== 10. Test Completion Status ==="
-tail -10 b8008_test.log
+tail -10 search_test.log
 
 echo ""
 echo "=========================================="
-echo "Full output saved to: b8008_test.log"
+echo "Full output saved to: search_test.log"
 echo "=========================================="

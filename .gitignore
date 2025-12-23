@@ -51,3 +51,5 @@ nohup.out
 b8008_test.log
 
 ram_test.log
+
+*.log

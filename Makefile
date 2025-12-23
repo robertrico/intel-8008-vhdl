@@ -106,11 +106,22 @@ test-b8008: $(BUILD_DIR)
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_tb --stop-time=50us
 
+# Default test program (can be overridden with PROG=name)
+PROG ?= alu_test_as
+ROM_FILE = test_programs/$(PROG).mem
+SIM_TIME ?= 60ms
+
 # CLAUDE - These are the main tests
+# Usage:
+#   make test-b8008-top                    - Run with default program (alu_test_as)
+#   make test-b8008-top PROG=search_as     - Run with search program
+#   make test-b8008-top PROG=ram_intensive_as - Run with RAM intensive test
+#   make test-b8008-top PROG=search_as SIM_TIME=30ms - Custom simulation time
 test-b8008-top: $(BUILD_DIR)
 	@echo "========================================="
 	@echo "Testing b8008_top - Complete System"
-	@echo "Running search program test"
+	@echo "Program: $(ROM_FILE)"
+	@echo "Sim time: $(SIM_TIME)"
 	@echo "========================================="
 	@echo ""
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
@@ -140,7 +151,21 @@ test-b8008-top: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_top_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb --stop-time=60ms
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb -gROM_FILE=$(ROM_FILE) --stop-time=$(SIM_TIME)
+
+# Convenience targets for specific test programs
+test-alu: test-b8008-top
+test-search: $(BUILD_DIR)
+	$(MAKE) test-b8008-top PROG=search_as
+test-ram: $(BUILD_DIR)
+	$(MAKE) test-b8008-top PROG=ram_intensive_as
+
+# List available test programs
+show-programs:
+	@echo "Available test programs:"
+	@ls -1 $(PROG_DIR)/*.mem 2>/dev/null | xargs -I {} basename {} .mem | sed 's/^/  /'
+	@echo ""
+	@echo "Usage: make test-b8008-top PROG=<program_name>"
 
 # ============================================================================
 # INDIVIDUAL MODULE TESTS
