@@ -81,15 +81,21 @@ All VHDL code is an **original implementation** by Robert Rico (2025), based on 
 
 ### Assembly Toolchain
 
-All test programs are assembled using **naken_asm** by Michael Kohn:
+All test programs are assembled using the **AS Assembler** (Macro Assembler AS) by Alfred Arnold:
 
-- **Tool**: naken_asm
-- **Author**: Michael Kohn
-- **Repository**: https://github.com/mikeakohn/naken_asm
+- **Tool**: AS Assembler
+- **Author**: Alfred Arnold
+- **Website**: http://john.ccac.rwth-aachen.de:8000/as/
 - **License**: GPL
-- **Website**: https://www.mikekohn.net/
 
-This project uses **8080 syntax** (e.g., `MOV`, `MVI`) rather than original 8008 mnemonics (e.g., `Lrr`, `LrI`) because naken_asm provides native support for this more familiar instruction set.
+This project uses **8080 syntax** (e.g., `MOV`, `MVI`) rather than original 8008 mnemonics (e.g., `Lrr`, `LrI`) because AS Assembler provides native support for this more familiar instruction set.
+
+### Historical Attribution
+
+Early iterations of this project used **naken_asm** by Michael Kohn for assembly:
+- **Repository**: https://github.com/mikeakohn/naken_asm
+- **Website**: https://www.mikekohn.net/
+- Thanks to Michael Kohn for his multi-architecture assembler which helped bootstrap early development.
 
 ---
 
@@ -182,5 +188,5 @@ When interfacing with vintage Intel 8008 silicon:
 For questions, issues, or contributions:
 - See repository issues/discussions
 
-For questions about naken_asm:
-- GitHub: https://github.com/mikeakohn/naken_asm
+For questions about AS Assembler:
+- Website: http://john.ccac.rwth-aachen.de:8000/as/

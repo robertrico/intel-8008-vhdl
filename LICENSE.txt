@@ -25,16 +25,15 @@ references for understanding different approaches to the 8008 architecture.
 
 Assembly Toolchain
 ------------------
-All test programs are assembled using naken_asm by Michael Kohn:
+All test programs are assembled using AS Assembler (Macro Assembler AS) by Alfred Arnold:
 
-  Tool: naken_asm
-  Author: Michael Kohn
-  Repository: https://github.com/mikeakohn/naken_asm
+  Tool: AS Assembler
+  Author: Alfred Arnold
+  Website: http://john.ccac.rwth-aachen.de:8000/as/
   License: GPL
-  Website: https://www.mikekohn.net/
 
 This project uses 8080 syntax (MOV, MVI, ADD) rather than original 8008
-mnemonics (Lrr, LrI, ADr) as supported by naken_asm.
+mnemonics (Lrr, LrI, ADr) as supported by AS Assembler.
 
 v1.0 Implementation by Robert Rico
 -----------------------------------
@@ -166,9 +165,12 @@ ACKNOWLEDGMENTS
   * Original 8008 microprocessor and documentation
   * SIM8-01 reference design
 
+- Alfred Arnold for:
+  * AS Assembler (Macro Assembler AS)
+
 - Michael Kohn for:
-  * naken_asm assembler
-  * verilog 8008 implementation
+  * naken_asm assembler (used in early project iterations)
+  * Verilog 8008 implementation reference
 
 - Vintage computing community for:
   * Documentation preservation and archiving

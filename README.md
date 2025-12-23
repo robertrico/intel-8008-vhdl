@@ -297,14 +297,14 @@ intel-8008-vhdl/
 
 ### Writing Assembly Programs
 
-This project uses [naken_asm](https://github.com/mikeakohn/naken_asm) by Michael Kohn for assembling 8008 code.
+This project uses the **AS Assembler** (Macro Assembler AS) by Alfred Arnold for assembling 8008 code.
 
-**Important:** naken_asm uses **8080 syntax** (Intel's later, more common mnemonics) rather than the original 8008 mnemonics. This means:
+**Important:** AS Assembler uses **8080 syntax** (Intel's later, more common mnemonics) rather than the original 8008 mnemonics. This means:
 - Use `MOV` instead of `Lrr` (register-to-register moves)
 - Use `MVI` instead of `LrI` (load immediate)
 - Use `ADD`, `SUB`, etc. instead of `ADr`, `SUr`
 
-This choice was made because 8080 syntax is more familiar and naken_asm already supports it.
+This choice was made because 8080 syntax is more familiar and widely supported.
 
 **Example program:**
 
@@ -339,7 +339,7 @@ make sim TEST=s8008_tb
 
 ### Assembly Syntax Reference
 
-Common instructions in 8080 syntax (used by naken_asm):
+Common instructions in 8080 syntax (used by AS Assembler):
 
 | Instruction | Description | Example |
 |-------------|-------------|---------|
@@ -992,8 +992,8 @@ This project evolved through several architectural approaches, each teaching val
 - [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build)
 
 ### Assembly Tools
-- [naken_asm](https://github.com/mikeakohn/naken_asm) - Multi-architecture assembler by Michael Kohn
-  - Supports Intel 8008 with 8080 syntax (use `.8008` directive)
+- [AS Assembler](http://john.ccac.rwth-aachen.de:8000/as/) - Macro Assembler AS by Alfred Arnold
+  - Supports Intel 8008 with 8080 syntax
   - More familiar mnemonics than original 8008 assembly language
   - Example: `MOV A,B` instead of `LAB`, `MVI A,5` instead of `LAI 5`
 
@@ -1090,8 +1090,8 @@ make all              # Launch interactive monitor
 - **OSS CAD Suite:** Install per instructions at https://github.com/YosysHQ/oss-cad-suite-build
 - **GHDL (Homebrew):** `brew install --cask ghdl` (only needed for interactive monitor)
 - **Python 3:** For hex-to-mem conversion utility
-- **naken_asm:** Multi-architecture assembler by Michael Kohn
-  - Repository: https://github.com/mikeakohn/naken_asm
+- **AS Assembler:** Macro Assembler AS by Alfred Arnold
+  - Website: http://john.ccac.rwth-aachen.de:8000/as/
   - Required for: Assembling custom 8008 programs
   - Supports 8080 syntax (more familiar than original 8008 mnemonics)
 

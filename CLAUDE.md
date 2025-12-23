@@ -147,7 +147,7 @@ intel-8008-vhdl/
 - Platform tested: macOS Sequoia 15.6.1
 
 ### Assembly Syntax (Future Use)
-When we get to testing full programs, this project uses **8080 syntax** via naken_asm:
+When we get to testing full programs, this project uses **8080 syntax** via AS Assembler:
 - Use `MOV` instead of `Lrr`
 - Use `MVI` instead of `LrI`
 - Use `ADD`, `SUB` etc. instead of `ADr`, `SUr`

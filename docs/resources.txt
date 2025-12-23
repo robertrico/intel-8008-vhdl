@@ -13,8 +13,8 @@ https://www.8008chron.com/
 Scott Baker's Mini-08 single board computer project using the 8008 processor
 https://www.smbaker.com/the-mini-08-8008-single-board-computer
 
-Naken ASM assembler which supports Intel 8008 assembly (among many other processors)
-https://www.mikekohn.net/micro/naken_asm.php
+AS Assembler (Macro Assembler AS) by Alfred Arnold - supports Intel 8008 with 8080 syntax
+http://john.ccac.rwth-aachen.de:8000/as/
 
 Wikipedia article covering the Intel 8008's history, specifications, and technical details
 https://en.wikipedia.org/wiki/Intel_8008
