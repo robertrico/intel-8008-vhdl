@@ -279,6 +279,7 @@ architecture structural of b8008 is
             state_t2              : in std_logic;
             current_cycle         : in integer range 1 to 3;
             instr_is_mem_indirect : in std_logic;
+            instr_needs_address   : in std_logic;
             ahl_select            : out std_logic_vector(2 downto 0);
             ahl_active            : out std_logic
         );
@@ -423,6 +424,7 @@ architecture structural of b8008 is
             instr_uses_temp_regs  : in std_logic;
             instr_needs_immediate : in std_logic;
             instr_writes_reg      : in std_logic;
+            instr_is_write        : in std_logic;
             current_cycle         : in integer range 1 to 3;
             interrupt             : in std_logic;
             load_reg_a            : out std_logic;
@@ -718,10 +720,12 @@ begin
     final_scratchpad_addr <= ahl_scratchpad_addr when ahl_active = '1' else scratchpad_select;
 
     -- Data bus driver: T1/T2 output address, T3+ tri-state for io_buffer
-    -- During cycle 2 T1/T2 of memory indirect operations, io_buffer drives data_bus from internal_bus (H/L regs)
+    -- During H:L address cycles, io_buffer drives data_bus from internal_bus (H/L regs)
+    -- - LrM/LMr (2-cycle): H:L at cycle 2 (instr_needs_address = '0')
+    -- - LMI (3-cycle): H:L at cycle 3 (instr_needs_address = '1')
     -- Otherwise during T1/T2, output selected_address (PC or Stack)
-    data_bus <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (current_cycle = 2 and instr_is_mem_indirect = '1')) else
-                (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (current_cycle = 2 and instr_is_mem_indirect = '1')) else
+    data_bus <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (ahl_active = '1')) else
+                (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (ahl_active = '1')) else
                 (others => 'Z');
 
     -- Debug outputs
@@ -952,6 +956,7 @@ begin
             state_t2              => state_t2,
             current_cycle         => current_cycle,
             instr_is_mem_indirect => instr_is_mem_indirect,
+            instr_needs_address   => instr_needs_address,
             ahl_select            => ahl_scratchpad_addr,
             ahl_active            => ahl_active
         );
@@ -1085,6 +1090,7 @@ begin
             instr_uses_temp_regs  => instr_uses_temp_regs,
             instr_needs_immediate => instr_needs_immediate,
             instr_writes_reg      => instr_writes_reg,
+            instr_is_write        => instr_is_write,
             current_cycle         => current_cycle,
             interrupt             => interrupt_pending,
             load_reg_a            => load_reg_a,

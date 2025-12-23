@@ -35,6 +35,7 @@ entity ahl_pointer is
 
         -- Instruction type
         instr_is_mem_indirect : in std_logic;  -- '1' when SSS or DDD = "111" (M)
+        instr_needs_address   : in std_logic;  -- '1' for 3-cycle instructions (LMI uses H:L at cycle 3)
 
         -- Outputs to scratchpad address multiplexer
         ahl_select    : out std_logic_vector(2 downto 0);  -- Scratchpad address
@@ -56,15 +57,26 @@ architecture rtl of ahl_pointer is
 begin
 
     -- Combinational logic for scratchpad address selection
-    process(state_t1, state_t2, current_cycle, instr_is_mem_indirect)
+    process(state_t1, state_t2, current_cycle, instr_is_mem_indirect, instr_needs_address)
+        -- Which cycle uses H:L for memory address?
+        -- - LrM/LMr (2-cycle): cycle 2 uses H:L (instr_needs_address = '0')
+        -- - LMI (3-cycle): cycle 3 uses H:L (instr_needs_address = '1')
+        variable hl_cycle : integer range 2 to 3;
     begin
         -- Defaults: inactive, don't override SSS/DDD
         ahl_select <= (others => '0');
         ahl_active <= '0';
 
-        -- During cycle 2 of memory indirect operations:
+        -- Determine which cycle should use H:L address
+        if instr_needs_address = '1' then
+            hl_cycle := 3;  -- LMI: H:L at cycle 3
+        else
+            hl_cycle := 2;  -- LrM/LMr: H:L at cycle 2
+        end if;
+
+        -- During the appropriate cycle of memory indirect operations:
         -- Override scratchpad selection to read H and L for address output
-        if current_cycle = 2 and instr_is_mem_indirect = '1' then
+        if current_cycle = hl_cycle and instr_is_mem_indirect = '1' then
             if state_t1 = '1' then
                 -- T1: Select L register to output lower address byte
                 ahl_select <= ADDR_L;

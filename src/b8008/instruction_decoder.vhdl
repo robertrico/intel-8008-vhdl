@@ -201,9 +201,14 @@ begin
                         -- 00 DDD 110 - LrI (load register immediate) - 2 cycles
                         -- 00 111 110 - LMI (load memory immediate) - 3 cycles
                         if op_543 = "111" then
-                            -- LMI - needs 3 cycles, writes to memory
-                            instr_needs_address <= '1';
-                            instr_is_write <= '1';
+                            -- LMI (MVI M) - needs 3 cycles, writes to memory
+                            -- Cycle 1: Fetch opcode (PCI)
+                            -- Cycle 2: Fetch immediate data (PCR) - loads into Reg.b
+                            -- Cycle 3: Write Reg.b to H:L address (PCW)
+                            instr_needs_address <= '1';     -- 3-cycle instruction
+                            instr_needs_immediate <= '1';   -- Cycle 2 fetches immediate to Reg.b
+                            instr_is_write <= '1';          -- Cycle 3 is memory write
+                            instr_is_mem_indirect <= '1';   -- Cycle 3 uses H:L address
                         else
                             -- LrI (MVI) - needs 2 cycles, needs T4 to write register
                             instr_needs_immediate <= '1';

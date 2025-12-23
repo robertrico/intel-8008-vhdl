@@ -162,10 +162,12 @@ architecture rtl of memory_io_control is
     -- Track when PC was loaded (JMP/CALL/RET/RST) to prevent increment at next T1
     signal pc_was_loaded : std_logic := '0';
 
-    -- Track when entering cycle 2+ of memory-indirect to suppress PC increment
-    -- This flag is set at T3 of cycle 1 when we know we're entering cycle 2 of mem-indirect
-    -- and cleared at T2 of cycle 2 (after T1 increment was suppressed)
-    signal in_mem_indirect_cycle2 : std_logic := '0';
+    -- Track when entering a cycle that uses H:L address (to suppress PC increment at next T1)
+    -- This flag is SET at T5 of the PREVIOUS cycle and CLEARED at T2 of the current cycle.
+    -- This ensures the flag is stable when T1 arrives (avoiding delta cycle races).
+    -- - LrM/LMr: Set at T5 of cycle 1, suppress PC inc at T1 of cycle 2
+    -- - LMI: Set at T5 of cycle 2, suppress PC inc at T1 of cycle 3
+    signal suppress_pc_inc_next_cycle : std_logic := '0';
 
 begin
 
@@ -182,7 +184,7 @@ begin
             prev_state_t4 <= '0';
             prev_state_t5 <= '0';
             pc_was_loaded <= '0';
-            in_mem_indirect_cycle2 <= '0';
+            suppress_pc_inc_next_cycle <= '0';
         elsif rising_edge(phi1) then
             -- Update previous state values for edge detection
             prev_state_t2 <= state_t2;
@@ -190,26 +192,40 @@ begin
             prev_state_t4 <= state_t4;
             prev_state_t5 <= state_t5;
 
-            -- Track when PC is loaded during T5 (JMP/CALL/RET/RST)
-            -- Set flag when PC is loaded, clear it after T1 completes (at T2)
-            -- Set mem-indirect flag at T5 of cycle 1 (detected via prev_state_t5)
-            -- At T5, instruction is fully decoded and we know if it's mem-indirect.
-            -- IMPORTANT: Don't set when advance_state is high - that means previous
-            -- instruction just finished and decoder still shows OLD values.
-            -- This flag will be visible at T1 of cycle 2 to suppress PC increment.
-            if prev_state_t5 = '1' then
-                if current_cycle = 1 and instr_is_mem_indirect = '1' and advance_state = '0' then
-                    in_mem_indirect_cycle2 <= '1';
-                    report "MEM_IO: Setting in_mem_indirect_cycle2 flag (at T1 of cycle 2)";
+            -- Set suppress_pc_inc_next_cycle at T5 when entering a cycle that uses H:L
+            -- This flag is checked at the NEXT T1 to suppress PC increment
+            if prev_state_t5 = '1' and advance_state = '0' then
+                report "MEM_IO: At T5 edge, current_cycle=" & integer'image(current_cycle) &
+                       " instr_is_mem_indirect=" & std_logic'image(instr_is_mem_indirect) &
+                       " instr_needs_address=" & std_logic'image(instr_needs_address);
+                -- At end of T5, check if next cycle uses H:L address
+                -- LrM/LMr: cycle 1 T5, about to enter cycle 2 (uses H:L)
+                -- LMI: cycle 2 T5, about to enter cycle 3 (uses H:L)
+                if instr_is_mem_indirect = '1' then
+                    if current_cycle = 1 and instr_needs_address = '0' then
+                        -- LrM/LMr: cycle 2 will use H:L
+                        suppress_pc_inc_next_cycle <= '1';
+                        report "MEM_IO: Setting suppress_pc_inc_next_cycle for LrM/LMr cycle 2";
+                    elsif current_cycle = 2 and instr_needs_address = '1' then
+                        -- LMI: cycle 3 will use H:L
+                        suppress_pc_inc_next_cycle <= '1';
+                        report "MEM_IO: Setting suppress_pc_inc_next_cycle for LMI cycle 3";
+                    end if;
                 end if;
             end if;
-            -- DON'T clear the flag at T5 of cycle 1! The flag needs to survive through T1 of cycle 2.
-            -- We clear it at T2 of cycle 2 instead (handled below with pc_was_loaded clearing).
+            -- Clear the flag at T2 (after T1 increment was suppressed)
+            if prev_state_t2 = '1' and suppress_pc_inc_next_cycle = '1' then
+                suppress_pc_inc_next_cycle <= '0';
+                report "MEM_IO: Clearing suppress_pc_inc_next_cycle";
+            end if;
+
             -- Use prev_state_t3 to detect T3 from the PREVIOUS phi1 cycle
             if prev_state_t3 = '1' then
                 -- Set pc_was_loaded flag at T3 of cycle 3 when PC will be loaded at T5
                 -- This is set EARLY to avoid race conditions with T1 increment
-                if current_cycle = 3 and instr_needs_address = '1' then
+                -- Only for JMP/CALL (instr_needs_address='1' AND NOT LMI)
+                -- LMI has instr_needs_address='1' but is a write operation - PC is not loaded
+                if current_cycle = 3 and instr_needs_address = '1' and instr_is_write = '0' then
                     if eval_condition = '0' or condition_met = '1' then
                         pc_was_loaded <= '1';
                         report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 3 (PC will be loaded at T5)";
@@ -228,11 +244,6 @@ begin
                     pc_was_loaded <= '0';
                     report "MEM_IO: Clearing pc_was_loaded flag (T2 - after T1 increment suppressed)";
                 end if;
-                -- Clear mem-indirect flag at T2 of cycle 2 (after T1 increment was suppressed)
-                if in_mem_indirect_cycle2 = '1' then
-                    in_mem_indirect_cycle2 <= '0';
-                    report "MEM_IO: Clearing in_mem_indirect_cycle2 flag (T2 - after T1 increment suppressed)";
-                end if;
             end if;
         end if;
     end process;
@@ -245,7 +256,7 @@ begin
             instr_needs_immediate, instr_needs_address,
             instr_sss_field, instr_ddd_field, instr_is_alu,
             instr_is_call, instr_is_ret, instr_is_rst,
-            instr_writes_reg, instr_reads_reg, pc_was_loaded, in_mem_indirect_cycle2)
+            instr_writes_reg, instr_reads_reg, pc_was_loaded, suppress_pc_inc_next_cycle)
     begin
         -- Defaults: all outputs inactive
         ir_load               <= '0';
@@ -295,26 +306,21 @@ begin
             -- For address instructions (JMP/CALL), PC increments in cycles 2 and 3 to fetch address bytes
             -- For immediate instructions (LrI, ALU I, LMI), PC increments in cycle 2 to fetch data byte
             -- ALSO NOT when PC was just loaded by JMP/CALL/RET/RST (pc_was_loaded flag set)
-            -- PC increment logic:
-            -- - Cycle 1: Always increment (fetching opcode)
-            -- - Cycle 2 of address instructions (JMP/CALL): Increment (fetching low address byte)
-            -- - Cycle 3 of address instructions: Increment (fetching high address byte)
-            -- - Cycle 2 of immediate instructions (LrI, ALU I): Increment (fetching immediate)
-            -- - Cycle 2 of mem-indirect (LrM, LMr): DO NOT increment (H:L is address, not PC)
+            -- PC increment logic
+            -- PC increments when fetching from external memory (via PC address)
+            -- PC does NOT increment when using H:L address for memory operations
             --
-            -- The key insight: if instr_is_mem_indirect='1' and we're NOT in cycle 1,
-            -- then we're in cycle 2 using H:L for the address, so don't increment PC.
-            -- We use instr_is_mem_indirect combined with instr_needs_immediate to distinguish:
-            -- - instr_is_mem_indirect='1' AND instr_needs_immediate='0' -> LrM/LMr (no PC inc in cycle 2)
-            -- - instr_needs_immediate='1' AND instr_is_mem_indirect='0' -> LrI etc (PC inc in cycle 2)
-            -- CRITICAL: Use in_mem_indirect_cycle2 flag to suppress PC increment during cycle 2
-            -- of memory-indirect instructions. The flag is set at T5 of cycle 1 and cleared at T2 of cycle 2.
-            -- This avoids the timing race with current_cycle (which updates at T1 rising edge).
-            if state_t1 = '1' and state_half = '0' and state_t1i = '0' and pc_was_loaded = '0' and
-               in_mem_indirect_cycle2 = '0' and
-               (current_cycle = 1 or
-                instr_needs_address = '1' or
-                (instr_needs_immediate = '1' and instr_is_mem_indirect = '0')) then
+            -- The suppress_pc_inc_next_cycle flag is set at T5 of the previous cycle
+            -- when we know the next cycle will use H:L address. This avoids delta
+            -- cycle race conditions with current_cycle.
+            --
+            -- Increment PC at T1 for:
+            -- - Cycle 1: Always (fetching opcode)
+            -- - Cycle 2: Unless suppress_pc_inc_next_cycle (LrM/LMr uses H:L)
+            -- - Cycle 3: Unless suppress_pc_inc_next_cycle (LMI uses H:L)
+            --
+            if state_t1 = '1' and state_half = '0' and state_t1i = '0' and
+               pc_was_loaded = '0' and suppress_pc_inc_next_cycle = '0' then
                 pc_increment_lower <= '1';
             end if;
 
@@ -335,8 +341,9 @@ begin
             -- Load PC during T4/T5 for various instructions
             -- JMP/CALL: T5 of cycle 3 (only if unconditional OR condition met)
             -- RET/RST: T5 of cycle 1
+            -- NOTE: LMI also has instr_needs_address='1' but is a write operation - PC should NOT be loaded
             if state_t5 = '1' then
-                if current_cycle = 3 and instr_needs_address = '1' then
+                if current_cycle = 3 and instr_needs_address = '1' and instr_is_write = '0' then
                     -- JMP/CALL: Load PC from Reg.a+Reg.b during T5 of cycle 3
                     -- Only load if unconditional OR condition is met
                     if eval_condition = '0' or condition_met = '1' then
@@ -367,9 +374,13 @@ begin
             -- For RET: use stack (will implement when we decode instruction)
             stack_addr_select <= '0';  -- Default to PC
 
-            -- Special case: During cycle 2 T1/T2 of memory indirect operations,
+            -- Special case: During cycle 2/3 T1/T2 of memory indirect operations,
             -- output H/L registers to data bus for external address latch
-            if current_cycle = 2 and instr_is_mem_indirect = '1' then
+            -- - LrM/LMr: cycle 2 uses H:L address
+            -- - LMI (MVI M): cycle 3 uses H:L address (cycle 2 uses PC for immediate)
+            if instr_is_mem_indirect = '1' and
+               ((current_cycle = 2 and instr_needs_address = '0') or   -- LrM/LMr: cycle 2
+                (current_cycle = 3 and instr_needs_address = '1')) then  -- LMI: cycle 3
                 -- Output L register during T1 (ahl_pointer selects L via final_scratchpad_addr)
                 scratchpad_read     <= '1';
                 regfile_to_bus      <= '1';  -- Register file drives internal bus
@@ -383,9 +394,11 @@ begin
             -- Cycle type encoding is handled by machine_cycle_control
             -- D[7:6] driven from cycle_type signal
 
-            -- Special case: During cycle 2 T1/T2 of memory indirect operations,
+            -- Special case: During cycle 2/3 T1/T2 of memory indirect operations,
             -- output H/L registers to data bus for external address latch
-            if current_cycle = 2 and instr_is_mem_indirect = '1' then
+            if instr_is_mem_indirect = '1' and
+               ((current_cycle = 2 and instr_needs_address = '0') or   -- LrM/LMr: cycle 2
+                (current_cycle = 3 and instr_needs_address = '1')) then  -- LMI: cycle 3
                 -- Output H register during T2 (ahl_pointer selects H via final_scratchpad_addr)
                 scratchpad_read     <= '1';
                 regfile_to_bus      <= '1';  -- Register file drives internal bus
@@ -440,10 +453,20 @@ begin
                     io_buffer_direction <= '1';  -- Write to external
                     memory_write        <= '1';
                     -- Note: Address selection (PC vs H:L) is handled by b8008.vhdl
-                    -- Data on internal bus comes from register file
-                    scratchpad_select <= instr_sss_field;
-                    scratchpad_read   <= '1';
-                    regfile_to_bus    <= '1';
+                    -- Data on internal bus comes from:
+                    -- - Register file (LMr) - read from SSS register
+                    -- - Reg.b (LMI) - immediate data loaded at cycle 2 T3
+                    -- For LMI (3-cycle mem write with immediate), Reg.b drives bus via register_alu_control
+                    if current_cycle = 3 and instr_needs_immediate = '1' then
+                        -- LMI: Reg.b drives bus (handled by register_alu_control output_reg_b)
+                        -- Don't enable scratchpad read - let Reg.b drive
+                        null;
+                    else
+                        -- LMr: read from register file
+                        scratchpad_select <= instr_sss_field;
+                        scratchpad_read   <= '1';
+                        regfile_to_bus    <= '1';
+                    end if;
 
                 when CYCLE_PCC =>
                     -- I/O operation (INP/OUT)
@@ -580,7 +603,8 @@ begin
             end if;
 
             -- JMP/CALL: Load PC from temp registers during T5 of cycle 3
-            if current_cycle = 3 and instr_needs_address = '1' then
+            -- NOTE: LMI also has instr_needs_address='1' but is a write operation - PC should NOT be loaded
+            if current_cycle = 3 and instr_needs_address = '1' and instr_is_write = '0' then
                 pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
                 if instr_is_call = '1' then
                     report "MEM_IO: Setting pc_load_from_regs at T5 cycle 3 for CALL";

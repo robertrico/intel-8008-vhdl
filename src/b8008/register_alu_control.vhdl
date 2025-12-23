@@ -34,6 +34,7 @@ entity register_alu_control is
         instr_uses_temp_regs  : in std_logic;  -- Uses Reg.a/Reg.b (register ALU ops, JMP, CALL)
         instr_needs_immediate : in std_logic;  -- Needs immediate byte (for immediate ALU ops, MVI)
         instr_writes_reg      : in std_logic;  -- Instruction writes to register (for MVI output)
+        instr_is_write        : in std_logic;  -- Memory write operation (LMr, LMI)
 
         -- Machine cycle control input
         current_cycle : in integer range 1 to 3;
@@ -165,8 +166,12 @@ begin
     -- the immediate byte at T4 cycle 2, and that goes directly to the register file.
     --
     output_reg_a  <= '0';  -- Reg.a never needs to drive bus
+    -- Reg.b drives bus for:
+    -- 1. MOV register-to-register at T5 cycle 1: Reg.b (loaded at T4 from SSS) writes to DDD
+    -- 2. LMI (MVI M) at T3 cycle 3: Reg.b (loaded at cycle 2 T3 with immediate) writes to memory
     output_reg_b  <= '1' when (state_is_t5 = '1' and current_cycle = 1 and instr_writes_reg = '1' and instr_uses_temp_regs = '1' and
                                instr_is_alu_op = '0' and instr_needs_immediate = '0') else
+                     '1' when (state_is_t3 = '1' and current_cycle = 3 and instr_is_write = '1' and instr_needs_immediate = '1') else
                      '0';
 
     -- ALU result drives bus during T5 for ALU operations

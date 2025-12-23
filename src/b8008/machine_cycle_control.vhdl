@@ -118,10 +118,14 @@ begin
                 -- I/O operation: PCC
                 cycle_type_latch <= "10";
                 report "MCycle: T2 cycle_type=PCC (I/O)";
-            elsif instr_is_write = '1' then
+            elsif instr_is_write = '1' and
+                  ((cycle_count = 2 and instr_needs_address = '0') or  -- LMr: cycle 2 is write
+                   (cycle_count = 3 and instr_needs_address = '1')) then  -- LMI: cycle 3 is write
                 -- Memory write: PCW
+                -- LMr (MOV M,r): 2-cycle, cycle 2 is write
+                -- LMI (MVI M): 3-cycle, cycle 3 is write (cycle 2 is read for immediate)
                 cycle_type_latch <= "11";
-                report "MCycle: T2 cycle_type=PCW (write)";
+                report "MCycle: T2 cycle_type=PCW (write) cycle=" & integer'image(cycle_count);
             else
                 -- Memory read: PCR
                 cycle_type_latch <= "01";
