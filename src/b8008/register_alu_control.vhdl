@@ -131,11 +131,19 @@ begin
     -- ALU enable: T5 during ALU operations
     -- ALU is combinational, so enable it for the entire T5 state
     -- Result will be stable and ready when register samples at phi2 rising edge
-    alu_enable <= state_is_t5 and instr_is_alu_op;
+    -- IMPORTANT: For 2-cycle ALU ops (immediate/memory), ALU runs in cycle 2 T5, NOT cycle 1 T5
+    -- For 1-cycle ALU ops (register), ALU runs in cycle 1 T5
+    alu_enable <= '1' when (state_is_t5 = '1' and instr_is_alu_op = '1' and
+                            ((current_cycle = 1 and instr_needs_immediate = '0') or   -- 1-cycle: reg ALU
+                             (current_cycle = 2 and instr_needs_immediate = '1')))    -- 2-cycle: imm/mem ALU
+                  else '0';
 
     -- Update flags: Same timing as ALU enable (flags updated after ALU operation)
     -- NOTE: Don't gate with phi2 here - the condition_flags module latches on phi2 rising edge
-    update_flags <= state_is_t5 and instr_is_alu_op;
+    update_flags <= '1' when (state_is_t5 = '1' and instr_is_alu_op = '1' and
+                              ((current_cycle = 1 and instr_needs_immediate = '0') or   -- 1-cycle: reg ALU
+                               (current_cycle = 2 and instr_needs_immediate = '1')))    -- 2-cycle: imm/mem ALU
+                    else '0';
 
     -- Debug: Report when we're trying to update flags
     process(phi2)
