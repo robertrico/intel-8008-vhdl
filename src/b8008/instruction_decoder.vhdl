@@ -105,7 +105,8 @@ begin
         -- Detect memory indirect operations (M register access)
         -- This happens when SSS or DDD field = "111" for move (11) or ALU register (10) ops
         -- NOT for ALU immediate (00PPP100) where PPP might be "111"
-        if (op_210 = "111" or op_543 = "111") and op_76 /= "00" then
+        -- NOT for jump/call/io (01XXXXXX) where XXX might be "111"
+        if (op_210 = "111" or op_543 = "111") and (op_76 = "10" or op_76 = "11") then
             instr_is_mem_indirect <= '1';
         end if;
 

@@ -224,8 +224,9 @@ begin
     flag_sign <= result_internal(7) when enable = '1' else '0';
 
     -- Parity flag: even parity (1 if even number of 1's)
-    flag_parity <= (result_internal(0) xor result_internal(1) xor result_internal(2) xor result_internal(3) xor
-                    result_internal(4) xor result_internal(5) xor result_internal(6) xor result_internal(7))
+    -- XOR of all bits gives 0 for even parity, 1 for odd parity, so we invert
+    flag_parity <= not (result_internal(0) xor result_internal(1) xor result_internal(2) xor result_internal(3) xor
+                        result_internal(4) xor result_internal(5) xor result_internal(6) xor result_internal(7))
                    when enable = '1' else '0';
 
 end architecture rtl;
