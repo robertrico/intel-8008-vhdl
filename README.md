@@ -1,38 +1,9 @@
-# Intel 8008 VHDL Implementation - v2.x (Not Working)
+# Intel 8008 VHDL Implementation
 
-**⚠️ PROJECT STATUS: INCOMPLETE - NOT CURRENTLY FUNCTIONAL ⚠️**
+This is a **block-based VHDL implementation** of the Intel 8008 microprocessor (the world's first 8-bit microprocessor from 1972). The project uses a modular architecture where each component (Program Counter, ALU, Register File, etc.) is a separate, simple module with explicit interfaces.
 
-This is the **third major iteration** of implementing the Intel 8008 microprocessor in VHDL. After successfully running a subset of instructions (search algorithm from 8008 datasheet), the project has encountered architectural degradation issues that prevent further progress.
-
-[![Status](https://img.shields.io/badge/status-v2.x%20not%20working-red)]()
+[![Status](https://img.shields.io/badge/status-active-green)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE.txt)
-
-## Critical Issues (Why This Version Doesn't Work)
-
-**Block Diagram Philosophy Degradation:**
-- **Initial Design (b8008):** Modular, "dumb" blocks following Intel 8008 block diagram architecture
-  - Program Counter: Simple increment/load/hold logic (~66 lines)
-  - Each module does ONE job with explicit control signals
-  - No instruction awareness in individual modules
-
-- **Current State:** Modules becoming "instruction aware"
-  - Logic creep: Conditional guards appearing (`if is_jmp and not in_interrupt`)
-  - Instruction knowledge leaking into modules that should be generic
-  - Increasing difficulty building and running regression tests
-  - Moving away from clean block-based design
-
-**What Worked:**
-- Successfully ran `search_as.asm` program (code from 8008 datasheet)
-- Subset of instructions validated in simulation
-- Block diagram approach proved sound for initial implementation
-
-**Why Development Stopped:**
-- As instruction set expanded, modules started coupling
-- Behavioral logic replacing explicit control signals
-- Test infrastructure becoming unreliable
-- Design philosophy compromised beyond recovery
-
-> **Developer Note:** This has been a difficult project. Rather than continue down a degraded architectural path, I'm stepping away to return when a cleaner approach presents itself. The fundamental block-based philosophy is sound, but the execution needs a fresh start. - Robert Rico, November 2025
 
 > **Platform Note:** This project has been developed and tested exclusively on **macOS Sequoia 15.6.1**. Compatibility with other operating systems has not been verified.
 
@@ -71,47 +42,23 @@ Located in: `src/components/v8008.vhdl`
   - Never reached working state
 - **Why abandoned:** Design became too convoluted, couldn't debug effectively
 
-### b8008 - v2.x (Current - Block-Based but Degraded)
-**Status:** ⚠️ Partially working, architecturally compromised
+### b8008 - v2.x (Current - Block-Based)
+**Status:** 🔧 Active development
 
 Located in: `src/b8008/`, `sim/b8008/`
 
 - **Block-diagram approach** - Modular components following Intel architecture
-- **Initial philosophy:** "Dumb modules" with explicit control signals
+- **Philosophy:** "Dumb modules" with explicit control signals
   - Program Counter: increment/load/hold only
   - ALU: operations only, no instruction knowledge
   - Register File: read/write only
   - Clean interfaces between modules
 
-- **What worked:**
+- **What's working:**
   - Successfully ran `search_as.asm` (8008 datasheet reference program)
   - Subset of instructions validated
   - Block-based architecture proved viable
   - Individual module tests passing
-
-- **What degraded:**
-  - Modules gaining instruction awareness
-  - Conditional logic creeping in: `if (is_jmp and not in_int_ack)`
-  - Control signals becoming less explicit
-  - Testing infrastructure reliability declining
-  - Build complexity increasing
-
-- **Current state:**
-  - Some modules still clean (Program Counter)
-  - Others becoming behavioral (instruction awareness)
-  - Cannot reliably run full instruction set
-  - Regression testing difficult
-
-**Why development paused:** The core philosophy of simple, modular blocks is being compromised. Rather than continue adding features while the architecture degrades, stepping away to return and refactor the instruction-aware modules back to clean "dumb module" design.
-
-## Current State
-
-**This README documents the project's evolution and current incomplete state.**
-
-- **Working version (s8008):** Code in `src/components/s8008.vhdl` - monolithic implementation with timing issues but functionally complete
-- **Current development (b8008):** Code in `src/b8008/` - block-based modular implementation that needs architectural cleanup
-
-**Path forward:** Revisit instruction-aware modules in b8008 and refactor them back to "dumb module" philosophy. The architecture is sound; it needs disciplined cleanup of the modules that have accumulated instruction awareness.
 
 ---
 
@@ -1014,33 +961,17 @@ This project evolved through several architectural approaches, each teaching val
 - Over-utilized behavioral constructs
 - Never reached working state
 
-### Approach 3: b8008 (Block-based - Partially Successful)
+### Approach 3: b8008 (Block-based - Current)
 **Philosophy:** "Dumb modules" following Intel block diagram
 
 **Pros:**
-- Clean architecture initially
+- Clean architecture
 - Individual modules simple and testable
 - Matches Intel 8008 block diagram
 - Subset of instructions validated
 - Educational value - shows how 8008 actually worked
 
-**Cons:**
-- As instruction set grew, modules coupled
-- Instruction awareness leaked into "dumb" blocks
-- Control signal complexity increased
-- Lost architectural purity
-
-**Key Lesson:** Block-based design is sound, but requires **strict discipline** to prevent logic creep. Any conditional based on instruction type in a low-level module (PC, ALU, registers) is a red flag.
-
-### Path Forward for b8008
-**Approach:** Refactor existing b8008 modules back to clean architecture:
-1. **Audit each module** - Identify which ones have instruction awareness
-2. **Refactor instruction-aware modules** - Move intelligence to control unit
-3. **Restore explicit control signals** - Replace boolean logic with simple signal checks
-4. **Fix one module at a time** - Maintain working tests during cleanup
-5. **Re-establish regression testing** - Ensure each refactor maintains functionality
-
-The block-based philosophy is correct. The modules that have drifted need to be brought back in line with the original "dumb module" principle. This is cleanup work, not a rewrite.
+**Key Principle:** Block-based design requires **strict discipline** to prevent logic creep. Any conditional based on instruction type in a low-level module (PC, ALU, registers) is a red flag - keep modules "dumb" and let the control unit handle instruction awareness.
 
 ---
 
@@ -1130,17 +1061,16 @@ When contributing:
 | FPGA Synthesis | ✅ Verified (ECP5) |
 | Hardware Deployment | ✅ Working (blinky, monitor, interrupts) |
 
-### b8008 (v2.x - Current Incomplete Version)
+### b8008 (v2.x - Current Active Version)
 | Component | Status |
 |-----------|--------|
-| Block-based Architecture | ⚠️ Designed but degrading |
+| Block-based Architecture | 🔧 Active development |
 | Program Counter | ✅ Complete and clean |
-| Instruction Decoder | ⚠️ Becoming instruction-aware |
-| Register File | ⚠️ Partial implementation |
-| ALU | 🔜 Planned integration |
-| Full Instruction Set | ❌ Subset only (search program works) |
-| Regression Testing | ❌ Unreliable |
-| Overall Status | ❌ **Not Working - Paused** |
+| Instruction Decoder | 🔧 In progress |
+| Register File | 🔧 In progress |
+| ALU | 🔧 In progress |
+| Full Instruction Set | 🔧 Subset working (search program runs) |
+| Regression Testing | 🔧 In progress |
 
 ---
 
