@@ -166,14 +166,13 @@ make test-b8008-top PROG=my_test
 - [docs/instruction_coverage.md](docs/instruction_coverage.md) - Opcode test coverage matrix
 - [docs/INTERRUPTS.md](docs/INTERRUPTS.md) - Interrupt system details
 - [docs/LEGACY.md](docs/LEGACY.md) - Previous implementations (s8008, v8008)
-- [CLAUDE.md](CLAUDE.md) - Development guidelines
 
 ## Legacy Note
 
 This is the third implementation iteration:
-- **s8008** - Worked on FPGA but had timing issues
-- **v8008** - Abandoned (too complex)
 - **b8008** - Current, block-based design
+- **v8008** - Abandoned (too complex)
+- **s8008** - Worked on FPGA but had timing issues
 
 See [docs/LEGACY.md](docs/LEGACY.md) for details on previous versions.
 
