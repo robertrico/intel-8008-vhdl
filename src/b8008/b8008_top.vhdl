@@ -89,7 +89,8 @@ architecture structural of b8008_top is
             debug_pc            : out std_logic_vector(13 downto 0);
             debug_ir            : out std_logic_vector(7 downto 0);
             debug_needs_address : out std_logic;
-            debug_int_pending   : out std_logic
+            debug_int_pending   : out std_logic;
+            cycle_type          : out std_logic_vector(1 downto 0)
         );
     end component;
 
@@ -136,6 +137,7 @@ architecture structural of b8008_top is
     signal rom_selected : std_logic;
     signal ram_selected : std_logic;
     signal is_write     : std_logic;
+    signal cycle_type   : std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
 
     -- Bootstrap flag: jam RST 0 only during first T1I after reset
     signal bootstrap_done : std_logic := '0';
@@ -242,7 +244,8 @@ begin
             debug_pc            => debug_pc,
             debug_ir            => debug_ir,
             debug_needs_address => debug_needs_address,
-            debug_int_pending   => debug_int_pending
+            debug_int_pending   => debug_int_pending,
+            cycle_type          => cycle_type
         );
 
     -- ========================================================================
@@ -294,11 +297,15 @@ begin
     -- DATA BUS MULTIPLEXING
     -- ========================================================================
 
-    -- For now, assume all accesses are reads (RAM won't write)
-    -- TODO: Properly decode read/write from S0/S1/S2 state signals
-    -- PCR (memory read) vs PCW (memory write) encoded in D7:D6 during T2
-    is_write <= '0';  -- Simplified: treat all as reads for now
-    ram_rw_n <= '1';  -- Read only for now
+    -- Decode cycle type for read/write control
+    -- cycle_type: 00=PCI, 01=PCR, 10=PCC, 11=PCW
+    -- PCW (cycle_type = "11") indicates memory write
+    is_write <= '1' when cycle_type = "11" else '0';
+
+    -- RAM RW_N: active low write enable
+    -- Write (RW_N=0) during T3/T4/T5 of PCW cycles when RAM is selected
+    ram_rw_n <= '0' when (is_write = '1' and ram_selected = '1' and
+                         (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else '1';
 
     -- RAM always receives data from bus (but only writes when RW_N=0)
     ram_data_in <= data_bus;

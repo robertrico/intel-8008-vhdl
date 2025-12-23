@@ -153,12 +153,19 @@ architecture rtl of memory_io_control is
 
     -- Edge detection for generating single-cycle pulses
     signal prev_state_t2 : std_logic := '0';
+    signal prev_state_t3 : std_logic := '0';
+    signal prev_state_t4 : std_logic := '0';
     signal prev_state_t5 : std_logic := '0';
     signal state_t2_edge : std_logic;
     signal state_t5_edge : std_logic;
 
     -- Track when PC was loaded (JMP/CALL/RET/RST) to prevent increment at next T1
     signal pc_was_loaded : std_logic := '0';
+
+    -- Track when entering cycle 2+ of memory-indirect to suppress PC increment
+    -- This flag is set at T3 of cycle 1 when we know we're entering cycle 2 of mem-indirect
+    -- and cleared at T2 of cycle 2 (after T1 increment was suppressed)
+    signal in_mem_indirect_cycle2 : std_logic := '0';
 
 begin
 
@@ -171,29 +178,60 @@ begin
     begin
         if reset = '1' then
             prev_state_t2 <= '0';
+            prev_state_t3 <= '0';
+            prev_state_t4 <= '0';
             prev_state_t5 <= '0';
             pc_was_loaded <= '0';
+            in_mem_indirect_cycle2 <= '0';
         elsif rising_edge(phi1) then
             -- Update previous state values for edge detection
             prev_state_t2 <= state_t2;
+            prev_state_t3 <= state_t3;
+            prev_state_t4 <= state_t4;
             prev_state_t5 <= state_t5;
 
             -- Track when PC is loaded during T5 (JMP/CALL/RET/RST)
             -- Set flag when PC is loaded, clear it after T1 completes (at T2)
-            if state_t5 = '1' then
-                -- PC loaded for JMP/CALL (cycle 3), RET/RST (cycle 1)
-                if (current_cycle = 3 and instr_needs_address = '1') or instr_is_ret = '1' or instr_is_rst = '1' then
-                    if (instr_is_ret = '1' or instr_is_rst = '1') or
-                       (eval_condition = '0' or condition_met = '1') then
+            -- Set mem-indirect flag at T5 of cycle 1 (detected via prev_state_t5)
+            -- At T5, instruction is fully decoded and we know if it's mem-indirect.
+            -- IMPORTANT: Don't set when advance_state is high - that means previous
+            -- instruction just finished and decoder still shows OLD values.
+            -- This flag will be visible at T1 of cycle 2 to suppress PC increment.
+            if prev_state_t5 = '1' then
+                if current_cycle = 1 and instr_is_mem_indirect = '1' and advance_state = '0' then
+                    in_mem_indirect_cycle2 <= '1';
+                    report "MEM_IO: Setting in_mem_indirect_cycle2 flag (at T1 of cycle 2)";
+                end if;
+            end if;
+            -- DON'T clear the flag at T5 of cycle 1! The flag needs to survive through T1 of cycle 2.
+            -- We clear it at T2 of cycle 2 instead (handled below with pc_was_loaded clearing).
+            -- Use prev_state_t3 to detect T3 from the PREVIOUS phi1 cycle
+            if prev_state_t3 = '1' then
+                -- Set pc_was_loaded flag at T3 of cycle 3 when PC will be loaded at T5
+                -- This is set EARLY to avoid race conditions with T1 increment
+                if current_cycle = 3 and instr_needs_address = '1' then
+                    if eval_condition = '0' or condition_met = '1' then
                         pc_was_loaded <= '1';
-                        report "MEM_IO: Setting pc_was_loaded flag (PC will be loaded)";
+                        report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 3 (PC will be loaded at T5)";
                     end if;
                 end if;
-            elsif state_t2 = '1' then
-                -- Clear flag at T2 (after T1 increment was suppressed)
+                -- Set pc_was_loaded for RET/RST at T3 of cycle 1
+                if current_cycle = 1 and (instr_is_ret = '1' or instr_is_rst = '1') then
+                    pc_was_loaded <= '1';
+                    report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 1 for RET/RST";
+                end if;
+            end if;
+            -- Use prev_state_t2 to detect T2 from the PREVIOUS phi1 cycle
+            if prev_state_t2 = '1' then
+                -- Clear flags at T2 (after T1 increment was suppressed)
                 if pc_was_loaded = '1' then
                     pc_was_loaded <= '0';
                     report "MEM_IO: Clearing pc_was_loaded flag (T2 - after T1 increment suppressed)";
+                end if;
+                -- Clear mem-indirect flag at T2 of cycle 2 (after T1 increment was suppressed)
+                if in_mem_indirect_cycle2 = '1' then
+                    in_mem_indirect_cycle2 <= '0';
+                    report "MEM_IO: Clearing in_mem_indirect_cycle2 flag (T2 - after T1 increment suppressed)";
                 end if;
             end if;
         end if;
@@ -207,7 +245,7 @@ begin
             instr_needs_immediate, instr_needs_address,
             instr_sss_field, instr_ddd_field, instr_is_alu,
             instr_is_call, instr_is_ret, instr_is_rst,
-            instr_writes_reg, instr_reads_reg, pc_was_loaded)
+            instr_writes_reg, instr_reads_reg, pc_was_loaded, in_mem_indirect_cycle2)
     begin
         -- Defaults: all outputs inactive
         ir_load               <= '0';
@@ -252,12 +290,30 @@ begin
             -- the address latched by external logic is PC (the next instruction to fetch).
             -- Original code incremented at T1 second half, causing fetch from PC-1.
             -- BUT NOT during T1I - PC is not advanced during interrupt acknowledge
-            -- ALSO NOT during cycle 2+ of memory-indirect instructions (PC stays at next instruction)
+            -- ALSO NOT during cycle 2 of memory-indirect instructions (PC stays at next instruction)
+            --   - Use registered flag in_mem_indirect_cycle2 to avoid race condition with current_cycle
             -- For address instructions (JMP/CALL), PC increments in cycles 2 and 3 to fetch address bytes
             -- For immediate instructions (LrI, ALU I, LMI), PC increments in cycle 2 to fetch data byte
             -- ALSO NOT when PC was just loaded by JMP/CALL/RET/RST (pc_was_loaded flag set)
+            -- PC increment logic:
+            -- - Cycle 1: Always increment (fetching opcode)
+            -- - Cycle 2 of address instructions (JMP/CALL): Increment (fetching low address byte)
+            -- - Cycle 3 of address instructions: Increment (fetching high address byte)
+            -- - Cycle 2 of immediate instructions (LrI, ALU I): Increment (fetching immediate)
+            -- - Cycle 2 of mem-indirect (LrM, LMr): DO NOT increment (H:L is address, not PC)
+            --
+            -- The key insight: if instr_is_mem_indirect='1' and we're NOT in cycle 1,
+            -- then we're in cycle 2 using H:L for the address, so don't increment PC.
+            -- We use instr_is_mem_indirect combined with instr_needs_immediate to distinguish:
+            -- - instr_is_mem_indirect='1' AND instr_needs_immediate='0' -> LrM/LMr (no PC inc in cycle 2)
+            -- - instr_needs_immediate='1' AND instr_is_mem_indirect='0' -> LrI etc (PC inc in cycle 2)
+            -- CRITICAL: Use in_mem_indirect_cycle2 flag to suppress PC increment during cycle 2
+            -- of memory-indirect instructions. The flag is set at T5 of cycle 1 and cleared at T2 of cycle 2.
+            -- This avoids the timing race with current_cycle (which updates at T1 rising edge).
             if state_t1 = '1' and state_half = '0' and state_t1i = '0' and pc_was_loaded = '0' and
-               (current_cycle = 1 or instr_needs_address = '1' or
+               in_mem_indirect_cycle2 = '0' and
+               (current_cycle = 1 or
+                instr_needs_address = '1' or
                 (instr_needs_immediate = '1' and instr_is_mem_indirect = '0')) then
                 pc_increment_lower <= '1';
             end if;
@@ -453,8 +509,10 @@ begin
 
             elsif current_cycle = 2 then
                 -- Second cycle: data has been read in T3, now write to destination
-                if instr_writes_reg = '1' then
-                    -- Instructions like LrI, LrM, INP - write to register
+                -- NOTE: Exclude ALU immediate operations - they write at T5 after ALU computes result
+                if instr_writes_reg = '1' and instr_is_alu = '0' then
+                    -- Instructions like LrI (MVI), LrM, INP - write to register at T4
+                    -- ALU immediate ops (ADI, SUI, XRI, etc.) write at T5 instead
                     scratchpad_select <= instr_ddd_field;
                     scratchpad_write  <= '1';
                     bus_to_regfile    <= '1';  -- Bus writes to register file
@@ -490,12 +548,24 @@ begin
             -- T5: Final extended cycle processing
             -- S2=1, S1=0, S0=1
 
-            -- Single-cycle ALU operations: Write result back to register
+            -- Single-cycle ALU operations (cycle 1): Write result back to register
             if current_cycle = 1 and instr_is_alu = '1' and instr_writes_reg = '1' and instr_needs_immediate = '0' then
                 -- INR, DCR, rotate, binary ALU ops - write ALU result to destination register
                 scratchpad_select <= instr_ddd_field;  -- Destination register
                 scratchpad_write  <= '1';
                 bus_to_regfile    <= '1';  -- ALU result (on internal bus) writes to register
+                report "MEM_IO: T5 cycle 1 ALU, writing result to DDD=" & integer'image(to_integer(unsigned(instr_ddd_field)));
+            end if;
+
+            -- Two-cycle ALU immediate operations (cycle 2): Write ALU result back to A register
+            -- ADI, SUI, NDI, XRI, ORI - immediate value loaded in T3, ALU executes in T5
+            if current_cycle = 2 and instr_is_alu = '1' and instr_writes_reg = '1' and instr_needs_immediate = '1' then
+                scratchpad_select <= instr_ddd_field;  -- Destination register (A = 000)
+                scratchpad_write  <= '1';
+                bus_to_regfile    <= '1';  -- ALU result (on internal bus) writes to A register
+                report "MEM_IO: T5 cycle 2 ALU immediate, setting scratchpad_select=" &
+                       integer'image(to_integer(unsigned(instr_ddd_field))) &
+                       " scratchpad_write=1 bus_to_regfile=1";
             end if;
 
             -- MOV register-to-register: Write Reg.b to destination register

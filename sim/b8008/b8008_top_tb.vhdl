@@ -22,7 +22,7 @@ architecture testbench of b8008_top_tb is
     -- Component declaration
     component b8008_top is
         generic (
-            ROM_FILE : string := "test_programs/ram_intensive_as.mem"
+            ROM_FILE : string := "test_programs/search_as.mem"
         );
         port (
             clk_in      : in  std_logic;

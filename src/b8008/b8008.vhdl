@@ -73,7 +73,9 @@ entity b8008 is
         debug_pc              : out std_logic_vector(13 downto 0);
         debug_ir              : out std_logic_vector(7 downto 0);
         debug_needs_address   : out std_logic;
-        debug_int_pending     : out std_logic
+        debug_int_pending     : out std_logic;
+        -- Cycle type output for external memory control
+        cycle_type            : out std_logic_vector(1 downto 0)  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
     );
 end entity b8008;
 
@@ -530,7 +532,7 @@ architecture structural of b8008 is
     signal sync          : std_logic;
 
     -- Machine cycle control signals
-    signal cycle_type       : std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
+    -- Note: cycle_type is now an output port, not an internal signal
     signal current_cycle    : integer range 1 to 3;
     signal advance_state    : std_logic;
     signal instr_is_hlt_flag : std_logic;  -- Latched HLT flag from machine_cycle_control

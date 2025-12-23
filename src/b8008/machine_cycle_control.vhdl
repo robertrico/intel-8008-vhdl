@@ -72,12 +72,13 @@ architecture rtl of machine_cycle_control is
 
 begin
 
-    -- Output current cycle
-    -- CRITICAL FIX: When transitioning to new instruction (advance_latch='1' and state_t1='1'),
-    -- immediately output 1 instead of waiting for cycle_count to update.
-    -- This ensures combinational logic in memory_io_control sees the correct value.
-    current_cycle <= 1 when (state_t1 = '1' and advance_latch = '1') else
-                     cycle_count;
+    -- Output current cycle (directly from registered cycle_count)
+    -- The cycle_count is updated at the rising edge of T1, so after T1 rises,
+    -- it will have the correct value for the NEW cycle.
+    -- NOTE: Don't immediately output 1 when advance_latch is set - we need to
+    -- keep the correct cycle number during T5 processing. The advance_latch
+    -- signals that we're DONE with the cycle, not that we've started a new one.
+    current_cycle <= cycle_count;
 
     -- Determine if instruction needs additional cycles
     -- NOTE: Conditional jumps/calls ALWAYS fetch all 3 bytes (3 cycles)
