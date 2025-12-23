@@ -425,6 +425,7 @@ architecture structural of b8008 is
             instr_needs_immediate : in std_logic;
             instr_writes_reg      : in std_logic;
             instr_is_write        : in std_logic;
+            instr_is_io           : in std_logic;
             current_cycle         : in integer range 1 to 3;
             interrupt             : in std_logic;
             load_reg_a            : out std_logic;
@@ -723,9 +724,13 @@ begin
     -- During H:L address cycles, io_buffer drives data_bus from internal_bus (H/L regs)
     -- - LrM/LMr (2-cycle): H:L at cycle 2 (instr_needs_address = '0')
     -- - LMI (3-cycle): H:L at cycle 3 (instr_needs_address = '1')
+    -- During I/O cycle 2, io_buffer drives data_bus with A register (T1) or Reg.b (T2)
+    -- - Per isa.json: INP/OUT cycle 2, T1: "REG.A TO OUT", T2: "REG.b TO OUT"
     -- Otherwise during T1/T2, output selected_address (PC or Stack)
-    data_bus <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (ahl_active = '1')) else
-                (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (ahl_active = '1')) else
+    data_bus <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (ahl_active = '1') and
+                                                                      not (instr_is_io = '1' and current_cycle = 2)) else
+                (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (ahl_active = '1') and
+                                                                                      not (instr_is_io = '1' and current_cycle = 2)) else
                 (others => 'Z');
 
     -- Debug outputs
@@ -1091,6 +1096,7 @@ begin
             instr_needs_immediate => instr_needs_immediate,
             instr_writes_reg      => instr_writes_reg,
             instr_is_write        => instr_is_write,
+            instr_is_io           => instr_is_io,
             current_cycle         => current_cycle,
             interrupt             => interrupt_pending,
             load_reg_a            => load_reg_a,

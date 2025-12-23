@@ -35,6 +35,7 @@ entity register_alu_control is
         instr_needs_immediate : in std_logic;  -- Needs immediate byte (for immediate ALU ops, MVI)
         instr_writes_reg      : in std_logic;  -- Instruction writes to register (for MVI output)
         instr_is_write        : in std_logic;  -- Memory write operation (LMr, LMI)
+        instr_is_io           : in std_logic;  -- I/O operation (INP, OUT)
 
         -- Machine cycle control input
         current_cycle : in integer range 1 to 3;
@@ -99,12 +100,14 @@ begin
     --   - ALU OP I/M: C2 T5
 
     -- Load Reg.b: T3 (cycles 1-2) OR T4 (cycle 1 only, for register ALU ops and MOV)
-    -- Cycle 1 T3: opcode byte (all instructions) - NOT useful, ignore
+    -- Cycle 1 T3: opcode byte - per isa.json "FETCH INSTR. TO IR & REG.b"
+    --             Used for I/O to capture port number for output during cycle 2 T2
     -- Cycle 2 T3: immediate/address low byte (for immediate ALU ops, JMP, CALL, MVI)
     -- Cycle 3 T3: address high byte goes to Reg.a, NOT Reg.b!
     -- Cycle 1 T4: source register operand (for register ALU operations AND MOV register-to-register)
     -- NOTE: Don't gate on phi2 here - let the temp registers sample on phi2 rising edge
-    load_reg_b <= '1' when (state_is_t3 = '1' and current_cycle = 2 and (instr_uses_temp_regs = '1' or instr_needs_immediate = '1')) else
+    load_reg_b <= '1' when (state_is_t3 = '1' and current_cycle = 1) else  -- All C1 T3: opcode to Reg.b (per isa.json)
+                  '1' when (state_is_t3 = '1' and current_cycle = 2 and (instr_uses_temp_regs = '1' or instr_needs_immediate = '1')) else
                   '1' when (state_is_t4 = '1' and current_cycle = 1 and instr_uses_temp_regs = '1' and instr_needs_immediate = '0') else
                   '0';
 
@@ -162,16 +165,23 @@ begin
     -- EXCEPTION:
     -- MOV (register-to-register): Reg.b drives bus at T5 cycle 1 (per isa.json)
     --
-    -- NOTE: MVI does NOT use Reg.b to drive the bus - the io_buffer still provides
-    -- the immediate byte at T4 cycle 2, and that goes directly to the register file.
+    -- Per isa.json, Reg.b is used as intermediate latch for data transfers:
+    -- Data loads into Reg.b at T3, then transfers to destination at T5
     --
     output_reg_a  <= '0';  -- Reg.a never needs to drive bus
     -- Reg.b drives bus for:
     -- 1. MOV register-to-register at T5 cycle 1: Reg.b (loaded at T4 from SSS) writes to DDD
     -- 2. LMI (MVI M) at T3 cycle 3: Reg.b (loaded at cycle 2 T3 with immediate) writes to memory
+    -- 3. LrI (MVI), LrM, INP at T5 cycle 2: Reg.b (loaded at T3) writes to destination
+    --    Per isa.json: T3=DATA TO REG.b, T5=REG.b TO DDD (or REG.A for INP)
+    -- 4. I/O cycle 2 T2: Reg.b (contains port number from instruction) outputs to data bus
+    --    Per isa.json: INP/OUT cycle 2, T2: "REG.b TO OUT"
     output_reg_b  <= '1' when (state_is_t5 = '1' and current_cycle = 1 and instr_writes_reg = '1' and instr_uses_temp_regs = '1' and
                                instr_is_alu_op = '0' and instr_needs_immediate = '0') else
                      '1' when (state_is_t3 = '1' and current_cycle = 3 and instr_is_write = '1' and instr_needs_immediate = '1') else
+                     '1' when (state_is_t5 = '1' and current_cycle = 2 and instr_writes_reg = '1' and
+                               instr_is_alu_op = '0' and instr_needs_immediate = '1') else
+                     '1' when (state_is_t2 = '1' and current_cycle = 2 and instr_is_io = '1') else  -- I/O T2: port number out
                      '0';
 
     -- ALU result drives bus during T5 for ALU operations

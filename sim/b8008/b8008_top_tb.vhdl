@@ -48,7 +48,10 @@ architecture testbench of b8008_top_tb is
             debug_pc            : out std_logic_vector(13 downto 0);
             debug_ir            : out std_logic_vector(7 downto 0);
             debug_needs_address : out std_logic;
-            debug_int_pending   : out std_logic
+            debug_int_pending   : out std_logic;
+            debug_io_port_8     : out std_logic_vector(7 downto 0);
+            debug_io_port_9     : out std_logic_vector(7 downto 0);
+            debug_io_port_10    : out std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -74,6 +77,9 @@ architecture testbench of b8008_top_tb is
     signal debug_ir            : std_logic_vector(7 downto 0);
     signal debug_needs_address : std_logic;
     signal debug_int_pending   : std_logic;
+    signal debug_io_port_8     : std_logic_vector(7 downto 0);
+    signal debug_io_port_9     : std_logic_vector(7 downto 0);
+    signal debug_io_port_10    : std_logic_vector(7 downto 0);
 
     -- Clock generation
     constant CLK_PERIOD : time := 10 ns;  -- 100 MHz
@@ -115,7 +121,10 @@ begin
             debug_pc            => debug_pc,
             debug_ir            => debug_ir,
             debug_needs_address => debug_needs_address,
-            debug_int_pending   => debug_int_pending
+            debug_int_pending   => debug_int_pending,
+            debug_io_port_8     => debug_io_port_8,
+            debug_io_port_9     => debug_io_port_9,
+            debug_io_port_10    => debug_io_port_10
         );
 
     -- ========================================================================

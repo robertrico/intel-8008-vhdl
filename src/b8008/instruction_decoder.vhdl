@@ -236,18 +236,22 @@ begin
             when "01" =>
                 if op_210(0) = '1' then
                     -- 01 XXX XX1 - I/O instructions
-                    -- 0100 MMM 1 - INP - 2 cycles, I/O read to A
-                    -- 01RR MMM 1 - OUT - 2 cycles, I/O write from A
+                    -- 0100 MMM 1 - INP - 2 cycles (8 states), I/O read to A
+                    -- 01RR MMM 1 - OUT - 2 cycles (6 states), I/O write from A
                     instr_needs_immediate <= '1';
                     instr_is_io <= '1';
                     if op_543(2) = '0' then
-                        -- INP: writes to A
+                        -- INP: reads from I/O port, writes to A register
+                        -- Per isa.json: T3=DATA TO Reg.b, T5=REG.b TO REG.A
                         instr_writes_reg <= '1';
                         instr_ddd_field <= "000";  -- A register
+                        instr_needs_t4t5 <= '1';   -- INP needs T4/T5 (8 states)
                     else
-                        -- OUT: reads from A
+                        -- OUT: reads from A register, writes to I/O port
+                        -- Per isa.json: T1/T2=address, T3=X (data hold), T4/T5 skipped
                         instr_reads_reg <= '1';
                         instr_sss_field <= "000";  -- A register
+                        -- OUT doesn't need T4/T5 (6 states)
                     end if;
                 else
                     -- 01 XXX XX0 - Jump/Call instructions - 3 cycles

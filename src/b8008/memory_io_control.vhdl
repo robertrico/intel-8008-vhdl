@@ -192,15 +192,17 @@ begin
             prev_state_t4 <= state_t4;
             prev_state_t5 <= state_t5;
 
-            -- Set suppress_pc_inc_next_cycle at T5 when entering a cycle that uses H:L
+            -- Set suppress_pc_inc_next_cycle at T5 when entering a cycle that doesn't use PC
             -- This flag is checked at the NEXT T1 to suppress PC increment
             if prev_state_t5 = '1' and advance_state = '0' then
                 report "MEM_IO: At T5 edge, current_cycle=" & integer'image(current_cycle) &
                        " instr_is_mem_indirect=" & std_logic'image(instr_is_mem_indirect) &
-                       " instr_needs_address=" & std_logic'image(instr_needs_address);
-                -- At end of T5, check if next cycle uses H:L address
+                       " instr_needs_address=" & std_logic'image(instr_needs_address) &
+                       " instr_is_io=" & std_logic'image(instr_is_io);
+                -- At end of T5, check if next cycle uses H:L address or is I/O
                 -- LrM/LMr: cycle 1 T5, about to enter cycle 2 (uses H:L)
                 -- LMI: cycle 2 T5, about to enter cycle 3 (uses H:L)
+                -- INP/OUT: cycle 1 T5, about to enter cycle 2 (I/O port, not PC)
                 if instr_is_mem_indirect = '1' then
                     if current_cycle = 1 and instr_needs_address = '0' then
                         -- LrM/LMr: cycle 2 will use H:L
@@ -211,6 +213,11 @@ begin
                         suppress_pc_inc_next_cycle <= '1';
                         report "MEM_IO: Setting suppress_pc_inc_next_cycle for LMI cycle 3";
                     end if;
+                end if;
+                -- I/O instructions: cycle 2 uses I/O port address, not PC
+                if instr_is_io = '1' and current_cycle = 1 then
+                    suppress_pc_inc_next_cycle <= '1';
+                    report "MEM_IO: Setting suppress_pc_inc_next_cycle for I/O cycle 2";
                 end if;
             end if;
             -- Clear the flag at T2 (after T1 increment was suppressed)
@@ -309,14 +316,15 @@ begin
             -- PC increment logic
             -- PC increments when fetching from external memory (via PC address)
             -- PC does NOT increment when using H:L address for memory operations
+            -- PC does NOT increment during I/O cycle 2 (PCC cycle uses I/O address, not PC)
             --
             -- The suppress_pc_inc_next_cycle flag is set at T5 of the previous cycle
-            -- when we know the next cycle will use H:L address. This avoids delta
+            -- when we know the next cycle doesn't use PC address. This avoids delta
             -- cycle race conditions with current_cycle.
             --
             -- Increment PC at T1 for:
             -- - Cycle 1: Always (fetching opcode)
-            -- - Cycle 2: Unless suppress_pc_inc_next_cycle (LrM/LMr uses H:L)
+            -- - Cycle 2: Unless suppress_pc_inc_next_cycle (LrM/LMr uses H:L, or I/O)
             -- - Cycle 3: Unless suppress_pc_inc_next_cycle (LMI uses H:L)
             --
             if state_t1 = '1' and state_half = '0' and state_t1i = '0' and
@@ -398,6 +406,17 @@ begin
                 io_buffer_direction <= '1';  -- Internal bus drives data bus (write direction)
             end if;
 
+            -- Special case: I/O cycle 2 T1 - output REG.A (accumulator) to data bus
+            -- Per isa.json: INP/OUT cycle 2, T1: "REG.A TO OUT"
+            if instr_is_io = '1' and current_cycle = 2 then
+                scratchpad_select   <= "000";  -- A register (accumulator)
+                scratchpad_read     <= '1';
+                regfile_to_bus      <= '1';  -- Register file drives internal bus
+                io_buffer_enable    <= '1';
+                io_buffer_direction <= '1';  -- Internal bus drives data bus (write direction)
+                report "MEM_IO: T1 cycle 2 I/O - outputting REG.A to data bus";
+            end if;
+
         elsif state_t2 = '1' then
             -- T2: Output address high byte + cycle type on D[7:6]
             -- S2=1, S1=0, S0=0
@@ -414,6 +433,16 @@ begin
                 regfile_to_bus      <= '1';  -- Register file drives internal bus
                 io_buffer_enable    <= '1';
                 io_buffer_direction <= '1';  -- Internal bus drives data bus (write direction)
+            end if;
+
+            -- Special case: I/O cycle 2 T2 - output REG.b (port number) to data bus
+            -- Per isa.json: INP/OUT cycle 2, T2: "REG.b TO OUT"
+            -- Reg.b contains the port number from instruction bits (loaded at cycle 1 T3)
+            -- This is handled by register_alu_control output_reg_b signal
+            if instr_is_io = '1' and current_cycle = 2 then
+                io_buffer_enable    <= '1';
+                io_buffer_direction <= '1';  -- Internal bus drives data bus (write direction)
+                report "MEM_IO: T2 cycle 2 I/O - outputting REG.b (port number) to data bus";
             end if;
 
         elsif state_t3 = '1' then
@@ -480,16 +509,20 @@ begin
 
                 when CYCLE_PCC =>
                     -- I/O operation (INP/OUT)
+                    -- INP: instr_writes_reg='1' (reads from I/O port, writes to A)
+                    -- OUT: instr_reads_reg='1' (reads from A, writes to I/O port)
                     io_buffer_enable <= '1';
-                    if instr_is_write = '1' then
-                        -- OUT: write accumulator to I/O
-                        io_buffer_direction <= '1';
+                    if instr_reads_reg = '1' and instr_writes_reg = '0' then
+                        -- OUT: write accumulator to I/O port
+                        io_buffer_direction <= '1';  -- Internal to external (write)
                         scratchpad_select   <= "000";  -- A register
                         scratchpad_read     <= '1';
                         regfile_to_bus      <= '1';  -- Register file drives bus
+                        report "MEM_IO: T3 CYCLE_PCC OUT - writing A register to I/O port";
                     else
-                        -- INP: read from I/O
-                        io_buffer_direction <= '0';
+                        -- INP: read from I/O port
+                        io_buffer_direction <= '0';  -- External to internal (read)
+                        report "MEM_IO: T3 CYCLE_PCC INP - reading from I/O port";
                     end if;
 
                 when others =>
@@ -541,21 +574,9 @@ begin
                 end if;
 
             elsif current_cycle = 2 then
-                -- Second cycle: data has been read in T3, now write to destination
-                -- NOTE: Exclude ALU immediate operations - they write at T5 after ALU computes result
-                if instr_writes_reg = '1' and instr_is_alu = '0' then
-                    -- Instructions like LrI (MVI), LrM, INP - write to register at T4
-                    -- ALU immediate ops (ADI, SUI, XRI, etc.) write at T5 instead
-                    scratchpad_select <= instr_ddd_field;
-                    scratchpad_write  <= '1';
-                    bus_to_regfile    <= '1';  -- Bus writes to register file
-                    report "MEM_IO: T4 cycle 2, writing to register DDD=" & integer'image(to_integer(unsigned(instr_ddd_field)));
-                    -- For memory read (LrM), keep io_buffer enabled to transfer data from external bus
-                    if cycle_type = CYCLE_PCR then
-                        io_buffer_enable    <= '1';
-                        io_buffer_direction <= '0';  -- Read from external
-                    end if;
-                end if;
+                -- Second cycle T4: Per isa.json, T4 = "X" (hold/no-op) for LrI, LrM, INP
+                -- Register write happens at T5, not T4!
+                -- Only ALU immediate ops use T4 to read accumulator for ALU input
 
                 -- For ALU immediate operations (CPI, ADI, etc.), read accumulator to internal bus
                 -- so temp register A can load it at T4 (Reg.b already loaded immediate at T3)
@@ -599,6 +620,17 @@ begin
                 report "MEM_IO: T5 cycle 2 ALU immediate, setting scratchpad_select=" &
                        integer'image(to_integer(unsigned(instr_ddd_field))) &
                        " scratchpad_write=1 bus_to_regfile=1";
+            end if;
+
+            -- Two-cycle non-ALU register writes (cycle 2): LrI (MVI), LrM, INP
+            -- Per isa.json: T3=DATA TO REG.b, T5=REG.b TO DDD
+            -- Reg.b is output by register_alu_control at T5 cycle 2
+            if current_cycle = 2 and instr_writes_reg = '1' and instr_is_alu = '0' and instr_needs_immediate = '1' then
+                scratchpad_select <= instr_ddd_field;  -- Destination register
+                scratchpad_write  <= '1';
+                bus_to_regfile    <= '1';  -- Reg.b (on internal bus) writes to destination
+                report "MEM_IO: T5 cycle 2 LrI/LrM/INP, writing Reg.b to DDD=" &
+                       integer'image(to_integer(unsigned(instr_ddd_field)));
             end if;
 
             -- MOV register-to-register: Write Reg.b to destination register
