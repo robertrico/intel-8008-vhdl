@@ -47,6 +47,10 @@ entity alu is
         -- (Accumulator is ignored in this mode)
         is_inr_dcr : in std_logic;
 
+        -- Rotate mode: when '1', perform rotate operation on accumulator
+        -- Opcode specifies: 000=RLC, 001=RRC, 010=RAL, 011=RAR
+        is_rotate : in std_logic;
+
         -- Carry input from flags
         carry_in : in std_logic;
 
@@ -72,7 +76,7 @@ end entity alu;
 
 architecture rtl of alu is
 
-    -- Operation codes
+    -- Operation codes (ALU arithmetic/logic)
     constant OP_ADD : std_logic_vector(2 downto 0) := "000";
     constant OP_ADC : std_logic_vector(2 downto 0) := "001";
     constant OP_SUB : std_logic_vector(2 downto 0) := "010";
@@ -81,6 +85,12 @@ architecture rtl of alu is
     constant OP_XOR : std_logic_vector(2 downto 0) := "101";
     constant OP_OR  : std_logic_vector(2 downto 0) := "110";
     constant OP_CMP : std_logic_vector(2 downto 0) := "111";
+
+    -- Rotate operation codes (when is_rotate='1')
+    constant ROT_RLC : std_logic_vector(2 downto 0) := "000";  -- Rotate Left Circular
+    constant ROT_RRC : std_logic_vector(2 downto 0) := "001";  -- Rotate Right Circular
+    constant ROT_RAL : std_logic_vector(2 downto 0) := "010";  -- Rotate Left through Accumulator
+    constant ROT_RAR : std_logic_vector(2 downto 0) := "011";  -- Rotate Right through Accumulator
 
     -- Latched result (stable during entire T5)
     signal result_latched : std_logic_vector(8 downto 0) := (others => '0');
@@ -112,49 +122,82 @@ begin
                     carry_val(0) := '1';
                 end if;
 
-                -- Select operands based on mode
-                if is_inr_dcr = '1' then
-                    -- INR/DCR mode: Reg.b is the operand, +1/-1 is generated internally
-                    operand1 := reg_b_in;  -- The register value to increment/decrement
-                    operand2 := x"01";     -- Constant +1 (for ADD/SUB)
+                -- Check for rotate operations first
+                if is_rotate = '1' then
+                    -- Rotate operations on accumulator
+                    case opcode is
+                        when ROT_RLC =>
+                            -- Rotate Left Circular: bit 7 -> carry AND bit 0
+                            temp_result(8) := accumulator_in(7);  -- Bit 7 to carry
+                            temp_result(7 downto 1) := accumulator_in(6 downto 0);  -- Shift left
+                            temp_result(0) := accumulator_in(7);  -- Bit 7 also to bit 0
+
+                        when ROT_RRC =>
+                            -- Rotate Right Circular: bit 0 -> carry AND bit 7
+                            temp_result(8) := accumulator_in(0);  -- Bit 0 to carry
+                            temp_result(6 downto 0) := accumulator_in(7 downto 1);  -- Shift right
+                            temp_result(7) := accumulator_in(0);  -- Bit 0 also to bit 7
+
+                        when ROT_RAL =>
+                            -- Rotate Left through Accumulator: bit 7 -> carry, old carry -> bit 0
+                            temp_result(8) := accumulator_in(7);  -- Bit 7 to new carry
+                            temp_result(7 downto 1) := accumulator_in(6 downto 0);  -- Shift left
+                            temp_result(0) := carry_in;  -- Old carry to bit 0
+
+                        when ROT_RAR =>
+                            -- Rotate Right through Accumulator: bit 0 -> carry, old carry -> bit 7
+                            temp_result(8) := accumulator_in(0);  -- Bit 0 to new carry
+                            temp_result(6 downto 0) := accumulator_in(7 downto 1);  -- Shift right
+                            temp_result(7) := carry_in;  -- Old carry to bit 7
+
+                        when others =>
+                            temp_result := (others => '0');
+                    end case;
                 else
-                    -- Normal binary ALU mode: Accumulator op Reg.b
-                    operand1 := accumulator_in;  -- Direct from accumulator
-                    operand2 := reg_b_in;        -- From temp register b
+                    -- Select operands based on mode
+                    if is_inr_dcr = '1' then
+                        -- INR/DCR mode: Reg.b is the operand, +1/-1 is generated internally
+                        operand1 := reg_b_in;  -- The register value to increment/decrement
+                        operand2 := x"01";     -- Constant +1 (for ADD/SUB)
+                    else
+                        -- Normal binary ALU mode: Accumulator op Reg.b
+                        operand1 := accumulator_in;  -- Direct from accumulator
+                        operand2 := reg_b_in;        -- From temp register b
+                    end if;
+
+                    -- Perform operation based on opcode
+                    case opcode is
+                        when OP_ADD =>
+                            -- ADD for normal ops, INR for is_inr_dcr mode
+                            temp_result := std_logic_vector(unsigned('0' & operand1) + unsigned('0' & operand2));
+
+                        when OP_ADC =>
+                            temp_result := std_logic_vector(unsigned('0' & operand1) + unsigned('0' & operand2) + carry_val);
+
+                        when OP_SUB =>
+                            -- SUB for normal ops, DCR for is_inr_dcr mode
+                            temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2));
+
+                        when OP_SBB =>
+                            temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2) - carry_val);
+
+                        when OP_AND =>
+                            temp_result := '0' & (operand1 and operand2);
+
+                        when OP_XOR =>
+                            temp_result := '0' & (operand1 xor operand2);
+
+                        when OP_OR =>
+                            temp_result := '0' & (operand1 or operand2);
+
+                        when OP_CMP =>
+                            -- Compare is like subtract, but result isn't stored (only flags)
+                            temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2));
+
+                        when others =>
+                            temp_result := (others => '0');
+                    end case;
                 end if;
-
-                -- Perform operation based on opcode
-                case opcode is
-                    when OP_ADD =>
-                        -- ADD for normal ops, INR for is_inr_dcr mode
-                        temp_result := std_logic_vector(unsigned('0' & operand1) + unsigned('0' & operand2));
-
-                    when OP_ADC =>
-                        temp_result := std_logic_vector(unsigned('0' & operand1) + unsigned('0' & operand2) + carry_val);
-
-                    when OP_SUB =>
-                        -- SUB for normal ops, DCR for is_inr_dcr mode
-                        temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2));
-
-                    when OP_SBB =>
-                        temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2) - carry_val);
-
-                    when OP_AND =>
-                        temp_result := '0' & (operand1 and operand2);
-
-                    when OP_XOR =>
-                        temp_result := '0' & (operand1 xor operand2);
-
-                    when OP_OR =>
-                        temp_result := '0' & (operand1 or operand2);
-
-                    when OP_CMP =>
-                        -- Compare is like subtract, but result isn't stored (only flags)
-                        temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2));
-
-                    when others =>
-                        temp_result := (others => '0');
-                end case;
 
                 result_latched <= temp_result;
             end if;

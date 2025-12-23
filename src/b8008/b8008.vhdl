@@ -169,6 +169,7 @@ architecture structural of b8008 is
             instr_uses_temp_regs  : out std_logic;
             instr_is_inr_dcr      : out std_logic;
             instr_is_binary_alu   : out std_logic;
+            instr_is_rotate       : out std_logic;
             instr_needs_t4t5      : out std_logic;
             rst_vector            : out std_logic_vector(2 downto 0);
             condition_code        : out std_logic_vector(1 downto 0);
@@ -442,6 +443,7 @@ architecture structural of b8008 is
             reg_b_in        : in std_logic_vector(7 downto 0);
             opcode          : in std_logic_vector(2 downto 0);
             is_inr_dcr      : in std_logic;
+            is_rotate       : in std_logic;
             carry_in        : in std_logic;
             enable          : in std_logic;
             output_result   : in std_logic;
@@ -555,6 +557,7 @@ architecture structural of b8008 is
     signal instr_uses_temp_regs  : std_logic;
     signal instr_is_inr_dcr      : std_logic;
     signal instr_is_binary_alu   : std_logic;
+    signal instr_is_rotate       : std_logic;
     signal instr_needs_t4t5      : std_logic;
     signal rst_vector            : std_logic_vector(2 downto 0);
     signal condition_code        : std_logic_vector(1 downto 0);
@@ -744,7 +747,8 @@ begin
     -- ALU opcode selection:
     -- For regular ALU ops (10PPPSSS): opcode from bits 5:3 (PPP field)
     -- For INR/DCR (00DDD00X): opcode from instruction decoder (instr_sss_field = 000 for INR, 010 for DCR)
-    alu_opcode <= instr_sss_field when instr_is_inr_dcr = '1' else instr_byte(5 downto 3);
+    -- For rotate (00XXX010): opcode from bits 5:3 (XXX field) via instr_sss_field
+    alu_opcode <= instr_sss_field when (instr_is_inr_dcr = '1' or instr_is_rotate = '1') else instr_byte(5 downto 3);
 
     -- ALU carry input from condition flags
     alu_carry_in <= flag_carry;
@@ -852,6 +856,7 @@ begin
             instr_uses_temp_regs  => instr_uses_temp_regs,
             instr_is_inr_dcr      => instr_is_inr_dcr,
             instr_is_binary_alu   => instr_is_binary_alu,
+            instr_is_rotate       => instr_is_rotate,
             instr_needs_t4t5      => instr_needs_t4t5,
             rst_vector            => rst_vector,
             condition_code        => condition_code,
@@ -1115,6 +1120,7 @@ begin
             reg_b_in        => reg_b_out,           -- From temp register b
             opcode          => alu_opcode,           -- PPP field (bits 5:3) from instruction
             is_inr_dcr      => instr_is_inr_dcr,    -- INR/DCR mode from instruction decoder
+            is_rotate       => instr_is_rotate,     -- Rotate mode from instruction decoder
             carry_in        => flag_carry,
             enable          => alu_enable,
             output_result   => output_result,

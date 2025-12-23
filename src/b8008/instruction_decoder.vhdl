@@ -46,6 +46,7 @@ entity instruction_decoder is
         instr_uses_temp_regs  : out std_logic;  -- Instruction uses Reg.a/Reg.b (ALU ops, JMP, CALL)
         instr_is_inr_dcr      : out std_logic;  -- INR/DCR instruction (load constant 0x01 into Reg.a)
         instr_is_binary_alu   : out std_logic;  -- Binary ALU op (ADD, SUB, etc. - load A register into Reg.a)
+        instr_is_rotate       : out std_logic;  -- Rotate instruction (RLC, RRC, RAL, RAR)
 
         -- For Machine Cycle Control (extended states T4/T5)
         instr_needs_t4t5      : out std_logic;  -- Instruction needs T4/T5 states (JMP, CALL, RET, RST, ALU ops)
@@ -93,6 +94,7 @@ begin
         instr_uses_temp_regs <= '0';  -- Default: doesn't use temp registers
         instr_is_inr_dcr <= '0';  -- Default: not INR/DCR
         instr_is_binary_alu <= '0';  -- Default: not binary ALU
+        instr_is_rotate <= '0';  -- Default: not rotate
         instr_needs_t4t5 <= '0';  -- Default: doesn't need T4/T5
         rst_vector <= (others => '0');  -- Default RST vector
         condition_code <= "00";  -- Default condition code
@@ -147,12 +149,14 @@ begin
 
                     when "010" =>
                         -- 00 XXX 010 - Rotate instructions (RLC, RRC, RAL, RAR) - 1 cycle
+                        -- XXX field (bits 5:3) specifies: 000=RLC, 001=RRC, 010=RAL, 011=RAR
                         instr_is_alu <= '1';
+                        instr_is_rotate <= '1';   -- Signal this is a rotate operation
                         instr_uses_temp_regs <= '1';
                         instr_reads_reg <= '1';   -- Read A
                         instr_writes_reg <= '1';  -- Write A
-                        instr_sss_field <= "000"; -- A register
-                        instr_ddd_field <= "000"; -- A register
+                        instr_sss_field <= op_543; -- Rotate opcode from bits 5:3
+                        instr_ddd_field <= "000"; -- Write to A register
                         instr_needs_t4t5 <= '1';  -- ALU needs T4/T5
 
                     when "011" =>
