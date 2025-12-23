@@ -65,6 +65,7 @@ $(BUILD_DIR):
 # TOP-LEVEL INTEGRATION TEST
 # ============================================================================
 
+# CLAUDE - This is NOT the main test.
 test-b8008: $(BUILD_DIR)
 	@echo "========================================="
 	@echo "Testing b8008 Top-Level Integration"
@@ -105,6 +106,7 @@ test-b8008: $(BUILD_DIR)
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_tb --stop-time=50us
 
+# CLAUDE - These are the main tests
 test-b8008-top: $(BUILD_DIR)
 	@echo "========================================="
 	@echo "Testing b8008_top - Complete System"
@@ -143,6 +145,9 @@ test-b8008-top: $(BUILD_DIR)
 # ============================================================================
 # INDIVIDUAL MODULE TESTS
 # ============================================================================
+
+# CLAUDE - When testing instructions, we should have make file commands to help us test specific files
+# NOT run the whole suite everytime.
 
 test-pc: $(BUILD_DIR)
 	@echo "Testing program counter..."

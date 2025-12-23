@@ -373,26 +373,27 @@ architecture structural of b8008 is
 
     component register_file is
         port (
-            phi2         : in std_logic;
-            reset        : in std_logic;
-            data_in      : in std_logic_vector(7 downto 0);
-            data_out     : out std_logic_vector(7 downto 0);
-            enable_a     : in std_logic;
-            enable_b     : in std_logic;
-            enable_c     : in std_logic;
-            enable_d     : in std_logic;
-            enable_e     : in std_logic;
-            enable_h     : in std_logic;
-            enable_l     : in std_logic;
-            read_enable  : in std_logic;
-            write_enable : in std_logic;
-            debug_reg_a  : out std_logic_vector(7 downto 0);
-            debug_reg_b  : out std_logic_vector(7 downto 0);
-            debug_reg_c  : out std_logic_vector(7 downto 0);
-            debug_reg_d  : out std_logic_vector(7 downto 0);
-            debug_reg_e  : out std_logic_vector(7 downto 0);
-            debug_reg_h  : out std_logic_vector(7 downto 0);
-            debug_reg_l  : out std_logic_vector(7 downto 0)
+            phi2            : in std_logic;
+            reset           : in std_logic;
+            data_in         : in std_logic_vector(7 downto 0);
+            data_out        : out std_logic_vector(7 downto 0);
+            enable_a        : in std_logic;
+            enable_b        : in std_logic;
+            enable_c        : in std_logic;
+            enable_d        : in std_logic;
+            enable_e        : in std_logic;
+            enable_h        : in std_logic;
+            enable_l        : in std_logic;
+            read_enable     : in std_logic;
+            write_enable    : in std_logic;
+            accumulator_out : out std_logic_vector(7 downto 0);
+            debug_reg_a     : out std_logic_vector(7 downto 0);
+            debug_reg_b     : out std_logic_vector(7 downto 0);
+            debug_reg_c     : out std_logic_vector(7 downto 0);
+            debug_reg_d     : out std_logic_vector(7 downto 0);
+            debug_reg_e     : out std_logic_vector(7 downto 0);
+            debug_reg_h     : out std_logic_vector(7 downto 0);
+            debug_reg_l     : out std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -404,9 +405,6 @@ architecture structural of b8008 is
             load_reg_b          : in std_logic;
             output_reg_a        : in std_logic;
             output_reg_b        : in std_logic;
-            instr_is_inr_dcr    : in std_logic;
-            instr_is_binary_alu : in std_logic;
-            reg_a_direct        : in std_logic_vector(7 downto 0);
             internal_bus        : inout std_logic_vector(7 downto 0);
             reg_a_out           : out std_logic_vector(7 downto 0);
             reg_b_out           : out std_logic_vector(7 downto 0)
@@ -439,11 +437,12 @@ architecture structural of b8008 is
 
     component alu is
         port (
-            reg_a_in        : in std_logic_vector(7 downto 0);
+            phi2            : in std_logic;
+            accumulator_in  : in std_logic_vector(7 downto 0);
             reg_b_in        : in std_logic_vector(7 downto 0);
             opcode          : in std_logic_vector(2 downto 0);
+            is_inr_dcr      : in std_logic;
             carry_in        : in std_logic;
-            carry_lookahead : in std_logic_vector(7 downto 0);
             enable          : in std_logic;
             output_result   : in std_logic;
             internal_bus    : inout std_logic_vector(7 downto 0);
@@ -600,8 +599,12 @@ architecture structural of b8008 is
     signal regfile_write_enable : std_logic;
 
     -- Temp register signals
-    signal reg_a_out : std_logic_vector(7 downto 0);  -- Temp register A (for ALU)
-    signal reg_b_out : std_logic_vector(7 downto 0);  -- Temp register B (for ALU)
+    signal reg_a_out : std_logic_vector(7 downto 0);  -- Temp register A (for addresses)
+    signal reg_b_out : std_logic_vector(7 downto 0);  -- Temp register B (for ALU operand)
+
+    -- Accumulator direct output (hardwired to ALU)
+    signal accumulator : std_logic_vector(7 downto 0);
+
     -- Debug signals from register file
     signal debug_reg_a_actual : std_logic_vector(7 downto 0);
     signal debug_reg_b_actual : std_logic_vector(7 downto 0);
@@ -738,8 +741,10 @@ begin
     pc_control.load            <= pc_load;
     pc_control.hold            <= pc_hold;
 
-    -- ALU opcode comes from instruction bits 5:3 (PPP field)
-    alu_opcode <= instr_byte(5 downto 3);
+    -- ALU opcode selection:
+    -- For regular ALU ops (10PPPSSS): opcode from bits 5:3 (PPP field)
+    -- For INR/DCR (00DDD00X): opcode from instruction decoder (instr_sss_field = 000 for INR, 010 for DCR)
+    alu_opcode <= instr_sss_field when instr_is_inr_dcr = '1' else instr_byte(5 downto 3);
 
     -- ALU carry input from condition flags
     alu_carry_in <= flag_carry;
@@ -1038,26 +1043,27 @@ begin
 
     u_register_file : register_file
         port map (
-            phi2         => phi2,
-            reset        => reset,
-            data_in      => regfile_data_in,
-            data_out     => regfile_data_out,
-            enable_a     => regfile_enable_a,
-            enable_b     => regfile_enable_b,
-            enable_c     => regfile_enable_c,
-            enable_d     => regfile_enable_d,
-            enable_e     => regfile_enable_e,
-            enable_h     => regfile_enable_h,
-            enable_l     => regfile_enable_l,
-            read_enable  => regfile_read_enable,
-            write_enable => regfile_write_enable,
-            debug_reg_a  => debug_reg_a_actual,
-            debug_reg_b  => debug_reg_b_actual,
-            debug_reg_c  => debug_reg_c_actual,
-            debug_reg_d  => debug_reg_d_actual,
-            debug_reg_e  => debug_reg_e_actual,
-            debug_reg_h  => debug_reg_h_actual,
-            debug_reg_l  => debug_reg_l_actual
+            phi2            => phi2,
+            reset           => reset,
+            data_in         => regfile_data_in,
+            data_out        => regfile_data_out,
+            enable_a        => regfile_enable_a,
+            enable_b        => regfile_enable_b,
+            enable_c        => regfile_enable_c,
+            enable_d        => regfile_enable_d,
+            enable_e        => regfile_enable_e,
+            enable_h        => regfile_enable_h,
+            enable_l        => regfile_enable_l,
+            read_enable     => regfile_read_enable,
+            write_enable    => regfile_write_enable,
+            accumulator_out => accumulator,
+            debug_reg_a     => debug_reg_a_actual,
+            debug_reg_b     => debug_reg_b_actual,
+            debug_reg_c     => debug_reg_c_actual,
+            debug_reg_d     => debug_reg_d_actual,
+            debug_reg_e     => debug_reg_e_actual,
+            debug_reg_h     => debug_reg_h_actual,
+            debug_reg_l     => debug_reg_l_actual
         );
 
     -- ------------------------------------------------------------------------
@@ -1093,9 +1099,6 @@ begin
             load_reg_b          => load_reg_b,
             output_reg_a        => output_reg_a,
             output_reg_b        => output_reg_b,
-            instr_is_inr_dcr    => instr_is_inr_dcr,
-            instr_is_binary_alu => instr_is_binary_alu,
-            reg_a_direct        => debug_reg_a_actual,
             internal_bus        => internal_bus,
             reg_a_out           => reg_a_out,
             reg_b_out           => reg_b_out
@@ -1107,11 +1110,12 @@ begin
 
     u_alu : alu
         port map (
-            reg_a_in        => reg_a_out,
-            reg_b_in        => reg_b_out,
-            opcode          => instr_sss_field,  -- PPP field (bits 5:3) from instruction
+            phi2            => phi2,
+            accumulator_in  => accumulator,         -- Direct from register file's A register
+            reg_b_in        => reg_b_out,           -- From temp register b
+            opcode          => alu_opcode,           -- PPP field (bits 5:3) from instruction
+            is_inr_dcr      => instr_is_inr_dcr,    -- INR/DCR mode from instruction decoder
             carry_in        => flag_carry,
-            carry_lookahead => (others => '0'),  -- Optional optimization, not used
             enable          => alu_enable,
             output_result   => output_result,
             internal_bus    => internal_bus,

@@ -4,16 +4,17 @@
 -- Arithmetic Logic Unit for Intel 8008 (b8008)
 --
 -- Performs 8-bit arithmetic and logic operations
--- - Takes operands from Reg.a and Reg.b
--- - Receives opcode bits from instruction byte (via internal bus)
--- - Uses carry look-ahead for fast addition
--- - Outputs result and condition flags
 -- - DUMB module: just executes operations based on opcode, no state
 --
+-- Architecture (based on actual Intel 8008):
+-- - Accumulator feeds input 1 DIRECTLY (hardwired, not via temp register)
+-- - Reg.b feeds input 2 (operand loaded via bus at T4)
+-- - INR/DCR: ALU uses Reg.b as input 1 and generates +1/-1 internally
+--
 -- Operations (from bits 5:3 of instruction, PPP field):
---   000 - ADD (Add)
+--   000 - ADD (Add) / INR (Increment when is_inr_dcr=1)
 --   001 - ADC (Add with Carry)
---   010 - SUB (Subtract)
+--   010 - SUB (Subtract) / DCR (Decrement when is_inr_dcr=1)
 --   011 - SBB (Subtract with Borrow)
 --   100 - AND (Logical AND)
 --   101 - XOR (Logical XOR)
@@ -30,18 +31,24 @@ use work.b8008_types.all;
 
 entity alu is
     port (
-        -- Operand inputs from temp registers
-        reg_a_in : in std_logic_vector(7 downto 0);
+        -- Clock for latching result
+        phi2 : in std_logic;
+
+        -- Operand input 1: Direct from Accumulator (hardwired)
+        accumulator_in : in std_logic_vector(7 downto 0);
+
+        -- Operand input 2: From Reg.b (loaded via bus)
         reg_b_in : in std_logic_vector(7 downto 0);
 
         -- Opcode from instruction (PPP field, bits 5:3)
         opcode : in std_logic_vector(2 downto 0);
 
+        -- INR/DCR mode: when '1', ALU uses Reg.b as input 1 and generates +1/-1 internally
+        -- (Accumulator is ignored in this mode)
+        is_inr_dcr : in std_logic;
+
         -- Carry input from flags
         carry_in : in std_logic;
-
-        -- Carry look-ahead signals (optional, for optimization)
-        carry_lookahead : in std_logic_vector(7 downto 0);
 
         -- Enable from Register and ALU Control
         enable : in std_logic;
@@ -50,7 +57,7 @@ entity alu is
         output_result : in std_logic;
 
         -- Internal data bus (8-bit result output)
-        internal_bus : inout std_logic_vector(7 downto 0);
+        internal_bus : inOut std_logic_vector(7 downto 0);
 
         -- Result output (9 bits: carry + 8-bit result)
         result : out std_logic_vector(8 downto 0);
@@ -75,59 +82,87 @@ architecture rtl of alu is
     constant OP_OR  : std_logic_vector(2 downto 0) := "110";
     constant OP_CMP : std_logic_vector(2 downto 0) := "111";
 
-    -- Internal result
+    -- Latched result (stable during entire T5)
+    signal result_latched : std_logic_vector(8 downto 0) := (others => '0');
+
+    -- Previous enable state for edge detection
+    signal enable_prev : std_logic := '0';
+
+    -- Internal result signal for cleaner output
     signal result_internal : std_logic_vector(8 downto 0);
 
 begin
 
-    -- ALU operation (pure combinational)
-    process(reg_a_in, reg_b_in, opcode, carry_in, enable)
+    -- Latch ALU result on the rising edge of enable (T4->T5 transition)
+    -- This prevents the result from changing when the register file is updated
+    process(phi2)
         variable carry_val : unsigned(8 downto 0);
         variable temp_result : std_logic_vector(8 downto 0);
+        variable operand1 : std_logic_vector(7 downto 0);
+        variable operand2 : std_logic_vector(7 downto 0);
     begin
-        if enable = '1' then
-            -- Prepare carry value for operations that use it
-            carry_val := (others => '0');
-            if carry_in = '1' then
-                carry_val(0) := '1';
+        if rising_edge(phi2) then
+            enable_prev <= enable;
+
+            -- Latch result when enable goes from 0 to 1
+            if enable = '1' and enable_prev = '0' then
+                -- Prepare carry value for operations that use it
+                carry_val := (others => '0');
+                if carry_in = '1' then
+                    carry_val(0) := '1';
+                end if;
+
+                -- Select operands based on mode
+                if is_inr_dcr = '1' then
+                    -- INR/DCR mode: Reg.b is the operand, +1/-1 is generated internally
+                    operand1 := reg_b_in;  -- The register value to increment/decrement
+                    operand2 := x"01";     -- Constant +1 (for ADD/SUB)
+                else
+                    -- Normal binary ALU mode: Accumulator op Reg.b
+                    operand1 := accumulator_in;  -- Direct from accumulator
+                    operand2 := reg_b_in;        -- From temp register b
+                end if;
+
+                -- Perform operation based on opcode
+                case opcode is
+                    when OP_ADD =>
+                        -- ADD for normal ops, INR for is_inr_dcr mode
+                        temp_result := std_logic_vector(unsigned('0' & operand1) + unsigned('0' & operand2));
+
+                    when OP_ADC =>
+                        temp_result := std_logic_vector(unsigned('0' & operand1) + unsigned('0' & operand2) + carry_val);
+
+                    when OP_SUB =>
+                        -- SUB for normal ops, DCR for is_inr_dcr mode
+                        temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2));
+
+                    when OP_SBB =>
+                        temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2) - carry_val);
+
+                    when OP_AND =>
+                        temp_result := '0' & (operand1 and operand2);
+
+                    when OP_XOR =>
+                        temp_result := '0' & (operand1 xor operand2);
+
+                    when OP_OR =>
+                        temp_result := '0' & (operand1 or operand2);
+
+                    when OP_CMP =>
+                        -- Compare is like subtract, but result isn't stored (only flags)
+                        temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2));
+
+                    when others =>
+                        temp_result := (others => '0');
+                end case;
+
+                result_latched <= temp_result;
             end if;
-
-            -- Perform operation based on opcode
-            case opcode is
-                when OP_ADD =>
-                    temp_result := std_logic_vector(unsigned('0' & reg_a_in) + unsigned('0' & reg_b_in));
-
-                when OP_ADC =>
-                    temp_result := std_logic_vector(unsigned('0' & reg_a_in) + unsigned('0' & reg_b_in) + carry_val);
-
-                when OP_SUB =>
-                    temp_result := std_logic_vector(unsigned('0' & reg_a_in) - unsigned('0' & reg_b_in));
-
-                when OP_SBB =>
-                    temp_result := std_logic_vector(unsigned('0' & reg_a_in) - unsigned('0' & reg_b_in) - carry_val);
-
-                when OP_AND =>
-                    temp_result := '0' & (reg_a_in and reg_b_in);
-
-                when OP_XOR =>
-                    temp_result := '0' & (reg_a_in xor reg_b_in);
-
-                when OP_OR =>
-                    temp_result := '0' & (reg_a_in or reg_b_in);
-
-                when OP_CMP =>
-                    -- Compare is like subtract, but result isn't stored (only flags)
-                    temp_result := std_logic_vector(unsigned('0' & reg_a_in) - unsigned('0' & reg_b_in));
-
-                when others =>
-                    temp_result := (others => '0');
-            end case;
-
-            result_internal <= temp_result;
-        else
-            result_internal <= (others => '0');
         end if;
     end process;
+
+    -- Generate internal result (combinational, from latched value)
+    result_internal <= result_latched when enable = '1' else (others => '0');
 
     -- Output result
     result <= result_internal;

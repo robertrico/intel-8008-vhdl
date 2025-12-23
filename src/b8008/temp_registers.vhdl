@@ -6,9 +6,12 @@
 -- Two 8-bit temporary registers that interface with the internal data bus
 -- - Reg.a: Typically holds accumulator value for ALU operations
 -- - Reg.b: Typically holds operand for ALU operations
--- - Both can read from internal bus when enabled
+-- - Both load from internal bus when enabled
 -- - Both have separate outputs to ALU and other modules
--- - DUMB module: just registers with enable signals
+-- - DUMB module: just registers with enable signals, no instruction awareness
+--
+-- The control unit is responsible for ensuring the correct data is on the
+-- internal bus when load signals are asserted.
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -24,18 +27,11 @@ entity temp_registers is
         phi2 : in std_logic;
 
         -- Control inputs from Register and ALU Control
-        load_reg_a : in std_logic;  -- Enable latch for Reg.a from bus
-        load_reg_b : in std_logic;  -- Enable latch for Reg.b from bus
+        load_reg_a : in std_logic;  -- Enable latch for Reg.a from internal bus
+        load_reg_b : in std_logic;  -- Enable latch for Reg.b from internal bus
 
         output_reg_a : in std_logic;  -- Enable Reg.a to drive internal bus
         output_reg_b : in std_logic;  -- Enable Reg.b to drive internal bus
-
-        -- Instruction type signals (from instruction decoder)
-        instr_is_inr_dcr : in std_logic;  -- '1' for INR/DCR instructions (load constant 0x01 into Reg.a)
-        instr_is_binary_alu : in std_logic;  -- '1' for binary ALU ops (ADD, SUB, etc. - load A register into Reg.a)
-
-        -- Direct input from A register (for binary ALU operations)
-        reg_a_direct : in std_logic_vector(7 downto 0);  -- A register value (bypasses internal bus)
 
         -- Internal data bus (bidirectional)
         internal_bus : inout std_logic_vector(7 downto 0);
@@ -64,37 +60,25 @@ begin
     internal_bus <= reg_b when output_reg_b = '1' else (others => 'Z');
 
     -- Latch Reg.a on phi2 rising edge when enabled
-    -- For unary ALU operations (INR/DCR), load constant 0x01 instead of from bus
-    -- For binary ALU operations (ADD, SUB, etc.), load A register directly instead of from bus
+    -- DUMB: just load whatever is on internal_bus
     process(phi2)
     begin
         if rising_edge(phi2) then
             if load_reg_a = '1' then
-                if instr_is_inr_dcr = '1' then
-                    -- Unary operation (INR/DCR): load constant 1
-                    reg_a <= x"01";
-                    report "TEMP_REG: Loading Reg.a with constant 0x01 for INR/DCR";
-                elsif instr_is_binary_alu = '1' then
-                    -- Binary ALU operation (ADD, SUB, etc.): load A register directly
-                    -- This allows Reg.b to load the SSS operand from internal_bus at the same time
-                    reg_a <= reg_a_direct;
-                    report "TEMP_REG: Loading Reg.a from A register direct = 0x" & to_hstring(unsigned(reg_a_direct));
-                else
-                    -- Normal operation: load from bus (for immediate ALU ops, JMP/CALL address high byte)
-                    reg_a <= internal_bus;
-                    report "TEMP_REG: Loading Reg.a from internal_bus = 0x" & to_hstring(unsigned(internal_bus));
-                end if;
+                reg_a <= internal_bus;
+                report "TEMP_REG: Loading Reg.a = 0x" & to_hstring(unsigned(internal_bus));
             end if;
         end if;
     end process;
 
     -- Latch Reg.b on phi2 rising edge when enabled
+    -- DUMB: just load whatever is on internal_bus
     process(phi2)
     begin
         if rising_edge(phi2) then
             if load_reg_b = '1' then
                 reg_b <= internal_bus;
-                report "TEMP_REG: Loading Reg.b from internal_bus = 0x" & to_hstring(unsigned(internal_bus));
+                report "TEMP_REG: Loading Reg.b = 0x" & to_hstring(unsigned(internal_bus));
             end if;
         end if;
     end process;

@@ -48,6 +48,10 @@ entity register_file is
         read_enable  : in std_logic;
         write_enable : in std_logic;
 
+        -- Accumulator direct output (hardwired to ALU)
+        -- This is the dedicated path from accumulator to ALU input
+        accumulator_out : out std_logic_vector(7 downto 0);
+
         -- Debug outputs (all registers)
         debug_reg_a : out std_logic_vector(7 downto 0);
         debug_reg_b : out std_logic_vector(7 downto 0);
@@ -114,6 +118,9 @@ begin
                 reg_h when (read_enable = '1' and enable_h = '1') else
                 reg_l when (read_enable = '1' and enable_l = '1') else
                 (others => '0');
+
+    -- Accumulator direct output: always available for ALU
+    accumulator_out <= reg_a;
 
     -- Debug outputs: always output all register values
     debug_reg_a <= reg_a;

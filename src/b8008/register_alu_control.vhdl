@@ -117,15 +117,15 @@ begin
         end if;
     end process;
 
-    -- Load Reg.a: T4 (cycle 1 or 2) OR T3 (cycle 3) for instructions using temp regs
-    -- Cycle 1 T4: accumulator (for register ALU operations)
-    -- Cycle 2 T4: accumulator (for immediate ALU operations like CPI) - NOT T3 because immediate byte loads then!
+    -- Load Reg.a: ONLY for address high bytes (JMP/CALL cycle 3)
+    --
+    -- IMPORTANT: Reg.a is NOT used for ALU operands! The accumulator is hardwired
+    -- directly to the ALU input. Reg.a is only used for the high byte of jump/call
+    -- addresses during 3-cycle instructions.
+    --
     -- Cycle 3 T3: address high byte (for JMP/CALL)
-    -- For JMP/CALL: only load Reg.a in cycle 3 (high byte), not cycle 2
     -- NOTE: Don't gate on phi2 here - let the temp registers sample on phi2 rising edge
-    load_reg_a <= '1' when (state_is_t4 = '1' and current_cycle = 1 and instr_is_alu_op = '1' and instr_uses_temp_regs = '1') else
-                  '1' when (state_is_t4 = '1' and current_cycle = 2 and instr_is_alu_op = '1' and instr_needs_immediate = '1') else
-                  '1' when (state_is_t3 = '1' and current_cycle = 3 and instr_uses_temp_regs = '1') else
+    load_reg_a <= '1' when (state_is_t3 = '1' and current_cycle = 3 and instr_uses_temp_regs = '1') else
                   '0';
 
     -- ALU enable: T5 during ALU operations
@@ -150,13 +150,14 @@ begin
     -- Output Enable Signals
     --
     -- Temp registers normally don't drive the internal bus - they hold operands for ALU.
-    -- EXCEPTIONS:
-    -- 1. MVI (load register immediate): Reg.b drives bus at T4 cycle 2
-    -- 2. MOV (register-to-register): Reg.b drives bus at T5 cycle 1 (per isa.json)
+    -- EXCEPTION:
+    -- MOV (register-to-register): Reg.b drives bus at T5 cycle 1 (per isa.json)
+    --
+    -- NOTE: MVI does NOT use Reg.b to drive the bus - the io_buffer still provides
+    -- the immediate byte at T4 cycle 2, and that goes directly to the register file.
     --
     output_reg_a  <= '0';  -- Reg.a never needs to drive bus
-    output_reg_b  <= '1' when (state_is_t4 = '1' and current_cycle = 2 and instr_writes_reg = '1' and instr_is_alu_op = '0') else
-                     '1' when (state_is_t5 = '1' and current_cycle = 1 and instr_writes_reg = '1' and instr_uses_temp_regs = '1' and
+    output_reg_b  <= '1' when (state_is_t5 = '1' and current_cycle = 1 and instr_writes_reg = '1' and instr_uses_temp_regs = '1' and
                                instr_is_alu_op = '0' and instr_needs_immediate = '0') else
                      '0';
 

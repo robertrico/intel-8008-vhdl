@@ -25,7 +25,7 @@ use work.b8008_types.all;
 entity b8008_top is
     generic (
         -- ROM initialization file
-        ROM_FILE : string := "test_programs/search_as.mem"
+        ROM_FILE : string := "test_programs/alu_test_as.mem"
     );
     port (
         -- External clock and reset
@@ -97,7 +97,7 @@ architecture structural of b8008_top is
     -- Component: 4KB ROM
     component rom_4kx8 is
         generic (
-            ROM_FILE : string := "test_programs/search_as.mem"
+            ROM_FILE : string := "test_programs/alu_test_as.mem"
         );
         port (
             ADDR     : in  std_logic_vector(11 downto 0);
