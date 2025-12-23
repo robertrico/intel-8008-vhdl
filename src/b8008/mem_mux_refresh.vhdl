@@ -62,8 +62,10 @@ begin
 
     -- PC data input - select source based on control signals
     -- The actual load is controlled by pc_control.load in the PC module
+    -- RST vector: AAA field specifies address AAA * 8 = 00000000_AAA_000
+    -- The 14-bit address is: 00000000 (8 bits) & AAA (3 bits) & 000 (3 bits)
     pc_data_in <= stack_addr when pc_load_from_stack = '1' else
-                  to_unsigned(0, 5) & unsigned(rst_vector) & to_unsigned(0, 6) when pc_load_from_rst = '1' else
+                  to_unsigned(0, 8) & unsigned(rst_vector) & to_unsigned(0, 3) when pc_load_from_rst = '1' else
                   unsigned(reg_a(5 downto 0) & reg_b);  -- Default: from temp registers (JMP/CALL)
 
     -- Register file to internal bus routing (tri-state)

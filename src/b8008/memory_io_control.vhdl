@@ -338,6 +338,16 @@ begin
                 report "MEM_IO: Incrementing PC at T3 cycle 3 for CALL (to compute return address)";
             end if;
 
+            -- RST: Increment PC at cycle 1 T4 first half (before stack push at T4 second half)
+            -- At T1, PC incremented TO the opcode address. We need it to point to the
+            -- NEXT instruction (PC+1) before pushing to stack as return address.
+            -- Note: We check at T4 (not T3) because at T3 rising edge, the IR is still
+            -- being loaded. By T4, the IR has the RST opcode and instr_is_rst is stable.
+            if state_t4 = '1' and state_half = '0' and current_cycle = 1 and instr_is_rst = '1' then
+                pc_increment_lower <= '1';
+                report "MEM_IO: Incrementing PC at T4 cycle 1 for RST (to compute return address)";
+            end if;
+
             -- Load PC during T4/T5 for various instructions
             -- JMP/CALL: T5 of cycle 3 (only if unconditional OR condition met)
             -- RET/RST: T5 of cycle 1
