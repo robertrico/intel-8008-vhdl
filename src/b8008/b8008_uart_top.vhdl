@@ -1,0 +1,674 @@
+--------------------------------------------------------------------------------
+-- b8008_uart_top.vhdl
+--------------------------------------------------------------------------------
+-- Top-level system with DUAL-MODE hardware UART:
+--   1. Bit-bang mode (ports 0/8): For original 1970s programs
+--   2. Direct mode (ports 1/9):   For new programs with byte-at-a-time I/O
+--
+-- BIT-BANG MODE (Ports 0/8):
+-- The "bit-bang UART adapter" bridges software-based serial I/O (as used in
+-- original 8008 programs from the 1970s) to hardware UART. The adapter:
+--   - TX: Collects bits from consecutive OUT 8 calls, assembles bytes, sends via UART
+--   - RX: Receives bytes via UART, presents them bit-by-bit on IN 0 reads
+-- This allows running ORIGINAL, UNMODIFIED programs like mandelbrot.asm, pi.asm,
+-- and other SCELBI-era software that bit-bang at 2400 baud.
+--
+-- DIRECT MODE (Ports 1/9):
+-- For new programs that want simple byte-at-a-time UART access:
+--   - IN 1:  Returns RX status (bit 7) + received byte (bits 6:0)
+--   - OUT 9: Sends byte immediately via UART
+--
+-- Memory Map:
+--   0x0000 - 0x0FFF (4KB): ROM (program code)
+--   0x1000 - 0x13FF (1KB): RAM (data storage)
+--   0x1400 - 0x3FFF:       Unmapped (returns 0x00)
+--
+-- I/O Map:
+--   Port 0 (IN):  Serial input via bit-bang adapter (old programs)
+--   Port 1 (IN):  Direct UART RX - bit 7=ready, bits 6:0=data (new programs)
+--   Port 8 (OUT): Serial output via bit-bang adapter (old programs)
+--   Port 9 (OUT): Direct UART TX - sends byte immediately (new programs)
+--   Port 31 (OUT): Checkpoint/assertion port (debug)
+--
+-- This module connects:
+--   - b8008 CPU core
+--   - rom_4kx8 (4KB ROM for program storage)
+--   - ram_1kx8 (1KB RAM for data storage)
+--   - bitbang_uart_adapter (software bit-bang to hardware UART bridge)
+--   - Address decode logic
+--------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+library work;
+use work.b8008_types.all;
+
+entity b8008_uart_top is
+    generic (
+        -- ROM initialization file
+        ROM_FILE    : string  := "test_programs/alu_test_as.mem";
+        -- Clock frequency for UART timing
+        CLK_FREQ_HZ : integer := 100_000_000;
+        -- UART baud rate (2400 matches original software timing)
+        BAUD_RATE   : integer := 2400
+    );
+    port (
+        -- External clock and reset
+        clk_in      : in std_logic;
+        reset       : in std_logic;
+        interrupt   : in std_logic;  -- Bootstrap interrupt (tie high after reset)
+
+        -- UART pins
+        uart_tx     : out std_logic;
+        uart_rx     : in  std_logic;
+
+        -- Debug outputs
+        phi1_out    : out std_logic;
+        phi2_out    : out std_logic;
+        sync_out    : out std_logic;
+        s0_out      : out std_logic;
+        s1_out      : out std_logic;
+        s2_out      : out std_logic;
+
+        -- Address and data for debugging
+        address_out : out std_logic_vector(13 downto 0);
+        data_out    : out std_logic_vector(7 downto 0);
+
+        -- RAM debug output (location 0 for verification)
+        ram_byte_0  : out std_logic_vector(7 downto 0);
+
+        -- Debug outputs: CPU state and key registers
+        debug_reg_a         : out std_logic_vector(7 downto 0);  -- A register
+        debug_reg_b         : out std_logic_vector(7 downto 0);  -- B register
+        debug_reg_c         : out std_logic_vector(7 downto 0);  -- C register
+        debug_reg_d         : out std_logic_vector(7 downto 0);  -- D register
+        debug_reg_e         : out std_logic_vector(7 downto 0);  -- E register
+        debug_reg_h         : out std_logic_vector(7 downto 0);  -- H register
+        debug_reg_l         : out std_logic_vector(7 downto 0);  -- L register
+        debug_cycle         : out integer range 1 to 3;
+        debug_pc            : out std_logic_vector(13 downto 0);
+        debug_ir            : out std_logic_vector(7 downto 0);
+        debug_needs_address : out std_logic;
+        debug_int_pending   : out std_logic;
+        -- Debug flag outputs
+        debug_flag_carry    : out std_logic;
+        debug_flag_zero     : out std_logic;
+        debug_flag_sign     : out std_logic;
+        debug_flag_parity   : out std_logic;
+
+        -- I/O port debug outputs (for verification)
+        debug_io_port_8     : out std_logic_vector(7 downto 0);
+        debug_io_port_9     : out std_logic_vector(7 downto 0);
+        debug_io_port_10    : out std_logic_vector(7 downto 0);
+
+        -- UART adapter debug outputs
+        debug_uart_tx_byte  : out std_logic_vector(7 downto 0);
+        debug_uart_rx_byte  : out std_logic_vector(7 downto 0)
+    );
+end entity b8008_uart_top;
+
+architecture structural of b8008_uart_top is
+
+    -- Component: b8008 CPU
+    component b8008 is
+        port (
+            clk_in         : in std_logic;
+            reset          : in std_logic;
+            phi1_out       : out std_logic;
+            phi2_out       : out std_logic;
+            data_bus       : inout std_logic_vector(7 downto 0);
+            sync_out       : out std_logic;
+            s0_out         : out std_logic;
+            s1_out         : out std_logic;
+            s2_out         : out std_logic;
+            ready_in       : in std_logic;
+            interrupt      : in std_logic;
+            -- Debug
+            debug_reg_a         : out std_logic_vector(7 downto 0);
+            debug_reg_b         : out std_logic_vector(7 downto 0);
+            debug_reg_c         : out std_logic_vector(7 downto 0);
+            debug_reg_d         : out std_logic_vector(7 downto 0);
+            debug_reg_e         : out std_logic_vector(7 downto 0);
+            debug_reg_h         : out std_logic_vector(7 downto 0);
+            debug_reg_l         : out std_logic_vector(7 downto 0);
+            debug_cycle         : out integer range 1 to 3;
+            debug_pc            : out std_logic_vector(13 downto 0);
+            debug_ir            : out std_logic_vector(7 downto 0);
+            debug_needs_address : out std_logic;
+            debug_int_pending   : out std_logic;
+            cycle_type          : out std_logic_vector(1 downto 0);
+            -- Debug flag outputs
+            debug_flag_carry    : out std_logic;
+            debug_flag_zero     : out std_logic;
+            debug_flag_sign     : out std_logic;
+            debug_flag_parity   : out std_logic
+        );
+    end component;
+
+    -- Component: 4KB ROM
+    component rom_4kx8 is
+        generic (
+            ROM_FILE : string := "test_programs/alu_test_as.mem"
+        );
+        port (
+            ADDR     : in  std_logic_vector(11 downto 0);
+            DATA_OUT : out std_logic_vector(7 downto 0);
+            CS_N     : in  std_logic
+        );
+    end component;
+
+    -- Component: 1KB RAM
+    component ram_1kx8 is
+        port (
+            CLK          : in  std_logic;
+            ADDR         : in  std_logic_vector(9 downto 0);
+            DATA_IN      : in  std_logic_vector(7 downto 0);
+            DATA_OUT     : out std_logic_vector(7 downto 0);
+            RW_N         : in  std_logic;
+            CS_N         : in  std_logic;
+            DEBUG_BYTE_0 : out std_logic_vector(7 downto 0)
+        );
+    end component;
+
+    -- Component: Bit-bang UART adapter
+    -- Bridges software bit-banged serial I/O to hardware UART
+    -- Also provides direct UART access for new programs
+    component bitbang_uart_adapter is
+        generic (
+            CLK_FREQ_HZ : integer;
+            BAUD_RATE   : integer
+        );
+        port (
+            clk             : in  std_logic;
+            rst             : in  std_logic;
+            port_out_data   : in  std_logic_vector(7 downto 0);
+            port_out_valid  : in  std_logic;
+            port_in_data    : out std_logic_vector(7 downto 0);
+            port_in_read    : in  std_logic;
+            uart_tx         : out std_logic;
+            uart_rx         : in  std_logic;
+            debug_tx_state  : out std_logic_vector(3 downto 0);
+            debug_rx_state  : out std_logic_vector(3 downto 0);
+            debug_tx_byte   : out std_logic_vector(7 downto 0);
+            debug_rx_byte   : out std_logic_vector(7 downto 0);
+            -- Direct UART access (for new programs using ports 1/9)
+            direct_tx_data  : in  std_logic_vector(7 downto 0);
+            direct_tx_start : in  std_logic;
+            direct_tx_busy  : out std_logic;
+            direct_rx_data  : out std_logic_vector(7 downto 0);
+            direct_rx_valid : out std_logic
+        );
+    end component;
+
+    -- Internal signals
+    signal address_bus : std_logic_vector(13 downto 0);
+    signal data_bus    : std_logic_vector(7 downto 0);
+    signal phi1        : std_logic;
+    signal phi2        : std_logic;
+
+    -- Memory signals
+    signal rom_cs_n    : std_logic;
+    signal rom_data    : std_logic_vector(7 downto 0);
+    signal ram_cs_n    : std_logic;
+    signal ram_data_in : std_logic_vector(7 downto 0);
+    signal ram_data_out: std_logic_vector(7 downto 0);
+    signal ram_rw_n    : std_logic;
+
+    -- Address decode
+    signal rom_selected : std_logic;
+    signal ram_selected : std_logic;
+    signal is_write     : std_logic;
+    signal is_io        : std_logic;  -- I/O cycle (PCC)
+    signal cycle_type   : std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
+
+    -- Bootstrap flag: jam RST 0 only during first T1I after reset
+    signal bootstrap_done : std_logic := '0';
+
+    -- I/O Port Simulation
+    -- Input ports (directly provide test values for INP instruction)
+    -- Port 0: returns 0x55 (alternating bits)
+    -- Port 1: returns 0xAA (alternating bits, inverted)
+    -- Port 2: returns 0x42 (ASCII 'B')
+    -- Port 3-7: returns port number
+    signal io_input_data : std_logic_vector(7 downto 0);
+    signal io_port_num   : std_logic_vector(2 downto 0);  -- Port number from T2 latched address
+
+    -- Output ports (latch values written by OUT instruction)
+    -- Port 8-15: Latch output data for verification
+    signal io_output_port_8  : std_logic_vector(7 downto 0) := (others => '0');
+    signal io_output_port_9  : std_logic_vector(7 downto 0) := (others => '0');
+    signal io_output_port_10 : std_logic_vector(7 downto 0) := (others => '0');
+
+    -- Checkpoint system: Port 31 (0x1F) is the assertion port
+    -- When OUT 31 is executed, capture full CPU state for verification
+    -- The accumulator value at that point is the checkpoint ID
+    signal checkpoint_id : integer := 0;
+    signal last_checkpoint_pc : std_logic_vector(13 downto 0) := (others => '1');  -- Track last checkpoint to avoid duplicates
+
+    -- External address latches (like real 8008 external hardware)
+    signal latched_address : std_logic_vector(13 downto 0) := (others => '0');
+
+    -- T-state decode from S[2:0]
+    signal is_t1  : std_logic;
+    signal is_t2  : std_logic;
+    signal is_t3  : std_logic;
+    signal is_t4  : std_logic;
+    signal is_t5  : std_logic;
+
+    -- Bit-bang UART adapter signals (ports 0/8 for old programs)
+    signal uart_port_out_valid : std_logic := '0';
+    signal uart_port_in_data   : std_logic_vector(7 downto 0);
+    signal uart_port_in_read   : std_logic := '0';
+    signal is_port_0_read      : std_logic;  -- IN 0 (serial input, bitbang)
+    signal is_port_8_write     : std_logic;  -- OUT 8 (serial output, bitbang)
+
+    -- Direct UART signals (ports 1/9 for new programs)
+    signal direct_tx_data      : std_logic_vector(7 downto 0) := (others => '0');
+    signal direct_tx_start     : std_logic := '0';
+    signal direct_tx_busy      : std_logic;
+    signal direct_rx_data      : std_logic_vector(7 downto 0);
+    signal direct_rx_valid     : std_logic;
+    signal is_port_1_read      : std_logic;  -- IN 1 (direct UART RX)
+    signal is_port_9_write     : std_logic;  -- OUT 9 (direct UART TX)
+
+    -- RX buffer for direct mode (holds last received byte until read)
+    signal direct_rx_buffer    : std_logic_vector(7 downto 0) := (others => '0');
+    signal direct_rx_ready     : std_logic := '0';  -- Byte available in buffer
+
+begin
+
+    -- ========================================================================
+    -- EXTERNAL ADDRESS LATCHING (Real 8008 Hardware Behavior)
+    -- ========================================================================
+    -- In real 8008, address is output on 8 bidirectional pins during T1/T2
+    -- External latches capture the address so data can use same pins during T3
+    -- Here we simulate this with internal latches
+
+    -- Decode T-states from status signals
+    -- T1: S2=0, S1=1, S0=0 (binary 010)
+    -- T2: S2=1, S1=0, S0=0 (binary 100)
+    -- T3: S2=0, S1=0, S0=1 (binary 001)
+    -- T4: S2=1, S1=1, S0=1 (binary 111)
+    -- T5: S2=1, S1=0, S0=1 (binary 101)
+    is_t1 <= '1' when (s2_out = '0' and s1_out = '1' and s0_out = '0') else '0';
+    is_t2 <= '1' when (s2_out = '1' and s1_out = '0' and s0_out = '0') else '0';
+    is_t3 <= '1' when (s2_out = '0' and s1_out = '0' and s0_out = '1') else '0';
+    is_t4 <= '1' when (s2_out = '1' and s1_out = '1' and s0_out = '1') else '0';
+    is_t5 <= '1' when (s2_out = '1' and s1_out = '0' and s0_out = '1') else '0';
+
+    -- Latch address during T1 and T2 (when CPU outputs address on data bus)
+    -- Real 8008 behavior: address is time-multiplexed on 8-bit data bus
+    -- T1: Lower 8 bits on data bus (latch only during SYNC high - first half of T1)
+    -- T2: Upper 6 bits on D[5:0], cycle type on D[7:6] (latch only during SYNC high)
+    -- CRITICAL: Only latch during SYNC=1 (first half) to avoid re-latching after PC increments
+    -- Hold latched address stable during T3 (when data bus used for data transfer)
+    process(phi1, reset)
+    begin
+        if reset = '1' then
+            latched_address <= (others => '0');
+        elsif rising_edge(phi1) then
+            if is_t1 = '1' and sync_out = '1' then
+                -- T1 first half (SYNC high): Latch lower 8 bits from data bus
+                latched_address(7 downto 0) <= data_bus;
+                report "ADDR_LATCH: T1 lower byte = 0x" & to_hstring(unsigned(data_bus));
+            elsif is_t2 = '1' and sync_out = '1' then
+                -- T2 first half (SYNC high): Latch upper 6 bits from data bus D[5:0]
+                latched_address(13 downto 8) <= data_bus(5 downto 0);
+                report "ADDR_LATCH: T2 upper byte = 0x" & to_hstring(unsigned(data_bus(5 downto 0))) &
+                       " Full address = 0x" & to_hstring(unsigned(data_bus(5 downto 0) & latched_address(7 downto 0)));
+            end if;
+            -- During T3+: Hold latched value stable
+        end if;
+    end process;
+
+    -- ========================================================================
+    -- BOOTSTRAP CONTROL
+    -- ========================================================================
+
+    -- Set bootstrap_done flag after first T1I completes
+    -- We detect when we LEAVE T1I state (transition to T2)
+    process(phi1, reset)
+    begin
+        if reset = '1' then
+            bootstrap_done <= '0';
+        elsif rising_edge(phi1) then
+            -- When we're in T2 and bootstrap isn't done yet, T1I just completed
+            if bootstrap_done = '0' and s2_out = '1' and s1_out = '0' and s0_out = '0' then
+                bootstrap_done <= '1';
+            end if;
+        end if;
+    end process;
+
+    -- ========================================================================
+    -- CPU INSTANCE
+    -- ========================================================================
+
+    u_cpu : b8008
+        port map (
+            clk_in      => clk_in,
+            reset       => reset,
+            phi1_out    => phi1,
+            phi2_out    => phi2,
+            data_bus    => data_bus,
+            sync_out    => sync_out,
+            s0_out      => s0_out,
+            s1_out      => s1_out,
+            s2_out      => s2_out,
+            ready_in            => '1',      -- Always ready (no wait states)
+            interrupt           => interrupt,
+            debug_reg_a         => debug_reg_a,
+            debug_reg_b         => debug_reg_b,
+            debug_reg_c         => debug_reg_c,
+            debug_reg_d         => debug_reg_d,
+            debug_reg_e         => debug_reg_e,
+            debug_reg_h         => debug_reg_h,
+            debug_reg_l         => debug_reg_l,
+            debug_cycle         => debug_cycle,
+            debug_pc            => debug_pc,
+            debug_ir            => debug_ir,
+            debug_needs_address => debug_needs_address,
+            debug_int_pending   => debug_int_pending,
+            cycle_type          => cycle_type,
+            debug_flag_carry    => debug_flag_carry,
+            debug_flag_zero     => debug_flag_zero,
+            debug_flag_sign     => debug_flag_sign,
+            debug_flag_parity   => debug_flag_parity
+        );
+
+    -- ========================================================================
+    -- MEMORY INSTANCES
+    -- ========================================================================
+
+    -- ROM: 4KB at 0x0000-0x0FFF
+    -- Uses LATCHED address (stable during T3 data transfer)
+    u_rom : rom_4kx8
+        generic map (
+            ROM_FILE => ROM_FILE
+        )
+        port map (
+            ADDR     => latched_address(11 downto 0),
+            DATA_OUT => rom_data,
+            CS_N     => rom_cs_n
+        );
+
+    -- RAM: 1KB at 0x1000-0x13FF
+    -- Uses LATCHED address (stable during T3 data transfer)
+    u_ram : ram_1kx8
+        port map (
+            CLK          => phi1,
+            ADDR         => latched_address(9 downto 0),
+            DATA_IN      => ram_data_in,
+            DATA_OUT     => ram_data_out,
+            RW_N         => ram_rw_n,
+            CS_N         => ram_cs_n,
+            DEBUG_BYTE_0 => ram_byte_0
+        );
+
+    -- ========================================================================
+    -- BIT-BANG UART ADAPTER
+    -- ========================================================================
+    -- Bridges software bit-banged serial I/O to hardware UART
+    -- Port 0 (IN): Serial input - adapter presents bits from received bytes
+    -- Port 8 (OUT): Serial output - adapter collects bits into bytes for TX
+
+    u_uart_adapter : bitbang_uart_adapter
+        generic map (
+            CLK_FREQ_HZ => CLK_FREQ_HZ,
+            BAUD_RATE   => BAUD_RATE
+        )
+        port map (
+            clk            => clk_in,
+            rst            => reset,
+            -- Bitbang interface (ports 0/8)
+            port_out_data  => data_bus,
+            port_out_valid => uart_port_out_valid,
+            port_in_data   => uart_port_in_data,
+            port_in_read   => uart_port_in_read,
+            -- Hardware UART pins
+            uart_tx        => uart_tx,
+            uart_rx        => uart_rx,
+            -- Debug
+            debug_tx_state => open,
+            debug_rx_state => open,
+            debug_tx_byte  => debug_uart_tx_byte,
+            debug_rx_byte  => debug_uart_rx_byte,
+            -- Direct UART interface (ports 1/9)
+            direct_tx_data  => direct_tx_data,
+            direct_tx_start => direct_tx_start,
+            direct_tx_busy  => direct_tx_busy,
+            direct_rx_data  => direct_rx_data,
+            direct_rx_valid => direct_rx_valid
+        );
+
+    -- Detect Port 0 read (IN 0) and Port 8 write (OUT 8) - Bitbang mode
+    -- INP encoding: 0100 MMM 1 where MMM is port number (0-7)
+    --   Port 0 = MMM=000, RR=00 (address bits 13:12=00, bits 11:9=000)
+    -- OUT encoding: 01RR MMM 1 where MMM is port number within group
+    --   Port 8 = RR=01, MMM=000 (address bits 13:12=01, bits 11:9=000)
+    is_port_0_read  <= '1' when (is_io = '1' and is_t3 = '1' and
+                                 latched_address(13 downto 12) = "00" and
+                                 io_port_num = "000") else '0';
+    is_port_8_write <= '1' when (is_io = '1' and is_t3 = '1' and
+                                 latched_address(13 downto 12) = "01" and
+                                 io_port_num = "000") else '0';
+
+    -- Detect Port 1 read (IN 1) and Port 9 write (OUT 9) - Direct UART mode
+    --   Port 1 = MMM=001, RR=00 (address bits 13:12=00, bits 11:9=001)
+    --   Port 9 = RR=01, MMM=001 (address bits 13:12=01, bits 11:9=001)
+    is_port_1_read  <= '1' when (is_io = '1' and is_t3 = '1' and
+                                 latched_address(13 downto 12) = "00" and
+                                 io_port_num = "001") else '0';
+    is_port_9_write <= '1' when (is_io = '1' and is_t3 = '1' and
+                                 latched_address(13 downto 12) = "01" and
+                                 io_port_num = "001") else '0';
+
+    -- Generate pulses for bitbang UART adapter
+    -- These are directly from combinational logic - adapter samples on clock edge
+    uart_port_out_valid <= is_port_8_write;
+    uart_port_in_read   <= is_port_0_read;
+
+    -- ========================================================================
+    -- ADDRESS DECODE LOGIC
+    -- ========================================================================
+
+    -- ROM selected: address 0x0000-0x0FFF (top 2 bits = 00)
+    -- Use LATCHED address for decode
+    rom_selected <= '1' when latched_address(13 downto 12) = "00" else '0';
+
+    -- RAM selected: address 0x1000-0x13FF (bits 13:12 = 01, bit 11:10 = 00)
+    -- Use LATCHED address for decode
+    ram_selected <= '1' when latched_address(13 downto 10) = "0100" else '0';
+
+    -- Chip selects (active low)
+    rom_cs_n <= not rom_selected;
+    ram_cs_n <= not ram_selected;
+
+    -- ========================================================================
+    -- DATA BUS MULTIPLEXING
+    -- ========================================================================
+
+    -- Decode cycle type for read/write control
+    -- cycle_type: 00=PCI, 01=PCR, 10=PCC, 11=PCW
+    -- PCW (cycle_type = "11") indicates memory write
+    -- PCC (cycle_type = "10") indicates I/O operation
+    is_write <= '1' when cycle_type = "11" else '0';
+    is_io    <= '1' when cycle_type = "10" else '0';
+
+    -- RAM RW_N: active low write enable
+    -- Write (RW_N=0) during T3/T4/T5 of PCW cycles when RAM is selected
+    ram_rw_n <= '0' when (is_write = '1' and ram_selected = '1' and
+                         (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else '1';
+
+    -- RAM always receives data from bus (but only writes when RW_N=0)
+    ram_data_in <= data_bus;
+
+    -- ========================================================================
+    -- I/O PORT SIMULATION
+    -- ========================================================================
+
+    -- Extract port number from latched address during I/O cycle
+    -- Per isa.json: T1 outputs REG.A, T2 outputs REG.b (contains port number from opcode)
+    -- INP encoding: 0100 MMM 1 where MMM (bits 3:1) is the port number
+    -- OUT encoding: 01RR MMM 1 where MMM (bits 3:1) is the port number
+    -- During T2, Reg.b is output. Data bus bits 5:0 are latched to address(13:8)
+    -- So port number (opcode bits 3:1) ends up in address bits 11:9
+    io_port_num <= latched_address(11 downto 9);  -- Opcode bits 3:1 (port number)
+
+    -- Input port data multiplexer
+    -- Port 0: Serial input via bit-bang UART adapter (for old programs)
+    -- Port 1: Direct UART RX byte with status (for new programs)
+    --         Bit 7: RX ready (1=byte available), Bits 6:0: received byte (when ready)
+    -- Ports 2-7: Test values for INP verification
+    io_input_data <= uart_port_in_data when io_port_num = "000" else  -- Port 0: Bitbang serial input
+                     (direct_rx_ready & direct_rx_buffer(6 downto 0)) when io_port_num = "001" else  -- Port 1: Direct UART RX
+                     x"42" when io_port_num = "010" else  -- Port 2: 0x42 ('B')
+                     x"03" when io_port_num = "011" else  -- Port 3: 0x03
+                     x"04" when io_port_num = "100" else  -- Port 4: 0x04
+                     x"05" when io_port_num = "101" else  -- Port 5: 0x05
+                     x"06" when io_port_num = "110" else  -- Port 6: 0x06
+                     x"07";                               -- Port 7: 0x07
+
+    -- ========================================================================
+    -- DIRECT UART HANDLING (Ports 1/9)
+    -- ========================================================================
+    -- Port 1 (IN): Returns received byte with ready status in bit 7
+    --              Reading clears the ready flag
+    -- Port 9 (OUT): Sends byte immediately via UART
+
+    -- Direct UART RX buffer - captures bytes as they arrive
+    -- Ready flag cleared when port 1 is read
+    process(clk_in, reset)
+    begin
+        if reset = '1' then
+            direct_rx_buffer <= (others => '0');
+            direct_rx_ready  <= '0';
+        elsif rising_edge(clk_in) then
+            -- Capture incoming byte from USART
+            if direct_rx_valid = '1' then
+                direct_rx_buffer <= direct_rx_data;
+                direct_rx_ready  <= '1';
+                report "DIRECT UART RX: Received byte 0x" & to_hstring(unsigned(direct_rx_data));
+            end if;
+
+            -- Clear ready flag when port 1 is read
+            if is_port_1_read = '1' and direct_rx_ready = '1' then
+                direct_rx_ready <= '0';
+                report "DIRECT UART RX: Buffer read, ready cleared";
+            end if;
+        end if;
+    end process;
+
+    -- Direct UART TX - trigger on port 9 write
+    process(clk_in, reset)
+    begin
+        if reset = '1' then
+            direct_tx_start <= '0';
+            direct_tx_data  <= (others => '0');
+        elsif rising_edge(clk_in) then
+            direct_tx_start <= '0';  -- Default: no TX
+
+            -- Trigger TX on port 9 write
+            if is_port_9_write = '1' then
+                direct_tx_data  <= data_bus;
+                direct_tx_start <= '1';
+                report "DIRECT UART TX: Sending byte 0x" & to_hstring(unsigned(data_bus));
+            end if;
+        end if;
+    end process;
+
+    -- Output port latches - capture data written by OUT instruction
+    -- OUT instruction: CPU drives data_bus with accumulator value during T3
+    process(phi1, reset)
+        variable port_base : integer;
+    begin
+        if reset = '1' then
+            io_output_port_8  <= (others => '0');
+            io_output_port_9  <= (others => '0');
+            io_output_port_10 <= (others => '0');
+            checkpoint_id <= 0;
+            last_checkpoint_pc <= (others => '1');
+        elsif rising_edge(phi1) then
+            -- Latch output data during T3 of I/O write (OUT instruction)
+            -- OUT uses ports 8-31 (RR field non-zero in opcode 01RRMMM1)
+            -- RR field is opcode bits 5:4 which map to address bits 13:12
+            -- INP has RR=00, OUT has RR≠00
+            if is_io = '1' and is_t3 = '1' and (latched_address(13) = '1' or latched_address(12) = '1') then
+                -- Calculate actual port number: base = RR * 8, port = base + MMM
+                -- RR=01 -> ports 8-15, RR=10 -> ports 16-23, RR=11 -> ports 24-31
+                port_base := to_integer(unsigned(latched_address(13 downto 12))) * 8;
+
+                -- Check for CHECKPOINT port (port 31 = RR=11, MMM=111)
+                if latched_address(13 downto 12) = "11" and io_port_num = "111" then
+                    -- Port 31: CHECKPOINT assertion port
+                    -- The A register contains the checkpoint ID (set by MVI A,N before OUT 31)
+                    -- Only report if this is a new checkpoint (different PC than last)
+                    if debug_pc /= last_checkpoint_pc then
+                        checkpoint_id <= to_integer(unsigned(debug_reg_a));
+                        last_checkpoint_pc <= debug_pc;
+                        report "CHECKPOINT: ID=" & integer'image(to_integer(unsigned(debug_reg_a))) &
+                               " PC=0x" & to_hstring(unsigned(debug_pc)) &
+                               " A=0x" & to_hstring(unsigned(debug_reg_a)) &
+                               " B=0x" & to_hstring(unsigned(debug_reg_b)) &
+                               " C=0x" & to_hstring(unsigned(debug_reg_c)) &
+                               " D=0x" & to_hstring(unsigned(debug_reg_d)) &
+                               " E=0x" & to_hstring(unsigned(debug_reg_e)) &
+                               " H=0x" & to_hstring(unsigned(debug_reg_h)) &
+                               " L=0x" & to_hstring(unsigned(debug_reg_l)) &
+                               " C=" & std_logic'image(debug_flag_carry)(2) &
+                               " Z=" & std_logic'image(debug_flag_zero)(2) &
+                               " S=" & std_logic'image(debug_flag_sign)(2) &
+                               " P=" & std_logic'image(debug_flag_parity)(2);
+                    end if;
+                else
+                    -- Regular output ports
+                    case io_port_num is
+                        when "000" =>
+                            io_output_port_8 <= data_bus;
+                            report "I/O: OUT port " & integer'image(port_base) & " = 0x" & to_hstring(unsigned(data_bus));
+                        when "001" =>
+                            io_output_port_9 <= data_bus;
+                            report "I/O: OUT port " & integer'image(port_base + 1) & " = 0x" & to_hstring(unsigned(data_bus));
+                        when "010" =>
+                            io_output_port_10 <= data_bus;
+                            report "I/O: OUT port " & integer'image(port_base + 2) & " = 0x" & to_hstring(unsigned(data_bus));
+                        when others =>
+                            report "I/O: OUT port " & integer'image(port_base + to_integer(unsigned(io_port_num))) &
+                                   " = 0x" & to_hstring(unsigned(data_bus));
+                    end case;
+                end if;
+            end if;
+        end if;
+    end process;
+
+    -- Connect memory/IO data to CPU data bus
+    -- Real 8008 behavior:
+    --   T1: CPU outputs address lower byte on data bus (external hardware latches it)
+    --   T2: CPU outputs address upper byte on data bus (external hardware latches it)
+    --   T3-T5: External hardware (ROM/RAM/IO) drives data bus for CPU to read
+    -- During T1I (interrupt acknowledge), jam RST 0 instruction (0x05) for bootstrap
+    -- Only jam during FIRST T1I after reset (bootstrap), then let ROM take over
+    -- IMPORTANT: Check is_io FIRST since I/O cycles have their own address format
+    -- (latched_address may fall in ROM/RAM range but it's actually I/O port data)
+    data_bus <= x"05" when (s2_out = '1' and s1_out = '1' and s0_out = '0' and bootstrap_done = '0') else  -- T1I bootstrap: jam RST 0
+                io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- I/O input drives bus during T3/T4/T5 (check first!)
+                rom_data when (rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM drives bus during T3/T4/T5
+                ram_data_out when (ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM drives bus during T3/T4/T5
+                (others => 'Z');  -- Tri-state during T1/T2 (CPU drives address)
+
+    -- ========================================================================
+    -- DEBUG OUTPUTS
+    -- ========================================================================
+
+    phi1_out    <= phi1;
+    phi2_out    <= phi2;
+    address_out <= latched_address;  -- Latched from data bus during T1/T2
+    data_out    <= data_bus;  -- Debug output: pass through as-is (may contain 'Z', 'X', etc.)
+
+    -- I/O port debug outputs
+    debug_io_port_8  <= io_output_port_8;
+    debug_io_port_9  <= io_output_port_9;
+    debug_io_port_10 <= io_output_port_10;
+
+end architecture structural;

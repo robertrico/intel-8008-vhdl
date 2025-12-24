@@ -25,3 +25,4 @@ https://www.intel.com/content/www/us/en/history/virtual-vault/articles/the-8008.
 https://en.wikichip.org/wiki/intel/mcs-8/isa
 
 https://github.com/jim11662418/Intel_8008_Single_Board_Computer
+https://www.willegal.net/scelbi/apps8008.html

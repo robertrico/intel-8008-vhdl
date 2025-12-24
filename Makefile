@@ -17,7 +17,7 @@ TEST_DIR = ./sim/b8008
 BUILD_DIR = ./build/b8008
 PROG_DIR = ./test_programs
 
-.PHONY: all clean assemble test-b8008 test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help
+.PHONY: all clean assemble test-b8008 test-b8008-top test-interrupt test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help
 
 all: help
 
@@ -125,6 +125,42 @@ show-programs:
 
 # CLAUDE - When testing instructions, we should have make file commands to help us test specific files
 # NOT run the whole suite everytime.
+
+# Interrupt test with dedicated testbench
+test-interrupt: $(BUILD_DIR)
+	@echo "========================================="
+	@echo "Testing Interrupt Handling"
+	@echo "Program: test_programs/interrupt_test_as.mem"
+	@echo "========================================="
+	@echo ""
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/phase_clocks.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/state_timing_generator.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/interrupt_ready_ff.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/program_counter.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/mem_mux_refresh.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_addr_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/condition_flags.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/io_buffer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_4kx8.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/legacy/ram_1kx8.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/interrupt_test_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_test_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_test_tb --stop-time=10ms
 
 test-pc: $(BUILD_DIR)
 	@echo "Testing program counter..."
