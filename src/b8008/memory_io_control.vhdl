@@ -554,15 +554,24 @@ begin
                     -- RET/RFc/RTc: Pop stack during T4 (only if condition met for conditional returns)
                     -- The condition_met signal is already handled by machine_cycle_control
                     -- which only enables T4/T5 if the condition is met
-                    stack_pop           <= '1';
-                    stack_read          <= '1';  -- Read from stack
-                    pc_load_from_stack  <= '1';  -- Load PC from stack
-                    select_stack        <= '1';  -- Use stack for address
-                    report "MEM_IO: T4 cycle 1 RET - popping from stack and loading PC";
+                    -- IMPORTANT: Pop in first half, read in second half to get correct stack level
+                    -- The Intel 8008 stack semantics: decrement SP FIRST, then read from new level
+                    if state_half = '0' then
+                        stack_pop           <= '1';  -- Decrement SP in first half
+                        report "MEM_IO: T4 cycle 1 RET - popping from stack (first half)";
+                    else
+                        stack_read          <= '1';  -- Read from stack in second half (after SP decremented)
+                        report "MEM_IO: T4 cycle 1 RET - reading from stack (second half)";
+                    end if;
+                    pc_load_from_stack  <= '1';  -- Load PC from stack (both halves)
+                    select_stack        <= '1';  -- Use stack for address (both halves)
                 elsif instr_is_rst = '1' then
                     -- RST: Push current PC to stack during T4, load RST vector during T5
-                    stack_push         <= '1';
-                    stack_write        <= '1';  -- Write PC to stack
+                    -- IMPORTANT: Only push/write during first half of T4 to avoid double-push
+                    if state_half = '0' then
+                        stack_push         <= '1';
+                        stack_write        <= '1';  -- Write PC to stack
+                    end if;
                 elsif instr_writes_reg = '1' and instr_reads_reg = '1' and instr_is_alu = '0' and instr_needs_immediate = '0' then
                     -- MOV register-to-register: Read source register (SSS) to internal bus
                     -- Per isa.json T4: "SSS TO REG. b"
@@ -590,9 +599,12 @@ begin
             elsif current_cycle = 3 then
                 -- Third cycle of CALL - push to stack during T4
                 if instr_is_call = '1' then
-                    stack_push         <= '1';
-                    stack_write        <= '1';  -- Write PC to stack
-                    report "MEM_IO: T4 cycle 3 CALL - pushing return address to stack";
+                    -- IMPORTANT: Only push/write during first half of T4 to avoid double-push
+                    if state_half = '0' then
+                        stack_push         <= '1';
+                        stack_write        <= '1';  -- Write PC to stack
+                        report "MEM_IO: T4 cycle 3 CALL - pushing return address to stack";
+                    end if;
                 end if;
                 -- JMP loads PC during T5, handled below
                 -- CALL loads PC during T5, handled below

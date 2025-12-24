@@ -51,9 +51,11 @@ begin
             if stack_push = '1' then
                 -- Push: increment (wraps from 111 to 000)
                 sp <= sp + 1;
+                report "STACK_PTR: Push, SP " & integer'image(to_integer(sp)) & " -> " & integer'image(to_integer(sp + 1));
             elsif stack_pop = '1' then
                 -- Pop: decrement (wraps from 000 to 111)
                 sp <= sp - 1;
+                report "STACK_PTR: Pop, SP " & integer'image(to_integer(sp)) & " -> " & integer'image(to_integer(sp - 1));
             end if;
         end if;
     end process;

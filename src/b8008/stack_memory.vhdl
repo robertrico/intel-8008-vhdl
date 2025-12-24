@@ -69,12 +69,30 @@ begin
                     stack(1) <= addr_in;
                     report "STACK: Writing level 1 = 0x" & to_hstring(unsigned(addr_in));
                 end if;
-                if enable_level_2 = '1' then stack(2) <= addr_in; end if;
-                if enable_level_3 = '1' then stack(3) <= addr_in; end if;
-                if enable_level_4 = '1' then stack(4) <= addr_in; end if;
-                if enable_level_5 = '1' then stack(5) <= addr_in; end if;
-                if enable_level_6 = '1' then stack(6) <= addr_in; end if;
-                if enable_level_7 = '1' then stack(7) <= addr_in; end if;
+                if enable_level_2 = '1' then
+                    stack(2) <= addr_in;
+                    report "STACK: Writing level 2 = 0x" & to_hstring(unsigned(addr_in));
+                end if;
+                if enable_level_3 = '1' then
+                    stack(3) <= addr_in;
+                    report "STACK: Writing level 3 = 0x" & to_hstring(unsigned(addr_in));
+                end if;
+                if enable_level_4 = '1' then
+                    stack(4) <= addr_in;
+                    report "STACK: Writing level 4 = 0x" & to_hstring(unsigned(addr_in));
+                end if;
+                if enable_level_5 = '1' then
+                    stack(5) <= addr_in;
+                    report "STACK: Writing level 5 = 0x" & to_hstring(unsigned(addr_in));
+                end if;
+                if enable_level_6 = '1' then
+                    stack(6) <= addr_in;
+                    report "STACK: Writing level 6 = 0x" & to_hstring(unsigned(addr_in));
+                end if;
+                if enable_level_7 = '1' then
+                    stack(7) <= addr_in;
+                    report "STACK: Writing level 7 = 0x" & to_hstring(unsigned(addr_in));
+                end if;
             end if;
         end if;
     end process;
@@ -91,13 +109,26 @@ begin
                 (others => '0');
 
     -- Monitor reads
-    process(stack_read, enable_level_0, enable_level_1, stack)
+    process(stack_read, enable_level_0, enable_level_1, enable_level_2, enable_level_3,
+            enable_level_4, enable_level_5, enable_level_6, enable_level_7, stack)
     begin
         if stack_read = '1' then
             if enable_level_0 = '1' then
                 report "STACK: Reading level 0 = 0x" & to_hstring(unsigned(stack(0)));
             elsif enable_level_1 = '1' then
                 report "STACK: Reading level 1 = 0x" & to_hstring(unsigned(stack(1)));
+            elsif enable_level_2 = '1' then
+                report "STACK: Reading level 2 = 0x" & to_hstring(unsigned(stack(2)));
+            elsif enable_level_3 = '1' then
+                report "STACK: Reading level 3 = 0x" & to_hstring(unsigned(stack(3)));
+            elsif enable_level_4 = '1' then
+                report "STACK: Reading level 4 = 0x" & to_hstring(unsigned(stack(4)));
+            elsif enable_level_5 = '1' then
+                report "STACK: Reading level 5 = 0x" & to_hstring(unsigned(stack(5)));
+            elsif enable_level_6 = '1' then
+                report "STACK: Reading level 6 = 0x" & to_hstring(unsigned(stack(6)));
+            elsif enable_level_7 = '1' then
+                report "STACK: Reading level 7 = 0x" & to_hstring(unsigned(stack(7)));
             end if;
         end if;
     end process;
