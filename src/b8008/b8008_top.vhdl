@@ -32,6 +32,7 @@ entity b8008_top is
         clk_in      : in std_logic;
         reset       : in std_logic;
         interrupt   : in std_logic;  -- Bootstrap interrupt (tie high after reset)
+        int_vector  : in std_logic_vector(2 downto 0) := "000";  -- RST vector (0-7) to jam during T1I
 
         -- Debug outputs
         phi1_out    : out std_logic;
@@ -452,7 +453,9 @@ begin
     -- Only jam during FIRST T1I after reset (bootstrap), then let ROM take over
     -- IMPORTANT: Check is_io FIRST since I/O cycles have their own address format
     -- (latched_address may fall in ROM/RAM range but it's actually I/O port data)
-    data_bus <= x"05" when (s2_out = '1' and s1_out = '1' and s0_out = '0' and bootstrap_done = '0') else  -- T1I bootstrap: jam RST 0
+    -- RST instruction opcode = 00 AAA 101 where AAA is the vector (0-7)
+    -- RST 0 = 0x05, RST 1 = 0x0D, RST 2 = 0x15, RST 3 = 0x1D, etc.
+    data_bus <= ("00" & int_vector & "101") when (s2_out = '1' and s1_out = '1' and s0_out = '0') else  -- T1I: jam RST instruction based on int_vector
                 io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- I/O input drives bus during T3/T4/T5 (check first!)
                 rom_data when (rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM drives bus during T3/T4/T5
                 ram_data_out when (ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM drives bus during T3/T4/T5

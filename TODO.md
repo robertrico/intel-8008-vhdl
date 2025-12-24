@@ -4,11 +4,12 @@ This document tracks what needs to be done before the b8008 is ready for FPGA ha
 
 ## Current Status
 
-- **19/19 verification tests pass**
+- **21/21 verification tests pass**
 - **All 48 instruction types implemented** (28 unique operation categories)
 - **Block-based architecture complete**
 - **Stack depth bug fixed** (RET was reading from wrong level)
-- **Estimated opcode coverage: ~85-90%** (see Confidence Report below)
+- **Interrupt handling tested** (RST 0 bootstrap + RST 7 runtime interrupt)
+- **Estimated opcode coverage: ~90-95%** (see Confidence Report below)
 
 ---
 
@@ -24,7 +25,8 @@ This document tracks what needs to be done before the b8008 is ready for FPGA ha
 | Control Flow | 95% | JMP, CALL, RET, conditionals all tested |
 | RST Instructions | 100% | All 8 vectors tested |
 | I/O Operations | 100% | All 8 INP and all 24 OUT ports tested |
-| **Overall System** | **90-95%** | Ready for hardware with high confidence |
+| Interrupts | 100% | Bootstrap (RST 0) and runtime interrupt (RST 7) tested |
+| **Overall System** | **95%** | Ready for hardware with high confidence |
 
 ---
 
@@ -64,12 +66,14 @@ This document tracks what needs to be done before the b8008 is ready for FPGA ha
 - [x] Verification script: `check_flag_test.sh`
 - [x] Tests Carry, Zero, Sign, and Parity flags
 
-### [ ] Add Interrupt Test
-`interrupt_ready_ff.vhdl` exists but has no test.
-- [ ] Create `interrupt_test_as.asm`
-- [ ] Test INT input sampling
-- [ ] Test T1I acknowledge cycle
-- [ ] Create verification script
+### [x] Add Interrupt Test
+`interrupt_ready_ff.vhdl` tested via dedicated interrupt testbench.
+- [x] Create `interrupt_test_as.asm`
+- [x] Test INT input sampling
+- [x] Test T1I acknowledge cycle with RST instruction jamming
+- [x] Test runtime interrupt (RST 7) waking from HLT
+- [x] Create verification script (`check_interrupt_test.sh`)
+- [x] Fixed IR reload bug after T1I (instruction was being overwritten from ROM)
 
 ### [x] Stack Depth Test
 - [x] Test 6 nested CALLs (`stack_depth_test_as.asm`)
@@ -137,9 +141,6 @@ Write a test that executes EVERY unique opcode at least once:
 ### READY Signal Untested
 External wait state handling exists but has no test coverage.
 
-### Interrupt Untested
-Interrupt handling logic exists but has no test coverage yet.
-
 ---
 
 ## Test Coverage Matrix
@@ -195,6 +196,8 @@ Note: INR/DCR have 6 variants each (B,C,D,E,H,L) - no INR A or DCR A exists.
 | `flag_test_as.asm` | Carry, Zero, Sign, Parity flags | PASS |
 | `stack_depth_test_as.asm` | 6 nested CALLs/RETs | PASS |
 | `search_as.asm` | Integrated algorithm test | PASS |
+| `alu_full_coverage_test_as.asm` | ADC/SBB/ANA/ORA/XRA/CMP with all registers | PASS |
+| `interrupt_test_as.asm` | Bootstrap RST 0, runtime RST 7 interrupt | PASS |
 
 ---
 
@@ -218,8 +221,8 @@ make test-b8008-top PROG=alu_test_as SIM_TIME=30ms
 Before FPGA deployment, ALL of the following must be true:
 
 1. [x] All high priority items complete (INR/DCR test, MOV r,r test)
-2. [x] Most medium priority items complete (I/O, ALU coverage) - interrupt still pending
-3. [x] Opcode coverage reaches 80%+ (currently ~85-90%)
+2. [x] All medium priority items complete (I/O, ALU coverage, interrupt test)
+3. [x] Opcode coverage reaches 90%+ (currently ~95%)
 4. [ ] Synthesis completes without errors
 5. [ ] Timing analysis passes
 6. [ ] At least one test program runs on hardware

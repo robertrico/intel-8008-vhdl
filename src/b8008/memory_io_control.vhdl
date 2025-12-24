@@ -169,6 +169,11 @@ architecture rtl of memory_io_control is
     -- - LMI: Set at T5 of cycle 2, suppress PC inc at T1 of cycle 3
     signal suppress_pc_inc_next_cycle : std_logic := '0';
 
+    -- Track when IR was loaded during T1I (interrupt acknowledge)
+    -- This suppresses the normal IR load at T3 of cycle 1 since the instruction
+    -- was already jammed during T1I. Cleared at T2.
+    signal ir_loaded_from_interrupt : std_logic := '0';
+
 begin
 
     -- Detect rising edges of state signals
@@ -185,7 +190,19 @@ begin
             prev_state_t5 <= '0';
             pc_was_loaded <= '0';
             suppress_pc_inc_next_cycle <= '0';
+            ir_loaded_from_interrupt <= '0';
         elsif rising_edge(phi1) then
+            -- Set flag when entering T1I (instruction will be jammed)
+            if state_t1i = '1' and state_half = '1' then
+                ir_loaded_from_interrupt <= '1';
+                report "MEM_IO: Setting ir_loaded_from_interrupt flag (T1I second half)";
+            end if;
+            -- Clear the flag at T4 (after T3 completed - uses prev_state_t4 for proper timing)
+            -- This ensures the flag is active throughout all of T3 to block IR reload
+            if prev_state_t4 = '1' and ir_loaded_from_interrupt = '1' then
+                ir_loaded_from_interrupt <= '0';
+                report "MEM_IO: Clearing ir_loaded_from_interrupt flag (after T4)";
+            end if;
             -- Update previous state values for edge detection
             prev_state_t2 <= state_t2;
             prev_state_t3 <= state_t3;
@@ -261,7 +278,7 @@ begin
             cycle_type, current_cycle, instr_is_io, instr_is_write, instr_is_mem_indirect,
             condition_met, ready_status, interrupt_pending, eval_condition,
             instr_needs_immediate, instr_needs_address,
-            instr_sss_field, instr_ddd_field, instr_is_alu,
+            instr_sss_field, instr_ddd_field, instr_is_alu, ir_loaded_from_interrupt,
             instr_is_call, instr_is_ret, instr_is_rst,
             instr_writes_reg, instr_reads_reg, pc_was_loaded, suppress_pc_inc_next_cycle)
     begin
@@ -468,11 +485,15 @@ begin
                     -- Instruction fetch: read from external memory and load IR
                     -- Cycle type PCI only occurs during cycle 1 (machine_cycle_control ensures this)
                     -- IMPORTANT: Do not load IR if CPU is stopped
+                    -- IMPORTANT: Do not load IR if we came from T1I (interrupt jammed instruction)
                     io_buffer_enable    <= '1';
                     io_buffer_direction <= '0';  -- Read from external
                     memory_read         <= '1';
-                    if state_stopped = '0' then
+                    if state_stopped = '0' and ir_loaded_from_interrupt = '0' then
                         ir_load <= '1';  -- Load instruction into IR
+                    elsif ir_loaded_from_interrupt = '1' then
+                        ir_load <= '0';  -- Don't load IR - instruction was jammed during T1I
+                        report "MEM_IO: Skipping ir_load - instruction was jammed during T1I";
                     else
                         ir_load <= '0';  -- Don't load IR when stopped
                         report "MEM_IO: Blocking ir_load - CPU is stopped";
