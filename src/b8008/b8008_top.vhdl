@@ -176,6 +176,12 @@ architecture structural of b8008_top is
     signal io_output_port_9  : std_logic_vector(7 downto 0) := (others => '0');
     signal io_output_port_10 : std_logic_vector(7 downto 0) := (others => '0');
 
+    -- Checkpoint system: Port 31 (0x1F) is the assertion port
+    -- When OUT 31 is executed, capture full CPU state for verification
+    -- The accumulator value at that point is the checkpoint ID
+    signal checkpoint_id : integer := 0;
+    signal last_checkpoint_pc : std_logic_vector(13 downto 0) := (others => '1');  -- Track last checkpoint to avoid duplicates
+
     -- External address latches (like real 8008 external hardware)
     signal latched_address : std_logic_vector(13 downto 0) := (others => '0');
 
@@ -376,31 +382,63 @@ begin
     -- Output port latches - capture data written by OUT instruction
     -- OUT instruction: CPU drives data_bus with accumulator value during T3
     process(phi1, reset)
+        variable port_base : integer;
     begin
         if reset = '1' then
             io_output_port_8  <= (others => '0');
             io_output_port_9  <= (others => '0');
             io_output_port_10 <= (others => '0');
+            checkpoint_id <= 0;
+            last_checkpoint_pc <= (others => '1');
         elsif rising_edge(phi1) then
             -- Latch output data during T3 of I/O write (OUT instruction)
             -- OUT uses ports 8-31 (RR field non-zero in opcode 01RRMMM1)
             -- RR field is opcode bits 5:4 which map to address bits 13:12
             -- INP has RR=00, OUT has RR≠00
             if is_io = '1' and is_t3 = '1' and (latched_address(13) = '1' or latched_address(12) = '1') then
-                case io_port_num is
-                    when "000" =>
-                        io_output_port_8 <= data_bus;
-                        report "I/O: OUT port 8 = 0x" & to_hstring(unsigned(data_bus));
-                    when "001" =>
-                        io_output_port_9 <= data_bus;
-                        report "I/O: OUT port 9 = 0x" & to_hstring(unsigned(data_bus));
-                    when "010" =>
-                        io_output_port_10 <= data_bus;
-                        report "I/O: OUT port 10 = 0x" & to_hstring(unsigned(data_bus));
-                    when others =>
-                        report "I/O: OUT port " & integer'image(to_integer(unsigned(io_port_num)) + 8) &
-                               " = 0x" & to_hstring(unsigned(data_bus));
-                end case;
+                -- Calculate actual port number: base = RR * 8, port = base + MMM
+                -- RR=01 -> ports 8-15, RR=10 -> ports 16-23, RR=11 -> ports 24-31
+                port_base := to_integer(unsigned(latched_address(13 downto 12))) * 8;
+
+                -- Check for CHECKPOINT port (port 31 = RR=11, MMM=111)
+                if latched_address(13 downto 12) = "11" and io_port_num = "111" then
+                    -- Port 31: CHECKPOINT assertion port
+                    -- The A register contains the checkpoint ID (set by MVI A,N before OUT 31)
+                    -- Only report if this is a new checkpoint (different PC than last)
+                    if debug_pc /= last_checkpoint_pc then
+                        checkpoint_id <= to_integer(unsigned(debug_reg_a));
+                        last_checkpoint_pc <= debug_pc;
+                        report "CHECKPOINT: ID=" & integer'image(to_integer(unsigned(debug_reg_a))) &
+                               " PC=0x" & to_hstring(unsigned(debug_pc)) &
+                               " A=0x" & to_hstring(unsigned(debug_reg_a)) &
+                               " B=0x" & to_hstring(unsigned(debug_reg_b)) &
+                               " C=0x" & to_hstring(unsigned(debug_reg_c)) &
+                               " D=0x" & to_hstring(unsigned(debug_reg_d)) &
+                               " E=0x" & to_hstring(unsigned(debug_reg_e)) &
+                               " H=0x" & to_hstring(unsigned(debug_reg_h)) &
+                               " L=0x" & to_hstring(unsigned(debug_reg_l)) &
+                               " C=" & std_logic'image(debug_flag_carry)(2) &
+                               " Z=" & std_logic'image(debug_flag_zero)(2) &
+                               " S=" & std_logic'image(debug_flag_sign)(2) &
+                               " P=" & std_logic'image(debug_flag_parity)(2);
+                    end if;
+                else
+                    -- Regular output ports
+                    case io_port_num is
+                        when "000" =>
+                            io_output_port_8 <= data_bus;
+                            report "I/O: OUT port " & integer'image(port_base) & " = 0x" & to_hstring(unsigned(data_bus));
+                        when "001" =>
+                            io_output_port_9 <= data_bus;
+                            report "I/O: OUT port " & integer'image(port_base + 1) & " = 0x" & to_hstring(unsigned(data_bus));
+                        when "010" =>
+                            io_output_port_10 <= data_bus;
+                            report "I/O: OUT port " & integer'image(port_base + 2) & " = 0x" & to_hstring(unsigned(data_bus));
+                        when others =>
+                            report "I/O: OUT port " & integer'image(port_base + to_integer(unsigned(io_port_num))) &
+                                   " = 0x" & to_hstring(unsigned(data_bus));
+                    end case;
+                end if;
             end if;
         end if;
     end process;

@@ -21,13 +21,8 @@ PASSED=0
 FAILED=0
 FAILED_TESTS=""
 
-# Find all .sh files except this script
-for script in "$SCRIPT_DIR"/*.sh; do
-    # Skip this script
-    if [ "$(basename "$script")" = "run_all_tests.sh" ]; then
-        continue
-    fi
-
+# Find all check_*.sh files (test scripts only, not libraries)
+for script in "$SCRIPT_DIR"/check_*.sh; do
     # Skip non-executable files
     if [ ! -x "$script" ]; then
         continue
