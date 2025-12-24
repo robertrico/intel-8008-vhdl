@@ -49,7 +49,7 @@ entity register_alu_control is
         alu_enable   : out std_logic;  -- Enable ALU execution
         update_flags : out std_logic;  -- Latch condition flags
 
-        -- Output enable signals (CRITICAL ISSUE #2)
+        -- Output enable signals
         output_reg_a  : out std_logic;  -- Reg.a drives internal bus
         output_reg_b  : out std_logic;  -- Reg.b drives internal bus
         output_result : out std_logic;  -- ALU result drives internal bus

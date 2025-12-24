@@ -51,7 +51,7 @@ entity instruction_decoder is
         -- For Machine Cycle Control (extended states T4/T5)
         instr_needs_t4t5      : out std_logic;  -- Instruction needs T4/T5 states (JMP, CALL, RET, RST, ALU ops)
 
-        -- RST vector (CRITICAL ISSUE #3)
+        -- RST vector
         rst_vector            : out std_logic_vector(2 downto 0);  -- RST instruction bits D5:D3
 
         -- Condition evaluation (for condition_flags module)

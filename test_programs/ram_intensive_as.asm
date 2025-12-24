@@ -78,9 +78,11 @@ MAIN:
         ; Phase 4: Verify first inverted value
         CALL    VERIFY
         ; CHECKPOINT 4: After VERIFY
-        MOV     L,B                 ; Save B to L (first inverted = 0xFF)
+        ; Save A to D (A contains 0xF0 which we need to preserve)
+        MOV     D,A                 ; D = A = 0xF0
         MVI     A,04h
-        OUT     CHKPT               ; CP4: B=0xFF, E=0xF0
+        OUT     CHKPT               ; CP4: D=0xF0, B=0xFF, E=0xF0
+        MOV     A,D                 ; Restore A = 0xF0
 
         ; Halt with results in registers
         HLT

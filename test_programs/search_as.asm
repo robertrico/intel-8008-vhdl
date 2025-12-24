@@ -68,11 +68,14 @@ LOOP:   MOV     A,M             ; Load A from memory[H:L]
 ; Found: Save location and Halt
 FOUND:
         ; CHECKPOINT 1: Found the period
-        MOV     E,L             ; Save L to E
+        ; A contains 0x2E (period), L contains 0xD4 (position)
+        MOV     E,A             ; Save A (period = 0x2E) to E
+        MOV     D,L             ; Save L (position = 0xD4) to D
         MVI     A,01h
-        OUT     CHKPT           ; CP1: L=0xD4 (position 212)
+        OUT     CHKPT           ; CP1: D=0xD4 (position 212)
+        MOV     A,E             ; Restore A = 0x2E
 
-        MOV     A,E             ; Restore L value to A
+        ; Original code continues...
         MOV     H,L             ; Copy L to H for verification
         MOV     L,H
         MOV     H,A
