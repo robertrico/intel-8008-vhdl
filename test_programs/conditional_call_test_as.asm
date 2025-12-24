@@ -10,6 +10,18 @@
 ;   - CZ (Call on zero)
 ;   - RZ (Return on zero)
 ;
+; Uses OUT 31 checkpoints for assertion-based verification.
+;
+; Checkpoint Results:
+;   CP1:  After ACI with carry    - L=0x16 (0x10+0x05+1)
+;   CP2:  After ACI no carry      - L=0x15 (0x10+0x05+0)
+;   CP3:  After SBI with borrow   - L=0x1A (0x20-0x05-1)
+;   CP4:  After SBI no borrow     - L=0x1B (0x20-0x05-0)
+;   CP5:  After CC                - C=0xAA (called on carry)
+;   CP6:  After CNC               - D=0xBB (called on no carry)
+;   CP7:  After CNZ/CZ/RZ         - success
+;   CP8:  Final                   - A=0x00
+;
 ; Expected final state:
 ;   A = 0x00 (success)
 ;   B = 0x07 (test counter - 7 tests completed)
@@ -18,6 +30,9 @@
 
         cpu     8008new
         page    0
+
+; Checkpoint port constant
+CHKPT   equ     31              ; Port 31 = checkpoint/assertion port
 
 ; Reset vector at 0x0000
         org     0000h
@@ -43,6 +58,11 @@ MAIN:
         ADI     01h             ; 0xFF + 0x01 = 0x100, sets carry
         MVI     A,10h           ; A = 0x10 (carry preserved)
         ACI     05h             ; A = 0x10 + 0x05 + 1 = 0x16
+        ; CHECKPOINT 1: Verify ACI with carry
+        MOV     L,A             ; Save A to L
+        MVI     A,01h
+        OUT     CHKPT           ; CP1: L=0x16
+        MOV     A,L             ; Restore A
 
         CPI     16h             ; Check result
         JNZ     FAIL            ; Fail if A != 0x16
@@ -56,6 +76,11 @@ MAIN:
         MVI     A,10h           ; A = 0x10
         ADI     00h             ; Clear carry
         ACI     05h             ; A = 0x10 + 0x05 + 0 = 0x15
+        ; CHECKPOINT 2: Verify ACI no carry
+        MOV     L,A             ; Save A to L
+        MVI     A,02h
+        OUT     CHKPT           ; CP2: L=0x15
+        MOV     A,L             ; Restore A
 
         CPI     15h             ; Check result
         JNZ     FAIL            ; Fail if A != 0x15
@@ -70,6 +95,11 @@ MAIN:
         ADI     01h             ; 0xFF + 0x01 = 0x100, sets carry
         MVI     A,20h           ; A = 0x20 (carry preserved)
         SBI     05h             ; A = 0x20 - 0x05 - 1 = 0x1A
+        ; CHECKPOINT 3: Verify SBI with borrow
+        MOV     L,A             ; Save A to L
+        MVI     A,03h
+        OUT     CHKPT           ; CP3: L=0x1A
+        MOV     A,L             ; Restore A
 
         CPI     1Ah             ; Check result
         JNZ     FAIL            ; Fail if A != 0x1A
@@ -83,6 +113,11 @@ MAIN:
         MVI     A,20h           ; A = 0x20
         ADI     00h             ; Clear carry
         SBI     05h             ; A = 0x20 - 0x05 - 0 = 0x1B
+        ; CHECKPOINT 4: Verify SBI no borrow
+        MOV     L,A             ; Save A to L
+        MVI     A,04h
+        OUT     CHKPT           ; CP4: L=0x1B
+        MOV     A,L             ; Restore A
 
         CPI     1Bh             ; Check result
         JNZ     FAIL            ; Fail if A != 0x1B
@@ -95,6 +130,9 @@ MAIN:
         MVI     A,0FFh          ; Set up to generate carry
         ADI     01h             ; Sets carry
         CC      SUB_CC          ; Call if carry set (should call)
+        ; CHECKPOINT 5: Verify CC called
+        MVI     A,05h
+        OUT     CHKPT           ; CP5: C=0xAA
 
         ; Check that C was set by subroutine
         MOV     A,C
@@ -109,6 +147,9 @@ MAIN:
         MVI     A,00h
         ADI     00h             ; Clear carry
         CNC     SUB_CNC         ; Call if carry NOT set (should call)
+        ; CHECKPOINT 6: Verify CNC called
+        MVI     A,06h
+        OUT     CHKPT           ; CP6: D=0xBB
 
         ; Check that D was set by subroutine
         MOV     A,D
@@ -139,10 +180,16 @@ MAIN:
         CPI     0DDh            ; Check A = 0xDD
         JNZ     FAIL            ; Fail if A != 0xDD
         INR     B               ; Test 7 passed, B = 7
+        ; CHECKPOINT 7: Verify CNZ/CZ/RZ worked
+        MVI     A,07h
+        OUT     CHKPT           ; CP7: B=0x07
 
         ;===========================================
         ; All tests passed! Set success marker
         ;===========================================
+        ; CHECKPOINT 8: Final success
+        MVI     A,08h
+        OUT     CHKPT           ; CP8: success
         MVI     A,00h           ; A = 0x00 (success)
         JMP     DONE
 

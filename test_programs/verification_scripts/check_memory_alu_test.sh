@@ -1,96 +1,115 @@
 #!/bin/bash
 
-# ============================================
+# ============================================================================
 # MEMORY ALU OPERATIONS TEST VERIFICATION SCRIPT
-# ============================================
-# This script verifies the b8008 CPU correctly
-# executes memory-based ALU operations:
+# ============================================================================
+# Comprehensive memory-based ALU operations test with checkpoint assertions
+#
+# Program: memory_alu_test_as.asm
+#
+# Tests all memory-based ALU operations:
 #   - ADC M (Add memory with carry)
 #   - SBB M (Subtract memory with borrow)
 #   - ANA M (AND memory)
 #   - XRA M (XOR memory)
 #   - ORA M (OR memory)
 #   - CMP M (Compare memory)
+#
+# Checkpoint Results:
+#   CP1:  After ADC M with carry   - E=0x16 (0x05+0x10+1)
+#   CP2:  After ADC M no carry     - E=0x15 (0x05+0x10+0)
+#   CP3:  After SBB M with borrow  - E=0x0C (0x10-0x03-1)
+#   CP4:  After SBB M no borrow    - E=0x0D (0x10-0x03-0)
+#   CP5:  After ANA M              - E=0x0B (0xAB AND 0x0F)
+#   CP6:  After XRA M              - E=0x55 (0xAA XOR 0xFF)
+#   CP7:  After ORA M              - E=0xAF (0xA0 OR 0x0F)
+#   CP8:  After CMP M (equal)      - ZF=1
+#   CP9:  After CMP M (greater)    - ZF=0, CF=0
+#   CP10: After CMP M (less)       - ZF=0, CF=1
+#   CP11: Final                    - success
+#
+# Final Register State:
+#   A: 0x00, B: 0x01, H: 0x00, L: 0xF0
+# ============================================================================
 
-echo "=========================================="
-echo "B8008 Memory ALU Operations Test"
-echo "=========================================="
-echo ""
+# Source the checkpoint library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/checkpoint_lib.sh"
 
 # Run the test
-echo "Running test (this takes a few seconds)..."
-make test-b8008-top PROG=memory_alu_test_as 2>&1 > memory_alu_test.log
+run_test "memory_alu_test_as" "10ms"
+
+# List all checkpoints found
+list_checkpoints
 
 echo ""
-echo "=== Expected Results ==="
-echo "  A = 0x00 (success marker - all tests passed)"
-echo "  B = 0x01 (test counter showing completion)"
-echo "  H = 0x00 (high byte of memory pointer)"
-echo "  L = 0xF0 (low byte - points to test data area)"
-echo ""
+echo "=== ADC M Tests ==="
 
-echo "=== Final Register State ==="
-tail -50 memory_alu_test.log | grep -E "Reg\.(A|B)" | tail -1
-tail -50 memory_alu_test.log | grep -E "Reg\.(H|L)" | tail -1
+# CP1: ADC M with carry (0x05 + 0x10 + 1 = 0x16)
+assert_checkpoint 1 \
+    "E=0x16"
 
-echo ""
-echo "=== Test Summary ==="
-
-# Check final register values
-PASS=true
-
-FINAL_A=$(tail -50 memory_alu_test.log | grep "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-F]+).*/\1/')
-FINAL_B=$(tail -50 memory_alu_test.log | grep "Reg\.B = " | tail -1 | sed -E 's/.*Reg\.B = (0x[0-9A-F]+).*/\1/')
-FINAL_H=$(tail -50 memory_alu_test.log | grep "Reg\.H = " | tail -1 | sed -E 's/.*Reg\.H = (0x[0-9A-F]+).*/\1/')
-FINAL_L=$(tail -50 memory_alu_test.log | grep "Reg\.L = " | tail -1 | sed -E 's/.*Reg\.L = (0x[0-9A-F]+).*/\1/')
-
-if [ "$FINAL_A" = "0x00" ]; then
-    echo "  [PASS] A = 0x00 (all tests passed)"
-else
-    echo "  [FAIL] A = $FINAL_A (expected 0x00 - test failed)"
-    PASS=false
-fi
-
-if [ "$FINAL_B" = "0x01" ]; then
-    echo "  [PASS] B = 0x01 (test completion marker)"
-else
-    echo "  [FAIL] B = $FINAL_B (expected 0x01)"
-    PASS=false
-fi
-
-if [ "$FINAL_H" = "0x00" ]; then
-    echo "  [PASS] H = 0x00 (memory pointer high)"
-else
-    echo "  [FAIL] H = $FINAL_H (expected 0x00)"
-    PASS=false
-fi
-
-if [ "$FINAL_L" = "0xF0" ]; then
-    echo "  [PASS] L = 0xF0 (memory pointer low)"
-else
-    echo "  [FAIL] L = $FINAL_L (expected 0xF0)"
-    PASS=false
-fi
+# CP2: ADC M without carry (0x05 + 0x10 + 0 = 0x15)
+assert_checkpoint 2 \
+    "E=0x15"
 
 echo ""
-if [ "$PASS" = true ]; then
-    echo "=========================================="
-    echo "ALL MEMORY ALU TESTS PASSED!"
-    echo "=========================================="
-    echo ""
-    echo "Instructions tested:"
-    echo "  - ADC M (Add memory with carry)"
-    echo "  - SBB M (Subtract memory with borrow)"
-    echo "  - ANA M (AND memory)"
-    echo "  - XRA M (XOR memory)"
-    echo "  - ORA M (OR memory)"
-    echo "  - CMP M (Compare memory)"
-else
-    echo "=========================================="
-    echo "SOME TESTS FAILED - Check output above"
-    echo "=========================================="
-fi
+echo "=== SBB M Tests ==="
+
+# CP3: SBB M with borrow (0x10 - 0x03 - 1 = 0x0C)
+assert_checkpoint 3 \
+    "E=0x0C"
+
+# CP4: SBB M without borrow (0x10 - 0x03 - 0 = 0x0D)
+assert_checkpoint 4 \
+    "E=0x0D"
 
 echo ""
-echo "Full output saved to: memory_alu_test.log"
-echo "=========================================="
+echo "=== Logical Memory Tests ==="
+
+# CP5: ANA M (0xAB AND 0x0F = 0x0B)
+assert_checkpoint 5 \
+    "E=0x0B"
+
+# CP6: XRA M (0xAA XOR 0xFF = 0x55)
+assert_checkpoint 6 \
+    "E=0x55"
+
+# CP7: ORA M (0xA0 OR 0x0F = 0xAF)
+assert_checkpoint 7 \
+    "E=0xAF"
+
+echo ""
+echo "=== CMP M Tests ==="
+
+# CP8: CMP M equal (A == M, ZF=1)
+assert_checkpoint 8 \
+    "ZF=1" \
+    "CF=0"
+
+# CP9: CMP M greater (A > M, ZF=0, CF=0)
+assert_checkpoint 9 \
+    "ZF=0" \
+    "CF=0"
+
+# CP10: CMP M less (A < M, ZF=0, CF=1)
+assert_checkpoint 10 \
+    "ZF=0" \
+    "CF=1"
+
+echo ""
+echo "=== Final State ==="
+
+# CP11: Final success checkpoint
+assert_checkpoint 11
+
+# Verify final state via traditional method
+assert_final_state \
+    "A=0x00" \
+    "B=0x01" \
+    "H=0x00" \
+    "L=0xF0"
+
+# Print summary and exit
+print_summary
+exit $?

@@ -1,9 +1,13 @@
 #!/bin/bash
 
-# ============================================
+# ============================================================================
 # CONDITIONAL CALL AND CARRY IMMEDIATE TEST VERIFICATION SCRIPT
-# ============================================
-# This script verifies the b8008 CPU correctly executes:
+# ============================================================================
+# Comprehensive conditional call test with checkpoint assertions
+#
+# Program: conditional_call_test_as.asm
+#
+# Tests conditional calls and carry-based immediate operations:
 #   - ACI (Add immediate with carry)
 #   - SBI (Subtract immediate with borrow)
 #   - CNC (Call on no carry)
@@ -11,68 +15,81 @@
 #   - CNZ (Call on not zero)
 #   - CZ (Call on zero)
 #   - RZ (Return on zero)
+#
+# Checkpoint Results:
+#   CP1:  After ACI with carry    - L=0x16 (0x10+0x05+1)
+#   CP2:  After ACI no carry      - L=0x15 (0x10+0x05+0)
+#   CP3:  After SBI with borrow   - L=0x1A (0x20-0x05-1)
+#   CP4:  After SBI no borrow     - L=0x1B (0x20-0x05-0)
+#   CP5:  After CC                - C=0xAA (called on carry)
+#   CP6:  After CNC               - D=0xBB (called on no carry)
+#   CP7:  After CNZ/CZ/RZ         - B=0x07
+#   CP8:  Final                   - success
+#
+# Final Register State:
+#   A: 0x00, B: 0x07, C: 0xAA, D: 0xBB
+# ============================================================================
 
-echo "=========================================="
-echo "B8008 Conditional Call & Carry Imm Test"
-echo "=========================================="
-echo ""
+# Source the checkpoint library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/checkpoint_lib.sh"
 
 # Run the test
-echo "Running test (this takes a few seconds)..."
-make test-b8008-top PROG=conditional_call_test_as 2>&1 > conditional_call_test.log
+run_test "conditional_call_test_as" "10ms"
+
+# List all checkpoints found
+list_checkpoints
 
 echo ""
-echo "=== Expected Results ==="
-echo "  A = 0x00 (success marker - all tests passed)"
-echo "  B = 0x07 (test counter - 7 tests completed)"
-echo ""
+echo "=== ACI (Add Immediate with Carry) Tests ==="
 
-echo "=== Final Register State ==="
-tail -50 conditional_call_test.log | grep -E "Reg\.(A|B)" | tail -1
+# CP1: ACI with carry (0x10 + 0x05 + 1 = 0x16)
+assert_checkpoint 1 \
+    "L=0x16"
 
-echo ""
-echo "=== Test Summary ==="
-
-# Check final register values
-PASS=true
-
-FINAL_A=$(tail -50 conditional_call_test.log | grep "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-F]+).*/\1/')
-FINAL_B=$(tail -50 conditional_call_test.log | grep "Reg\.B = " | tail -1 | sed -E 's/.*Reg\.B = (0x[0-9A-F]+).*/\1/')
-
-if [ "$FINAL_A" = "0x00" ]; then
-    echo "  [PASS] A = 0x00 (all tests passed)"
-else
-    echo "  [FAIL] A = $FINAL_A (expected 0x00 - test failed)"
-    PASS=false
-fi
-
-if [ "$FINAL_B" = "0x07" ]; then
-    echo "  [PASS] B = 0x07 (7 tests completed)"
-else
-    echo "  [FAIL] B = $FINAL_B (expected 0x07)"
-    PASS=false
-fi
+# CP2: ACI without carry (0x10 + 0x05 + 0 = 0x15)
+assert_checkpoint 2 \
+    "L=0x15"
 
 echo ""
-if [ "$PASS" = true ]; then
-    echo "=========================================="
-    echo "ALL CONDITIONAL CALL TESTS PASSED!"
-    echo "=========================================="
-    echo ""
-    echo "Instructions tested:"
-    echo "  - ACI (Add immediate with carry)"
-    echo "  - SBI (Subtract immediate with borrow)"
-    echo "  - CNC (Call on no carry)"
-    echo "  - CC (Call on carry)"
-    echo "  - CNZ (Call on not zero)"
-    echo "  - CZ (Call on zero)"
-    echo "  - RZ (Return on zero)"
-else
-    echo "=========================================="
-    echo "SOME TESTS FAILED - Check output above"
-    echo "=========================================="
-fi
+echo "=== SBI (Subtract Immediate with Borrow) Tests ==="
+
+# CP3: SBI with borrow (0x20 - 0x05 - 1 = 0x1A)
+assert_checkpoint 3 \
+    "L=0x1A"
+
+# CP4: SBI without borrow (0x20 - 0x05 - 0 = 0x1B)
+assert_checkpoint 4 \
+    "L=0x1B"
 
 echo ""
-echo "Full output saved to: conditional_call_test.log"
-echo "=========================================="
+echo "=== Conditional Call Tests ==="
+
+# CP5: CC called on carry (C = 0xAA)
+assert_checkpoint 5 \
+    "C=0xAA"
+
+# CP6: CNC called on no carry (D = 0xBB)
+assert_checkpoint 6 \
+    "D=0xBB"
+
+# CP7: CNZ/CZ/RZ all worked (B = 0x07)
+assert_checkpoint 7 \
+    "B=0x07"
+
+echo ""
+echo "=== Final State ==="
+
+# CP8: Final success checkpoint
+assert_checkpoint 8
+
+# Verify final state via traditional method
+assert_final_state \
+    "A=0x00" \
+    "B=0x07" \
+    "C=0xAA" \
+    "D=0xBB"
+
+# Print summary and exit
+print_summary
+exit $?
