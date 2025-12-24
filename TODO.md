@@ -4,7 +4,7 @@ This document tracks what needs to be done before the b8008 is ready for FPGA ha
 
 ## Current Status
 
-- **21/21 verification tests pass**
+- **23/23 verification tests pass**
 - **All 48 instruction types implemented** (28 unique operation categories)
 - **Block-based architecture complete**
 - **Stack depth bug fixed** (RET was reading from wrong level)
@@ -147,7 +147,7 @@ External wait state handling exists but has no test coverage.
 
 | Instruction Type | Count | Tested | Coverage |
 |-----------------|-------|--------|----------|
-| HLT | 3 | 1+ | 33%+ |
+| HLT | 3 | 3 | **100%** |
 | MOV r,r | 49 | 49 | **100%** |
 | MOV r,M | 7 | 7 | **100%** |
 | MOV M,r | 7 | 7 | **100%** |
@@ -155,7 +155,7 @@ External wait state handling exists but has no test coverage.
 | MVI M | 1 | 1 | **100%** |
 | INR | 6 | 6 | **100%** |
 | DCR | 6 | 6 | **100%** |
-| ALU r (56 ops) | 56 | ~40 | 71% |
+| ALU r (56 ops) | 56 | 56 | **100%** |
 | ALU M | 8 | 8 | **100%** |
 | ALU I | 8 | 8 | **100%** |
 | Rotate | 4 | 4 | **100%** |
@@ -198,6 +198,8 @@ Note: INR/DCR have 6 variants each (B,C,D,E,H,L) - no INR A or DCR A exists.
 | `search_as.asm` | Integrated algorithm test | PASS |
 | `alu_full_coverage_test_as.asm` | ADC/SBB/ANA/ORA/XRA/CMP with all registers | PASS |
 | `interrupt_test_as.asm` | Bootstrap RST 0, runtime RST 7 interrupt | PASS |
+| `hlt_01_as.asm` | HLT opcode 0x01 | PASS |
+| `hlt_ff_as.asm` | HLT opcode 0xFF | PASS |
 
 ---
 

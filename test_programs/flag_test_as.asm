@@ -187,9 +187,10 @@ MAIN:
         ;===========================================
         ; All tests passed! Set success marker
         ;===========================================
-        ; CHECKPOINT 9: Final success
+        ; CHECKPOINT 9: Final success (flag tests complete)
         MVI     A,09h
-        OUT     CHKPT           ; CP9: success
+        OUT     CHKPT           ; CP9: All flag tests passed
+
         MVI     A,00h           ; A = 0x00 (success)
         JMP     DONE
 
