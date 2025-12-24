@@ -132,20 +132,20 @@ show-programs:
 # Captures and decodes the serial output in simulation
 #
 # Usage:
-#   make test-serial PROG=mandelbrot       - Run shooting mandelbrot game
-#   make test-serial PROG=pi          - Run pi calculation
-#   make test-serial PROG=mandelbrot  - Run mandelbrot renderer
+#   make test-serial SERIAL_PROG=mandelbrot                     - Run mandelbrot (30min default)
+#   make test-serial SERIAL_PROG=pi SERIAL_TIME_MS=60000        - Run pi for 1 minute
+#   make test-serial SERIAL_PROG=mandelbrot SERIAL_TIME_MS=500  - Run mandelbrot for 500ms
 #
 SERIAL_PROG ?= mandelbrot
 SERIAL_ROM = test_programs/samples/$(SERIAL_PROG).mem
-SERIAL_TIME ?= 30min
+SERIAL_TIME_MS ?= 1800000
 START_ADDR ?= 64
 
 test-serial: $(BUILD_DIR)
 	@echo "========================================="
 	@echo "Testing Serial I/O Program"
 	@echo "Program: $(SERIAL_ROM)"
-	@echo "Sim time: $(SERIAL_TIME)"
+	@echo "Sim time: $(SERIAL_TIME_MS)ms"
 	@echo "========================================="
 	@echo ""
 	@if [ ! -f "$(SERIAL_ROM)" ]; then \
@@ -181,7 +181,7 @@ test-serial: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/serial_capture.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_serial_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_serial_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_serial_tb -gROM_FILE=$(SERIAL_ROM) -gSTART_ADDR=$(START_ADDR) --stop-time=$(SERIAL_TIME)
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_serial_tb -gROM_FILE=$(SERIAL_ROM) -gSTART_ADDR=$(START_ADDR) -gRUN_TIME_MS=$(SERIAL_TIME_MS)
 
 # ============================================================================
 # INDIVIDUAL MODULE TESTS

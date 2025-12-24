@@ -40,6 +40,9 @@ entity register_alu_control is
         -- Machine cycle control input
         current_cycle : in integer range 1 to 3;
 
+        -- State half for timing (0=first half, 1=second half of each state)
+        state_half : in std_logic;
+
         -- Interrupt input
         interrupt : in std_logic;
 
@@ -143,8 +146,9 @@ begin
                   else '0';
 
     -- Update flags: Same timing as ALU enable (flags updated after ALU operation)
-    -- NOTE: Don't gate with phi2 here - the condition_flags module latches on phi2 rising edge
-    update_flags <= '1' when (state_is_t5 = '1' and instr_is_alu_op = '1' and
+    -- NOTE: Only update on SECOND HALF of T5 to ensure ALU result is stable
+    -- The condition_flags module latches on phi2 rising edge
+    update_flags <= '1' when (state_is_t5 = '1' and state_half = '1' and instr_is_alu_op = '1' and
                               ((current_cycle = 1 and instr_needs_immediate = '0') or   -- 1-cycle: reg ALU
                                (current_cycle = 2 and instr_needs_immediate = '1')))    -- 2-cycle: imm/mem ALU
                     else '0';

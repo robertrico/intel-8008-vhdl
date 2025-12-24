@@ -24,7 +24,7 @@ use work.b8008_types.all;
 
 entity b8008_serial_tb is
     generic (
-        ROM_FILE    : string  := "test_programs/samples/stars.mem";
+        ROM_FILE    : string  := "test_programs/samples/hello_8008.mem";
         RUN_TIME_MS : integer := 100;  -- Simulation time in milliseconds
         START_ADDR  : integer := 0     -- Start address (injected as JMP during bootstrap)
     );

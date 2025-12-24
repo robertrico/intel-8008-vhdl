@@ -44,31 +44,33 @@ architecture rtl of ram_4kx8 is
     impure function init_ram_from_file(filename : string) return ram_array is
         file mem_file : text;
         variable line_buf : line;
-        variable byte_val : integer;
         variable ram_init : ram_array := (others => x"00");
         variable addr : integer := 0;
-        variable char : character;
         variable good : boolean;
-        variable file_opened : boolean := false;
+        variable status : file_open_status;
     begin
         if filename'length > 0 then
-            file_open(mem_file, filename, read_mode);
-            file_opened := true;
+            -- Try to open file with status check
+            file_open(status, mem_file, filename, read_mode);
 
-            while not endfile(mem_file) and addr < 4096 loop
-                readline(mem_file, line_buf);
-                -- Skip empty lines
-                if line_buf'length > 0 then
-                    -- Read hex value (2 hex digits)
-                    hread(line_buf, ram_init(addr), good);
-                    if good then
-                        addr := addr + 1;
+            if status = open_ok then
+                while not endfile(mem_file) and addr < 4096 loop
+                    readline(mem_file, line_buf);
+                    -- Skip empty lines
+                    if line_buf'length > 0 then
+                        -- Read hex value (2 hex digits)
+                        hread(line_buf, ram_init(addr), good);
+                        if good then
+                            addr := addr + 1;
+                        end if;
                     end if;
-                end if;
-            end loop;
+                end loop;
 
-            file_close(mem_file);
-            report "RAM: Loaded " & integer'image(addr) & " bytes from " & filename;
+                file_close(mem_file);
+                report "RAM: Loaded " & integer'image(addr) & " bytes from " & filename;
+            else
+                report "RAM: File " & filename & " not found, starting with zeroed RAM" severity warning;
+            end if;
         end if;
         return ram_init;
     end function;

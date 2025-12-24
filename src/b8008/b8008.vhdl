@@ -433,6 +433,7 @@ architecture structural of b8008 is
             instr_is_write        : in std_logic;
             instr_is_io           : in std_logic;
             current_cycle         : in integer range 1 to 3;
+            state_half            : in std_logic;
             interrupt             : in std_logic;
             load_reg_a            : out std_logic;
             load_reg_b            : out std_logic;
@@ -1109,6 +1110,7 @@ begin
             instr_is_write        => instr_is_write,
             instr_is_io           => instr_is_io,
             current_cycle         => current_cycle,
+            state_half            => state_half,
             interrupt             => interrupt_pending,
             load_reg_a            => load_reg_a,
             load_reg_b            => load_reg_b,
