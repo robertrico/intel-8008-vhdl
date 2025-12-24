@@ -230,3 +230,41 @@ Before FPGA deployment, ALL of the following must be true:
 6. [ ] At least one test program runs on hardware
 
 ---
+
+## hello_8008.asm PUTS routine not outputting string
+
+**Status**: Investigating
+
+**Symptom**: 
+- Program outputs "HI<CR><LF>0123456789 <CR><LF>" correctly
+- But skips the "B8008-OK" string from PUTS routine
+- PUTS calls MOV A,M, CPI 00H, RZ - and RZ returns immediately
+- This means MOV A,M is reading 0x00 instead of 'B' (0x42)
+
+**Hypothesis**: RAM/Memory address issue
+- String is at address 0x0200 in the .mem file (verified - bytes 42 38 30 30 38 2D 4F 4B 00)
+- H and L registers are loaded with 0x02 and 0x00 (MVI H,02H / MVI L,00H at 0x66/0x68)
+- MOV A,M (LrM) is a 2-cycle memory indirect instruction
+- ahl_pointer.vhdl selects H:L registers during cycle 2 T1/T2 for address output
+
+**Possible causes to investigate**:
+1. ahl_pointer cycle selection: `instr_needs_address` vs `instr_needs_immediate` for LrM
+   - LrM sets `instr_needs_immediate='1'` but NOT `instr_needs_address`
+   - ahl_pointer uses `instr_needs_address` to decide cycle 2 vs cycle 3
+   - But ahl_pointer also checks `instr_is_mem_indirect` which IS set for LrM
+   
+2. RAM not loading address 0x0200 correctly
+   - ram_4kx8 only has 12-bit address (0-4095), 0x200=512 is valid
+   - Check if RAM init_ram_from_file actually loads all 521 lines
+   
+3. Memory bus timing during MOV A,M cycle 2
+   - Verify latched_address captures H:L correctly during T1/T2
+   - Check if data is read from RAM at correct time (T3?)
+
+4. Register file H/L not being written correctly by MVI instructions
+   - Trace register writes to verify H=0x02 and L=0x00
+
+**Next steps**:
+- Add debug output to ahl_pointer to verify it's activating during MOV A,M
+- Add debug output to show actual address being sent to RAM during cycle 2
+- Verify RAM contents at address 0x0200 after initialization

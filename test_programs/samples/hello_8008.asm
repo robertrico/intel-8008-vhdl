@@ -32,12 +32,14 @@ OUTPORT equ     08H             ; Serial output port
 ; Main program
         org     0040h
 START:
-        ; Test 1: Output "HI " directly (simple test)
+        ; Test 1: Output "HI" directly (simple test)
         MVI     A,'H'
         CALL    ECHO
         MVI     A,'I'
         CALL    ECHO
-        MVI     A,' '
+        MVI     A,0DH           ; CR
+        CALL    ECHO
+        MVI     A,0AH           ; LF
         CALL    ECHO
 
         ; Test 2: Output digits 0-9 using a loop (tests INR, CPI, JNZ)
@@ -55,8 +57,8 @@ DIGIT_LOOP:
         CALL    ECHO
 
         ; Test 3: Output string from memory using MOV A,M (tests memory indirect)
-        MVI     H,00H           ; Point to MSG at 0x00C0
-        MVI     L,0C0H
+        MVI     H,02H           ; Point to MSG at 0x0200
+        MVI     L,00H
         CALL    PUTS
 
         ; Output CR/LF
@@ -135,9 +137,9 @@ DELAY:
         RET
 
 ;------------------------------------------------------------------------
-; String data at 0x00C0
+; String data at 0x0200 (well past code)
 ;------------------------------------------------------------------------
-        org     00C0h
+        org     0200h
 MSG:
         db      "B8008-OK",00H
 
