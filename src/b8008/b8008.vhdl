@@ -75,7 +75,12 @@ entity b8008 is
         debug_needs_address   : out std_logic;
         debug_int_pending     : out std_logic;
         -- Cycle type output for external memory control
-        cycle_type            : out std_logic_vector(1 downto 0)  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
+        cycle_type            : out std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
+        -- Debug flag outputs
+        debug_flag_carry      : out std_logic;
+        debug_flag_zero       : out std_logic;
+        debug_flag_sign       : out std_logic;
+        debug_flag_parity     : out std_logic
     );
 end entity b8008;
 
@@ -746,6 +751,10 @@ begin
     debug_ir            <= instr_byte;
     debug_needs_address <= instr_needs_address;
     debug_int_pending   <= interrupt_pending;
+    debug_flag_carry    <= flag_carry;
+    debug_flag_zero     <= flag_zero;
+    debug_flag_sign     <= flag_sign;
+    debug_flag_parity   <= flag_parity;
 
     -- PC control record construction
     pc_control.increment_lower <= pc_increment_lower;

@@ -51,6 +51,9 @@ entity b8008_top is
         -- Debug outputs: CPU state and key registers
         debug_reg_a         : out std_logic_vector(7 downto 0);  -- A register
         debug_reg_b         : out std_logic_vector(7 downto 0);  -- B register
+        debug_reg_c         : out std_logic_vector(7 downto 0);  -- C register
+        debug_reg_d         : out std_logic_vector(7 downto 0);  -- D register
+        debug_reg_e         : out std_logic_vector(7 downto 0);  -- E register
         debug_reg_h         : out std_logic_vector(7 downto 0);  -- H register
         debug_reg_l         : out std_logic_vector(7 downto 0);  -- L register
         debug_cycle         : out integer range 1 to 3;
@@ -58,6 +61,11 @@ entity b8008_top is
         debug_ir            : out std_logic_vector(7 downto 0);
         debug_needs_address : out std_logic;
         debug_int_pending   : out std_logic;
+        -- Debug flag outputs
+        debug_flag_carry    : out std_logic;
+        debug_flag_zero     : out std_logic;
+        debug_flag_sign     : out std_logic;
+        debug_flag_parity   : out std_logic;
 
         -- I/O port debug outputs (for verification)
         debug_io_port_8     : out std_logic_vector(7 downto 0);
@@ -95,7 +103,12 @@ architecture structural of b8008_top is
             debug_ir            : out std_logic_vector(7 downto 0);
             debug_needs_address : out std_logic;
             debug_int_pending   : out std_logic;
-            cycle_type          : out std_logic_vector(1 downto 0)
+            cycle_type          : out std_logic_vector(1 downto 0);
+            -- Debug flag outputs
+            debug_flag_carry    : out std_logic;
+            debug_flag_zero     : out std_logic;
+            debug_flag_sign     : out std_logic;
+            debug_flag_parity   : out std_logic
         );
     end component;
 
@@ -256,9 +269,9 @@ begin
             interrupt           => interrupt,
             debug_reg_a         => debug_reg_a,
             debug_reg_b         => debug_reg_b,
-            debug_reg_c         => open,  -- Not used in top-level yet
-            debug_reg_d         => open,  -- Not used in top-level yet
-            debug_reg_e         => open,  -- Not used in top-level yet
+            debug_reg_c         => debug_reg_c,
+            debug_reg_d         => debug_reg_d,
+            debug_reg_e         => debug_reg_e,
             debug_reg_h         => debug_reg_h,
             debug_reg_l         => debug_reg_l,
             debug_cycle         => debug_cycle,
@@ -266,7 +279,11 @@ begin
             debug_ir            => debug_ir,
             debug_needs_address => debug_needs_address,
             debug_int_pending   => debug_int_pending,
-            cycle_type          => cycle_type
+            cycle_type          => cycle_type,
+            debug_flag_carry    => debug_flag_carry,
+            debug_flag_zero     => debug_flag_zero,
+            debug_flag_sign     => debug_flag_sign,
+            debug_flag_parity   => debug_flag_parity
         );
 
     -- ========================================================================

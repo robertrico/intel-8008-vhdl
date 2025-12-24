@@ -42,6 +42,9 @@ architecture testbench of b8008_top_tb is
             ram_byte_0  : out std_logic_vector(7 downto 0);
             debug_reg_a         : out std_logic_vector(7 downto 0);
             debug_reg_b         : out std_logic_vector(7 downto 0);
+            debug_reg_c         : out std_logic_vector(7 downto 0);
+            debug_reg_d         : out std_logic_vector(7 downto 0);
+            debug_reg_e         : out std_logic_vector(7 downto 0);
             debug_reg_h         : out std_logic_vector(7 downto 0);
             debug_reg_l         : out std_logic_vector(7 downto 0);
             debug_cycle         : out integer range 1 to 3;
@@ -49,6 +52,10 @@ architecture testbench of b8008_top_tb is
             debug_ir            : out std_logic_vector(7 downto 0);
             debug_needs_address : out std_logic;
             debug_int_pending   : out std_logic;
+            debug_flag_carry    : out std_logic;
+            debug_flag_zero     : out std_logic;
+            debug_flag_sign     : out std_logic;
+            debug_flag_parity   : out std_logic;
             debug_io_port_8     : out std_logic_vector(7 downto 0);
             debug_io_port_9     : out std_logic_vector(7 downto 0);
             debug_io_port_10    : out std_logic_vector(7 downto 0)
@@ -70,6 +77,9 @@ architecture testbench of b8008_top_tb is
     signal ram_byte_0  : std_logic_vector(7 downto 0);
     signal debug_reg_a         : std_logic_vector(7 downto 0);
     signal debug_reg_b         : std_logic_vector(7 downto 0);
+    signal debug_reg_c         : std_logic_vector(7 downto 0);
+    signal debug_reg_d         : std_logic_vector(7 downto 0);
+    signal debug_reg_e         : std_logic_vector(7 downto 0);
     signal debug_reg_h         : std_logic_vector(7 downto 0);
     signal debug_reg_l         : std_logic_vector(7 downto 0);
     signal debug_cycle         : integer range 1 to 3;
@@ -77,6 +87,10 @@ architecture testbench of b8008_top_tb is
     signal debug_ir            : std_logic_vector(7 downto 0);
     signal debug_needs_address : std_logic;
     signal debug_int_pending   : std_logic;
+    signal debug_flag_carry    : std_logic;
+    signal debug_flag_zero     : std_logic;
+    signal debug_flag_sign     : std_logic;
+    signal debug_flag_parity   : std_logic;
     signal debug_io_port_8     : std_logic_vector(7 downto 0);
     signal debug_io_port_9     : std_logic_vector(7 downto 0);
     signal debug_io_port_10    : std_logic_vector(7 downto 0);
@@ -115,6 +129,9 @@ begin
             ram_byte_0  => ram_byte_0,
             debug_reg_a         => debug_reg_a,
             debug_reg_b         => debug_reg_b,
+            debug_reg_c         => debug_reg_c,
+            debug_reg_d         => debug_reg_d,
+            debug_reg_e         => debug_reg_e,
             debug_reg_h         => debug_reg_h,
             debug_reg_l         => debug_reg_l,
             debug_cycle         => debug_cycle,
@@ -122,6 +139,10 @@ begin
             debug_ir            => debug_ir,
             debug_needs_address => debug_needs_address,
             debug_int_pending   => debug_int_pending,
+            debug_flag_carry    => debug_flag_carry,
+            debug_flag_zero     => debug_flag_zero,
+            debug_flag_sign     => debug_flag_sign,
+            debug_flag_parity   => debug_flag_parity,
             debug_io_port_8     => debug_io_port_8,
             debug_io_port_9     => debug_io_port_9,
             debug_io_port_10    => debug_io_port_10
@@ -195,10 +216,17 @@ begin
                        " | MCycle = " & integer'image(debug_cycle);
                 report "CPU Registers (scratchpad):";
                 report "  Reg.A = 0x" & to_hstring(unsigned(debug_reg_a)) &
-                       " | Reg.B = 0x" & to_hstring(unsigned(debug_reg_b));
+                       " | Reg.B = 0x" & to_hstring(unsigned(debug_reg_b)) &
+                       " | Reg.C = 0x" & to_hstring(unsigned(debug_reg_c));
+                report "  Reg.D = 0x" & to_hstring(unsigned(debug_reg_d)) &
+                       " | Reg.E = 0x" & to_hstring(unsigned(debug_reg_e));
                 report "  Reg.H = 0x" & to_hstring(unsigned(debug_reg_h)) &
                        " | Reg.L = 0x" & to_hstring(unsigned(debug_reg_l)) &
                        "  (H:L ptr = " & integer'image(to_integer(unsigned(debug_reg_h & debug_reg_l))) & ")";
+                report "Flags: C=" & std_logic'image(debug_flag_carry) &
+                       " Z=" & std_logic'image(debug_flag_zero) &
+                       " S=" & std_logic'image(debug_flag_sign) &
+                       " P=" & std_logic'image(debug_flag_parity);
                 report "External Bus:";
                 report "  Addr = 0x" & to_hstring(unsigned(address_out)) &
                        " | Data = 0x" & to_hstring(unsigned(data_out)) &
