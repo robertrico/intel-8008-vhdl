@@ -1,91 +1,79 @@
 #!/bin/bash
 
-# ============================================
+# ============================================================================
 # RAM INTENSIVE PROGRAM TEST VERIFICATION
-# ============================================
-# This script verifies the b8008 CPU correctly
-# executes the ram_intensive_as.asm program
+# ============================================================================
+# Comprehensive RAM testing with multiple operations
+#
+# Program: ram_intensive_as.asm
+#
+# Test Phases:
+#   1. Fill RAM with ascending pattern (0-15)
+#   2. Read back and accumulate sum
+#   3. Write inverted pattern
+#   4. Verify first and last values
+#
+# Checkpoint Results:
+#   CP1: After FILL_RAM  - L=0x10 (filled 16 bytes)
+#   CP2: After CALC_SUM  - L=0x78 (sum = 120)
+#   CP3: After INVERT    - L=0x10 (inverted 16 bytes)
+#   CP4: After VERIFY    - L=0xFF (first inverted value)
+#
+# Final Register State:
+#   A: 0xF0 (last inverted value)
+#   B: 0xFF (first inverted value)
+#   H: 0x10 (RAM base high)
+#   L: 0x0F (last array index)
+# ============================================================================
 
-echo "==========================================="
-echo "B8008 RAM Intensive Test Verification"
-echo "==========================================="
-echo ""
+# Source the checkpoint library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/checkpoint_lib.sh"
 
 # Run the test
-echo "Running test (this takes a few seconds)..."
-make test-b8008-top PROG=ram_intensive_as 2>&1 > ram_test.log
+run_test "ram_intensive_as" "30ms"
+
+# List all checkpoints found
+list_checkpoints
 
 echo ""
-echo "=== Expected Results ==="
-echo "  A = 0xF0 (last inverted value: 0x0F XOR 0xFF)"
-echo "  B = 0xFF (first inverted value: 0x00 XOR 0xFF)"
-echo "  H = 0x10 (RAM base high)"
-echo "  L = 0x0F (last array index)"
-echo ""
+echo "=== RAM Fill Phase ==="
 
-echo "=== Final Register State ==="
-tail -50 ram_test.log | grep -E "Reg\.(A|B)" | tail -1
-tail -50 ram_test.log | grep -E "Reg\.(H|L)" | tail -1
+# CP1: After FILL_RAM (L = 0x10, loop counter)
+assert_checkpoint 1 \
+    "L=0x10"
 
 echo ""
-echo "=== Test Summary ==="
+echo "=== Sum Calculation Phase ==="
 
-# Check final register values
-PASS=true
-
-FINAL_A=$(tail -50 ram_test.log | grep "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-F]+).*/\1/')
-FINAL_B=$(tail -50 ram_test.log | grep "Reg\.B = " | tail -1 | sed -E 's/.*Reg\.B = (0x[0-9A-F]+).*/\1/')
-FINAL_H=$(tail -50 ram_test.log | grep "Reg\.H = " | tail -1 | sed -E 's/.*Reg\.H = (0x[0-9A-F]+).*/\1/')
-FINAL_L=$(tail -50 ram_test.log | grep "Reg\.L = " | tail -1 | sed -E 's/.*Reg\.L = (0x[0-9A-F]+).*/\1/')
-
-if [ "$FINAL_A" = "0xF0" ]; then
-    echo "  [PASS] A = 0xF0 (last inverted value)"
-else
-    echo "  [FAIL] A = $FINAL_A (expected 0xF0)"
-    PASS=false
-fi
-
-if [ "$FINAL_B" = "0xFF" ]; then
-    echo "  [PASS] B = 0xFF (first inverted value)"
-else
-    echo "  [FAIL] B = $FINAL_B (expected 0xFF)"
-    PASS=false
-fi
-
-if [ "$FINAL_H" = "0x10" ]; then
-    echo "  [PASS] H = 0x10 (RAM base high)"
-else
-    echo "  [FAIL] H = $FINAL_H (expected 0x10)"
-    PASS=false
-fi
-
-if [ "$FINAL_L" = "0x0F" ]; then
-    echo "  [PASS] L = 0x0F (last array index)"
-else
-    echo "  [FAIL] L = $FINAL_L (expected 0x0F)"
-    PASS=false
-fi
+# CP2: After CALC_SUM (L = 0x78 = 120 = sum of 0-15)
+assert_checkpoint 2 \
+    "L=0x78"
 
 echo ""
-if [ "$PASS" = true ]; then
-    echo "==========================================="
-    echo "ALL RAM TESTS PASSED!"
-    echo "==========================================="
-    echo ""
-    echo "Instructions tested:"
-    echo "  - MOV r,M (Read from RAM)"
-    echo "  - MOV M,r (Write to RAM)"
-    echo "  - ADD r (Add register)"
-    echo "  - XRI (XOR immediate)"
-    echo "  - INR (Increment register)"
-    echo "  - CALL/RET (Subroutine)"
-    echo "  - JNZ (Conditional jump)"
-else
-    echo "==========================================="
-    echo "SOME TESTS FAILED - Check output above"
-    echo "==========================================="
-fi
+echo "=== Inversion Phase ==="
+
+# CP3: After INVERT_RAM (L = 0x10, loop counter)
+assert_checkpoint 3 \
+    "L=0x10"
 
 echo ""
-echo "Full output saved to: ram_test.log"
-echo "==========================================="
+echo "=== Verification Phase ==="
+
+# CP4: After VERIFY (L = B = 0xFF, first inverted value)
+assert_checkpoint 4 \
+    "L=0xFF"
+
+echo ""
+echo "=== Final State ==="
+
+# Verify final state via traditional method
+assert_final_state \
+    "A=0xF0" \
+    "B=0xFF" \
+    "H=0x10" \
+    "L=0x0F"
+
+# Print summary and exit
+print_summary
+exit $?

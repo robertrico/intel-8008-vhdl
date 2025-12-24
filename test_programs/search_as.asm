@@ -8,9 +8,19 @@
 ;
 ; Test data: "Hello, world. 8008!!" stored starting at location 200
 ;
+; Checkpoint Results:
+;   CP1: Found period - E=0xD4 (position 212 where period found)
+;
+; Final Register State:
+;   A = 0x2E (period character '.')
+;   H = 0x2E (copied from A)
+;   L = 0xD4 (position 212)
 
         cpu     8008new
         page    0
+
+; Checkpoint port constant
+CHKPT   equ     31              ; Port 31 = checkpoint/assertion port
 
 ; Start at address 0x0000 to execute from reset
         org     0000h
@@ -56,7 +66,14 @@ LOOP:   MOV     A,M             ; Load A from memory[H:L]
         JNZ     LOOP            ; Jump if Not Zero
 
 ; Found: Save location and Halt
-FOUND:  MOV     H,L             ; Copy L to H for verification
+FOUND:
+        ; CHECKPOINT 1: Found the period
+        MOV     E,L             ; Save L to E
+        MVI     A,01h
+        OUT     CHKPT           ; CP1: L=0xD4 (position 212)
+
+        MOV     A,E             ; Restore L value to A
+        MOV     H,L             ; Copy L to H for verification
         MOV     L,H
         MOV     H,A
         HLT                     ; HLT - Found the period!

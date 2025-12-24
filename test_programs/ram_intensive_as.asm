@@ -25,12 +25,20 @@
 ;   C: Array length (0x10 = 16)
 ;   D: Sum of 0-15 (should be 0x78 = 120 decimal)
 ;   E: Last inverted value (should be 0xF0)
-;   H: RAM base high (0x08)
+;   H: RAM base high (0x10)
 ;   L: Final address offset (0x0F)
 ;
+; Checkpoint Results:
+;   CP1: After FILL_RAM  - L=0x10 (filled 16 bytes)
+;   CP2: After CALC_SUM  - L=0x78 (sum = 120)
+;   CP3: After INVERT    - L=0x10 (inverted 16 bytes)
+;   CP4: After VERIFY    - B=0xFF, E=0xF0
 
         cpu     8008new
         page    0
+
+; Checkpoint port constant
+CHKPT   equ     31              ; Port 31 = checkpoint/assertion port
 
 ; Reset vector
         org     0000h
@@ -47,16 +55,32 @@ MAIN:
 
         ; Phase 1: Fill RAM with ascending pattern (0..15)
         CALL    FILL_RAM
+        ; CHECKPOINT 1: After FILL_RAM
+        ; L should be 0x10 (loop counter reached 16)
+        MVI     A,01h
+        OUT     CHKPT               ; CP1: L=0x10
 
         ; Phase 2: Calculate sum of array
         CALL    CALC_SUM
         MOV     D,A                 ; Save sum in D
+        ; CHECKPOINT 2: After CALC_SUM
+        MOV     L,A                 ; Save sum to L
+        MVI     A,02h
+        OUT     CHKPT               ; CP2: L=0x78 (sum = 120)
 
         ; Phase 3: Write inverted pattern
         CALL    INVERT_RAM
+        ; CHECKPOINT 3: After INVERT_RAM
+        ; L should be 0x10 (loop counter reached 16)
+        MVI     A,03h
+        OUT     CHKPT               ; CP3: L=0x10
 
         ; Phase 4: Verify first inverted value
         CALL    VERIFY
+        ; CHECKPOINT 4: After VERIFY
+        MOV     L,B                 ; Save B to L (first inverted = 0xFF)
+        MVI     A,04h
+        OUT     CHKPT               ; CP4: B=0xFF, E=0xF0
 
         ; Halt with results in registers
         HLT

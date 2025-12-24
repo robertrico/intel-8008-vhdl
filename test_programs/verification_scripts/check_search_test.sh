@@ -1,82 +1,50 @@
 #!/bin/bash
 
-# ============================================
+# ============================================================================
 # SEARCH PROGRAM TEST VERIFICATION SCRIPT
-# ============================================
-# This script verifies the b8008 CPU correctly
-# executes the search_as.asm program
+# ============================================================================
+# Searches memory for a period character ('.')
+#
+# Program: search_as.asm
+#
+# Test data: "Hello, world. 8008!!" stored starting at location 200 (0xC8)
+# Period is at position 212 (0xD4)
+#
+# Checkpoint Results:
+#   CP1: Found period - E=0xD4 (position 212)
+#
+# Final Register State:
+#   A: 0x2E (period character '.')
+#   H: 0x2E (copied from A)
+#   L: 0xD4 (position 212)
+# ============================================================================
 
-echo "=========================================="
-echo "B8008 Search Program Test Verification"
-echo "=========================================="
-echo ""
+# Source the checkpoint library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/checkpoint_lib.sh"
 
 # Run the test
-echo "Running test (this takes a few seconds)..."
-make test-b8008-top PROG=search_as 2>&1 > search_test.log
+run_test "search_as" "10ms"
+
+# List all checkpoints found
+list_checkpoints
 
 echo ""
-echo "=== Expected Results ==="
-echo "  A = 0x2E (period character '.')"
-echo "  H = 0x2E (copied from A by MOV H,A)"
-echo "  L = 0xD4 (position 212 where period found)"
-echo ""
+echo "=== Search Result ==="
 
-echo "=== Final Register State ==="
-tail -50 search_test.log | grep -E "Reg\.(A|B)" | tail -1
-tail -50 search_test.log | grep -E "Reg\.(H|L)" | tail -1
+# CP1: Found the period at position 212 (0xD4)
+assert_checkpoint 1 \
+    "E=0xD4"
 
 echo ""
-echo "=== Test Summary ==="
+echo "=== Final State ==="
 
-# Check final register values
-PASS=true
+# Verify final state via traditional method
+assert_final_state \
+    "A=0x2E" \
+    "H=0x2E" \
+    "L=0xD4"
 
-FINAL_A=$(tail -50 search_test.log | grep "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-F]+).*/\1/')
-FINAL_H=$(tail -50 search_test.log | grep "Reg\.H = " | tail -1 | sed -E 's/.*Reg\.H = (0x[0-9A-F]+).*/\1/')
-FINAL_L=$(tail -50 search_test.log | grep "Reg\.L = " | tail -1 | sed -E 's/.*Reg\.L = (0x[0-9A-F]+).*/\1/')
-
-if [ "$FINAL_A" = "0x2E" ]; then
-    echo "  [PASS] A = 0x2E (period character)"
-else
-    echo "  [FAIL] A = $FINAL_A (expected 0x2E)"
-    PASS=false
-fi
-
-if [ "$FINAL_H" = "0x2E" ]; then
-    echo "  [PASS] H = 0x2E (copied from A)"
-else
-    echo "  [FAIL] H = $FINAL_H (expected 0x2E)"
-    PASS=false
-fi
-
-if [ "$FINAL_L" = "0xD4" ]; then
-    echo "  [PASS] L = 0xD4 (position 212)"
-else
-    echo "  [FAIL] L = $FINAL_L (expected 0xD4)"
-    PASS=false
-fi
-
-echo ""
-if [ "$PASS" = true ]; then
-    echo "=========================================="
-    echo "ALL SEARCH TESTS PASSED!"
-    echo "=========================================="
-    echo ""
-    echo "Instructions tested:"
-    echo "  - MOV r,M (Read from memory)"
-    echo "  - MOV r,r (Register to register)"
-    echo "  - CPI (Compare immediate)"
-    echo "  - JZ (Jump on zero)"
-    echo "  - JNZ (Jump on not zero)"
-    echo "  - INR (Increment register)"
-    echo "  - CALL/RET (Subroutine)"
-else
-    echo "=========================================="
-    echo "SOME TESTS FAILED - Check output above"
-    echo "=========================================="
-fi
-
-echo ""
-echo "Full output saved to: search_test.log"
-echo "=========================================="
+# Print summary and exit
+print_summary
+exit $?
