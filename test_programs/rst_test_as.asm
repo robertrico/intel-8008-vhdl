@@ -15,12 +15,24 @@
 ;   - Pushes current PC to stack (like CALL)
 ;   - Jumps to address AAA * 8 (where AAA is the 3-bit vector)
 ;
+; Uses OUT 31 checkpoints for assertion-based verification.
+;
+; Checkpoint Results:
+;   CP1:  After RST 1 - C=0x01, B=0x01
+;   CP2:  After RST 2 - D=0x02, B=0x02
+;   CP3:  After RST 3 - E=0x03, B=0x03
+;   CP4:  After RST 4 - H=0x04, B=0x04
+;   CP5:  Final       - A=0x00
+;
 ; Expected final state:
 ;   A = 0x00 (success)
 ;   B = 0x04 (4 RST handlers called)
 
         cpu     8008new
         page    0
+
+; Checkpoint port constant
+CHKPT   equ     31              ; Port 31 = checkpoint/assertion port
 
 ; RST vectors (must be at specific addresses)
 ; Each vector has 8 bytes of space
@@ -75,6 +87,9 @@ MAIN:
         ;===========================================
         RST     1               ; Call RST 1 handler
         ; Returns here, B should be 1, C should be 1
+        ; CHECKPOINT 1: Verify RST 1 worked
+        MVI     A,01h
+        OUT     CHKPT           ; CP1: C=0x01, B=0x01
 
         MOV     A,C             ; A = C
         CPI     01h             ; Check C = 1 (RST 1 marker)
@@ -85,6 +100,9 @@ MAIN:
         ;===========================================
         RST     2               ; Call RST 2 handler
         ; Returns here, B should be 2, D should be 2
+        ; CHECKPOINT 2: Verify RST 2 worked
+        MVI     A,02h
+        OUT     CHKPT           ; CP2: D=0x02, B=0x02
 
         MOV     A,D             ; A = D
         CPI     02h             ; Check D = 2 (RST 2 marker)
@@ -95,6 +113,9 @@ MAIN:
         ;===========================================
         RST     3               ; Call RST 3 handler
         ; Returns here, B should be 3, E should be 3
+        ; CHECKPOINT 3: Verify RST 3 worked
+        MVI     A,03h
+        OUT     CHKPT           ; CP3: E=0x03, B=0x03
 
         MOV     A,E             ; A = E
         CPI     03h             ; Check E = 3 (RST 3 marker)
@@ -105,6 +126,9 @@ MAIN:
         ;===========================================
         RST     4               ; Call RST 4 handler
         ; Returns here, B should be 4, H should be 4
+        ; CHECKPOINT 4: Verify RST 4 worked
+        MVI     A,04h
+        OUT     CHKPT           ; CP4: H=0x04, B=0x04
 
         MOV     A,H             ; A = H
         CPI     04h             ; Check H = 4 (RST 4 marker)
@@ -120,6 +144,9 @@ MAIN:
         ;===========================================
         ; All tests passed!
         ;===========================================
+        ; CHECKPOINT 5: Final success
+        MVI     A,05h
+        OUT     CHKPT           ; CP5: success
         MVI     A,00h           ; A = 0x00 (success)
         JMP     DONE
 

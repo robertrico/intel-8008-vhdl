@@ -1,104 +1,75 @@
 #!/bin/bash
 
-# ============================================
+# ============================================================================
 # INP/OUT I/O INSTRUCTION TEST VERIFICATION SCRIPT
-# ============================================
-# This script verifies the b8008 CPU correctly executes:
+# ============================================================================
+# Comprehensive I/O instruction test with checkpoint assertions
+#
+# Program: io_test_as.asm
+#
+# Tests I/O instructions:
 #   - INP (IN): Read from input port to accumulator
 #   - OUT: Write accumulator to output port
 #
 # Port allocation (simulated in b8008_top.vhdl):
 #   Input ports 0-7: Return test values
-#     Port 0: 0x55 (alternating bits)
-#     Port 1: 0xAA (alternating bits, inverted)
-#     Port 2: 0x42 (ASCII 'B')
+#     Port 0: 0x55, Port 1: 0xAA, Port 2: 0x42
 #   Output ports 8-31: Latch values for verification
 #
-# Test sequence:
-#   1. IN 0 -> OUT 8 (expect 0x55)
-#   2. IN 1 -> OUT 9 (expect 0xAA)
-#   3. IN 2 (expect 0x42)
+# Checkpoint Results:
+#   CP1:  After IN 0  - L=0x55
+#   CP2:  After OUT 8 - port 8 written
+#   CP3:  After IN 1  - L=0xAA
+#   CP4:  After OUT 9 - port 9 written
+#   CP5:  After IN 2  - L=0x42
+#   CP6:  Final       - success
+#
+# Final Register State:
+#   A: 0x00, B: 0x03
+# ============================================================================
 
-echo "=========================================="
-echo "B8008 INP/OUT I/O Instruction Test"
-echo "=========================================="
-echo ""
+# Source the checkpoint library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/checkpoint_lib.sh"
 
 # Run the test
-echo "Running test (this takes a few seconds)..."
-cd /Users/hackbook/Development/intel-8008-vhdl && make test-b8008-top ROM_FILE=test_programs/io_test_as.mem 2>&1 > io_test.log
+run_test "io_test_as" "10ms"
+
+# List all checkpoints found
+list_checkpoints
 
 echo ""
-echo "=== Expected Results ==="
-echo "  A = 0x00 (success marker - all tests passed)"
-echo "  B = 0x03 (test counter - 3 I/O tests passed)"
-echo "  Output port 8 = 0x55"
-echo "  Output port 9 = 0xAA"
-echo ""
+echo "=== Input Port Tests ==="
 
-echo "=== Final Register State ==="
-tail -100 io_test.log | grep -E "Reg\.(A|B)" | tail -1
+# CP1: IN 0 (expect 0x55)
+assert_checkpoint 1 \
+    "L=0x55"
 
-echo ""
-echo "=== I/O Port Activity ==="
-grep -E "I/O:" io_test.log | head -10
+# CP2: OUT 8 executed
+assert_checkpoint 2
 
-echo ""
-echo "=== Test Summary ==="
+# CP3: IN 1 (expect 0xAA)
+assert_checkpoint 3 \
+    "L=0xAA"
 
-# Check final register values
-PASS=true
+# CP4: OUT 9 executed
+assert_checkpoint 4
 
-FINAL_A=$(tail -100 io_test.log | grep "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-F]+).*/\1/')
-FINAL_B=$(tail -100 io_test.log | grep "Reg\.B = " | tail -1 | sed -E 's/.*Reg\.B = (0x[0-9A-F]+).*/\1/')
-
-if [ "$FINAL_A" = "0x00" ]; then
-    echo "  [PASS] A = 0x00 (all tests passed)"
-else
-    echo "  [FAIL] A = $FINAL_A (expected 0x00 - test failed)"
-    PASS=false
-fi
-
-if [ "$FINAL_B" = "0x03" ]; then
-    echo "  [PASS] B = 0x03 (3 I/O tests passed)"
-else
-    echo "  [FAIL] B = $FINAL_B (expected 0x03)"
-    PASS=false
-fi
-
-# Check I/O port outputs if test passed
-if grep -q "I/O: OUT port 8 = 0x55" io_test.log; then
-    echo "  [PASS] Port 8 = 0x55"
-else
-    echo "  [INFO] Port 8 output not found or incorrect"
-fi
-
-if grep -q "I/O: OUT port 9 = 0xAA" io_test.log; then
-    echo "  [PASS] Port 9 = 0xAA"
-else
-    echo "  [INFO] Port 9 output not found or incorrect"
-fi
+# CP5: IN 2 (expect 0x42)
+assert_checkpoint 5 \
+    "L=0x42"
 
 echo ""
-if [ "$PASS" = true ]; then
-    echo "=========================================="
-    echo "ALL I/O TESTS PASSED!"
-    echo "=========================================="
-    echo ""
-    echo "Instructions tested:"
-    echo "  - INP (IN 0, IN 1, IN 2)"
-    echo "  - OUT (OUT 8, OUT 9)"
-else
-    echo "=========================================="
-    echo "SOME TESTS FAILED - Check output above"
-    echo "=========================================="
-    echo ""
-    echo "Debug hints:"
-    echo "  - Check for PCC cycle type in log"
-    echo "  - Verify io_input_data is being placed on data bus"
-    echo "  - Check T-state timing for I/O cycles"
-fi
+echo "=== Final State ==="
 
-echo ""
-echo "Full output saved to: io_test.log"
-echo "=========================================="
+# CP6: Final success checkpoint
+assert_checkpoint 6
+
+# Verify final state via traditional method
+assert_final_state \
+    "A=0x00" \
+    "B=0x03"
+
+# Print summary and exit
+print_summary
+exit $?
