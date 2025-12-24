@@ -1,9 +1,11 @@
 #!/bin/bash
 
-# ============================================
+# ============================================================================
 # STACK DEPTH TEST VERIFICATION SCRIPT
-# ============================================
+# ============================================================================
 # Tests the 8-level internal stack of the Intel 8008
+#
+# Program: stack_depth_test_as.asm
 #
 # The 8008 has an 8-level hardware stack for CALL/RET/RST
 # This test verifies:
@@ -11,96 +13,69 @@
 #   2. All 6 RETurns work correctly
 #   3. Each level preserves the return address correctly
 #
-# Test approach:
-#   - Call SUB1 which calls SUB2 which calls... SUB6
-#   - Each subroutine increments a register to prove it was called
-#   - Each RET must return to the correct level
+# Checkpoint Results:
+#   CP1: Entry SUB1 - L=0x01 (B counter)
+#   CP2: Entry SUB2 - L=0x02
+#   CP3: Entry SUB3 - L=0x03
+#   CP4: Entry SUB4 - L=0x04
+#   CP5: Entry SUB5 - L=0x05
+#   CP6: Entry SUB6 - L=0x06 (deepest)
+#   CP7: Final      - L=0x06
 #
-# Expected final state:
-#   A = 0x00 (success indicator)
-#   B = 0x06 (6 subroutines called)
-#   C = 0x06 (6 returns completed)
+# Final Register State:
+#   A: 0x00, B: 0x06, C: 0x06
+# ============================================================================
 
-echo "==========================================="
-echo "B8008 Stack Depth (6-level) Test"
-echo "==========================================="
-echo ""
+# Source the checkpoint library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/checkpoint_lib.sh"
 
 # Run the test
-echo "Running test (this takes a few seconds)..."
-make test-b8008-top PROG=stack_depth_test_as SIM_TIME=30ms 2>&1 > stack_depth_test.log
+run_test "stack_depth_test_as" "30ms"
+
+# List all checkpoints found
+list_checkpoints
 
 echo ""
-echo "=== 1. Nested CALL Execution ==="
-echo "Looking for stack operations..."
-grep "STACK_PTR:" stack_depth_test.log | head -15
+echo "=== Stack Descent Tests ==="
+
+# CP1: Entry SUB1 (B = 1)
+assert_checkpoint 1 \
+    "L=0x01"
+
+# CP2: Entry SUB2 (B = 2)
+assert_checkpoint 2 \
+    "L=0x02"
+
+# CP3: Entry SUB3 (B = 3)
+assert_checkpoint 3 \
+    "L=0x03"
+
+# CP4: Entry SUB4 (B = 4)
+assert_checkpoint 4 \
+    "L=0x04"
+
+# CP5: Entry SUB5 (B = 5)
+assert_checkpoint 5 \
+    "L=0x05"
+
+# CP6: Entry SUB6 - deepest level (B = 6)
+assert_checkpoint 6 \
+    "L=0x06"
 
 echo ""
-echo "=== 2. HLT Detection ==="
-grep "PC = 0x01.*IR = 0x00" stack_depth_test.log | tail -1
+echo "=== Final State ==="
 
-echo ""
-echo "=== 3. Final Register State ==="
-echo "Expected:"
-echo "  A = 0x00 (success indicator)"
-echo "  B = 0x06 (6 nested CALLs completed)"
-echo "  C = 0x06 (6 RETurns completed)"
-echo ""
-echo "Actual (last reported state):"
-tail -100 stack_depth_test.log | grep "Reg\.A = " | tail -1
-tail -100 stack_depth_test.log | grep "Reg\.B = " | tail -1
-tail -100 stack_depth_test.log | grep "Reg\.C = " | tail -1
+# CP7: Final success checkpoint (B = 6, C = 6)
+assert_checkpoint 7 \
+    "L=0x06"
 
-echo ""
-echo "=== 4. Test Summary ==="
+# Verify final state via traditional method
+assert_final_state \
+    "A=0x00" \
+    "B=0x06" \
+    "C=0x06"
 
-# Check final register values
-PASS=true
-
-# Get last register values
-FINAL_A=$(tail -100 stack_depth_test.log | grep "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-Fa-f]+).*/\1/')
-FINAL_B=$(tail -100 stack_depth_test.log | grep "Reg\.B = " | tail -1 | sed -E 's/.*Reg\.B = (0x[0-9A-Fa-f]+).*/\1/')
-FINAL_C=$(tail -100 stack_depth_test.log | grep "Reg\.C = " | tail -1 | sed -E 's/.*Reg\.C = (0x[0-9A-Fa-f]+).*/\1/')
-
-echo "Checking final values..."
-
-if [ "$FINAL_A" = "0x00" ]; then
-    echo "  [PASS] A = 0x00 (success indicator)"
-else
-    echo "  [FAIL] A = $FINAL_A (expected 0x00)"
-    PASS=false
-fi
-
-if [ "$FINAL_B" = "0x06" ]; then
-    echo "  [PASS] B = 0x06 (6 nested CALLs)"
-else
-    echo "  [FAIL] B = $FINAL_B (expected 0x06)"
-    PASS=false
-fi
-
-if [ "$FINAL_C" = "0x06" ]; then
-    echo "  [PASS] C = 0x06 (6 RETurns completed)"
-else
-    echo "  [FAIL] C = $FINAL_C (expected 0x06)"
-    PASS=false
-fi
-
-echo ""
-if [ "$PASS" = true ]; then
-    echo "==========================================="
-    echo "ALL STACK DEPTH TESTS PASSED!"
-    echo "  - 6 nested CALLs executed"
-    echo "  - 6 RETurns completed correctly"
-    echo "  - Stack levels 0-5 verified"
-    echo "==========================================="
-    exit 0
-else
-    echo "==========================================="
-    echo "SOME TESTS FAILED - Check output above"
-    echo "==========================================="
-    exit 1
-fi
-
-echo ""
-echo "Full output saved to: stack_depth_test.log"
-echo "==========================================="
+# Print summary and exit
+print_summary
+exit $?

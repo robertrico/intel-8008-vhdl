@@ -25,9 +25,22 @@
 ;   B = 0x07 (7 RST calls completed: RST 1-7)
 ;
 ; Note: RST 0 is tested separately since it shares with bootstrap
+;
+; Checkpoint Results:
+;   CP1: After RST 1 - C=0x11
+;   CP2: After RST 2 - C=0x22
+;   CP3: After RST 3 - C=0x33
+;   CP4: After RST 4 - C=0x44
+;   CP5: After RST 5 - C=0x55
+;   CP6: After RST 6 - C=0x66
+;   CP7: After RST 7 - C=0x77
+;   CP8: Final       - B=0x07 (7 RST calls)
 
         cpu     8008new
         page    0
+
+; Checkpoint port constant
+CHKPT   equ     31              ; Port 31 = checkpoint/assertion port
 
 ; ============================================
 ; RST VECTORS (must be at fixed addresses)
@@ -104,6 +117,11 @@ MAIN:
         ; TEST 1: RST 1 (jump to 0x0008)
         ;===========================================
         RST     1
+        ; CHECKPOINT 1: Verify RST 1 executed
+        MOV     L,C             ; Save C to L
+        MVI     A,01h
+        OUT     CHKPT           ; CP1: C=0x11
+
         MOV     A,C
         CPI     11h             ; Check marker
         JNZ     FAIL
@@ -113,6 +131,11 @@ MAIN:
         ; TEST 2: RST 2 (jump to 0x0010)
         ;===========================================
         RST     2
+        ; CHECKPOINT 2: Verify RST 2 executed
+        MOV     L,C             ; Save C to L
+        MVI     A,02h
+        OUT     CHKPT           ; CP2: C=0x22
+
         MOV     A,C
         CPI     22h             ; Check marker
         JNZ     FAIL
@@ -122,6 +145,11 @@ MAIN:
         ; TEST 3: RST 3 (jump to 0x0018)
         ;===========================================
         RST     3
+        ; CHECKPOINT 3: Verify RST 3 executed
+        MOV     L,C             ; Save C to L
+        MVI     A,03h
+        OUT     CHKPT           ; CP3: C=0x33
+
         MOV     A,C
         CPI     33h             ; Check marker
         JNZ     FAIL
@@ -131,6 +159,11 @@ MAIN:
         ; TEST 4: RST 4 (jump to 0x0020)
         ;===========================================
         RST     4
+        ; CHECKPOINT 4: Verify RST 4 executed
+        MOV     L,C             ; Save C to L
+        MVI     A,04h
+        OUT     CHKPT           ; CP4: C=0x44
+
         MOV     A,C
         CPI     44h             ; Check marker
         JNZ     FAIL
@@ -140,6 +173,11 @@ MAIN:
         ; TEST 5: RST 5 (jump to 0x0028)
         ;===========================================
         RST     5
+        ; CHECKPOINT 5: Verify RST 5 executed
+        MOV     L,C             ; Save C to L
+        MVI     A,05h
+        OUT     CHKPT           ; CP5: C=0x55
+
         MOV     A,C
         CPI     55h             ; Check marker
         JNZ     FAIL
@@ -149,6 +187,11 @@ MAIN:
         ; TEST 6: RST 6 (jump to 0x0030)
         ;===========================================
         RST     6
+        ; CHECKPOINT 6: Verify RST 6 executed
+        MOV     L,C             ; Save C to L
+        MVI     A,06h
+        OUT     CHKPT           ; CP6: C=0x66
+
         MOV     A,C
         CPI     66h             ; Check marker
         JNZ     FAIL
@@ -158,6 +201,11 @@ MAIN:
         ; TEST 7: RST 7 (jump to 0x0038)
         ;===========================================
         RST     7
+        ; CHECKPOINT 7: Verify RST 7 executed
+        MOV     L,C             ; Save C to L
+        MVI     A,07h
+        OUT     CHKPT           ; CP7: C=0x77
+
         MOV     A,C
         CPI     77h             ; Check marker
         JNZ     FAIL
@@ -176,6 +224,11 @@ MAIN:
         ;===========================================
         ; All tests passed!
         ;===========================================
+        ; CHECKPOINT 8: Final success
+        MOV     L,B             ; Save B to L (should be 0x07)
+        MVI     A,08h
+        OUT     CHKPT           ; CP8: B=0x07
+
         MVI     A,00h           ; A = 0x00 (success)
         JMP     DONE
 

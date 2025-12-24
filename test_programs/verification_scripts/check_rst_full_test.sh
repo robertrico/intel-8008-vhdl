@@ -1,9 +1,12 @@
 #!/bin/bash
 
-# ============================================
-# FULL RST TEST VERIFICATION SCRIPT
-# ============================================
+# ============================================================================
+# FULL RST (0-7) TEST VERIFICATION SCRIPT
+# ============================================================================
 # Tests ALL 8 RST vectors (0-7)
+#
+# Program: rst_full_test_as.asm
+#
 # RST n jumps to address n*8:
 #   RST 0 -> 0x0000 (special: also bootstrap vector)
 #   RST 1 -> 0x0008
@@ -14,96 +17,73 @@
 #   RST 6 -> 0x0030
 #   RST 7 -> 0x0038
 #
-# Each RST handler increments B and sets a register to confirm execution:
-#   RST 0 handler: tested by bootstrap (implicit)
-#   RST 1-7 handlers: explicit test
+# Checkpoint Results:
+#   CP1: After RST 1 - L=0x11 (C marker)
+#   CP2: After RST 2 - L=0x22 (C marker)
+#   CP3: After RST 3 - L=0x33 (C marker)
+#   CP4: After RST 4 - L=0x44 (C marker)
+#   CP5: After RST 5 - L=0x55 (C marker)
+#   CP6: After RST 6 - L=0x66 (C marker)
+#   CP7: After RST 7 - L=0x77 (C marker)
+#   CP8: Final       - L=0x07 (B counter)
 #
-# Expected final state:
-#   A = 0x00 (success indicator)
-#   B = 0x07 (7 explicit RST calls completed: RST 1-7)
-#   (RST 0 is tested but doesn't increment B since it's also bootstrap)
+# Final Register State:
+#   A: 0x00, B: 0x07 (7 RST calls completed)
+# ============================================================================
 
-echo "==========================================="
-echo "B8008 Full RST (0-7) Test Verification"
-echo "==========================================="
-echo ""
+# Source the checkpoint library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/checkpoint_lib.sh"
 
 # Run the test
-echo "Running test (this takes a few seconds)..."
-make test-b8008-top PROG=rst_full_test_as SIM_TIME=30ms 2>&1 > rst_full_test.log
+run_test "rst_full_test_as" "30ms"
+
+# List all checkpoints found
+list_checkpoints
 
 echo ""
-echo "=== 1. RST Vector Execution ==="
-echo "Looking for RST handler execution..."
-grep "RST.*handler\|Reached 0x00[0-3]" rst_full_test.log | head -10
+echo "=== RST Vector Tests ==="
+
+# CP1: RST 1 executed (C = 0x11)
+assert_checkpoint 1 \
+    "L=0x11"
+
+# CP2: RST 2 executed (C = 0x22)
+assert_checkpoint 2 \
+    "L=0x22"
+
+# CP3: RST 3 executed (C = 0x33)
+assert_checkpoint 3 \
+    "L=0x33"
+
+# CP4: RST 4 executed (C = 0x44)
+assert_checkpoint 4 \
+    "L=0x44"
+
+# CP5: RST 5 executed (C = 0x55)
+assert_checkpoint 5 \
+    "L=0x55"
+
+# CP6: RST 6 executed (C = 0x66)
+assert_checkpoint 6 \
+    "L=0x66"
+
+# CP7: RST 7 executed (C = 0x77)
+assert_checkpoint 7 \
+    "L=0x77"
 
 echo ""
-echo "=== 2. HLT Detection ==="
-grep "PC = 0x01.*IR = 0x00" rst_full_test.log | tail -1
+echo "=== Final State ==="
 
-echo ""
-echo "=== 3. Final Register State ==="
-echo "Expected:"
-echo "  A = 0x00 (success indicator)"
-echo "  B = 0x07 (7 RST calls: RST 1-7)"
-echo ""
-echo "Actual (last reported state):"
-tail -100 rst_full_test.log | grep "Reg\.A = " | tail -1
-tail -100 rst_full_test.log | grep "Reg\.D = " | tail -1
+# CP8: Final success checkpoint (B = 0x07)
+assert_checkpoint 8 \
+    "L=0x07"
 
-echo ""
-echo "=== 4. Test Summary ==="
+# Verify final state via traditional method
+assert_final_state \
+    "A=0x00" \
+    "B=0x07"
 
-# Check final register values
-PASS=true
-
-# Get last register values
-FINAL_A=$(tail -100 rst_full_test.log | grep "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-Fa-f]+).*/\1/')
-FINAL_B=$(tail -100 rst_full_test.log | grep "Reg\.B = " | tail -1 | sed -E 's/.*Reg\.B = (0x[0-9A-Fa-f]+).*/\1/')
-
-echo "Checking final values..."
-
-if [ "$FINAL_A" = "0x00" ]; then
-    echo "  [PASS] A = 0x00 (success indicator)"
-else
-    echo "  [FAIL] A = $FINAL_A (expected 0x00)"
-    PASS=false
-fi
-
-if [ "$FINAL_B" = "0x07" ]; then
-    echo "  [PASS] B = 0x07 (7 RST handlers called)"
-else
-    echo "  [FAIL] B = $FINAL_B (expected 0x07)"
-    PASS=false
-fi
-
-# Verify we reached specific RST vectors
-echo ""
-echo "Verifying RST vector addresses were reached..."
-
-for vec in "0028" "0030" "0038"; do
-    if grep -q "Addr = 0x$vec\|PC = 0x$vec" rst_full_test.log; then
-        echo "  [PASS] RST vector 0x$vec was reached"
-    else
-        echo "  [WARN] RST vector 0x$vec not found in log"
-    fi
-done
-
-echo ""
-if [ "$PASS" = true ]; then
-    echo "==========================================="
-    echo "ALL RST TESTS PASSED!"
-    echo "  - RST 0 (bootstrap) verified"
-    echo "  - RST 1-7 explicitly tested"
-    echo "==========================================="
-    exit 0
-else
-    echo "==========================================="
-    echo "SOME TESTS FAILED - Check output above"
-    echo "==========================================="
-    exit 1
-fi
-
-echo ""
-echo "Full output saved to: rst_full_test.log"
-echo "==========================================="
+# Print summary and exit
+print_summary
+exit $?
