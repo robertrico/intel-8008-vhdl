@@ -236,18 +236,19 @@ begin
             when "01" =>
                 if op_210(0) = '1' then
                     -- 01 XXX XX1 - I/O instructions
-                    -- 0100 MMM 1 - INP - 2 cycles (8 states), I/O read to A
-                    -- 01RR MMM 1 - OUT - 2 cycles (6 states), I/O write from A
+                    -- 0100 0MMM 1 - INP - 2 cycles (8 states), I/O read to A (RR=00, ports 0-7)
+                    -- 01RR XMMM 1 - OUT - 2 cycles (6 states), I/O write from A (RR=01,10,11 for ports 8-31)
+                    -- RR field is in bits 5:4 of the opcode (op_543(2:1) after extracting bits 5:3)
                     instr_needs_immediate <= '1';
                     instr_is_io <= '1';
-                    if op_543(2) = '0' then
-                        -- INP: reads from I/O port, writes to A register
+                    if instruction_byte(5 downto 4) = "00" then
+                        -- INP: RR=00, reads from I/O port (0-7), writes to A register
                         -- Per isa.json: T3=DATA TO Reg.b, T5=REG.b TO REG.A
                         instr_writes_reg <= '1';
                         instr_ddd_field <= "000";  -- A register
                         instr_needs_t4t5 <= '1';   -- INP needs T4/T5 (8 states)
                     else
-                        -- OUT: reads from A register, writes to I/O port
+                        -- OUT: RR=01/10/11, reads from A register, writes to I/O port (8-31)
                         -- Per isa.json: T1/T2=address, T3=X (data hold), T4/T5 skipped
                         instr_reads_reg <= '1';
                         instr_sss_field <= "000";  -- A register

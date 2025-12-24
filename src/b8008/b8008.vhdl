@@ -249,7 +249,8 @@ architecture structural of b8008 is
             pc_increment_upper    : out std_logic;
             pc_load               : out std_logic;
             pc_hold               : out std_logic;
-            pc_carry_in           : in std_logic
+            pc_carry_in           : in std_logic;
+            pc_lower_byte         : in std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -947,6 +948,7 @@ begin
             pc_increment_lower    => pc_increment_lower,
             pc_increment_upper    => pc_increment_upper,
             pc_carry_in           => pc_carry,
+            pc_lower_byte         => std_logic_vector(pc_addr(7 downto 0)),
             pc_load               => pc_load,
             pc_hold               => pc_hold
         );

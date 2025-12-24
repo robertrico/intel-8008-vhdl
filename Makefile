@@ -17,7 +17,7 @@ TEST_DIR = ./sim/b8008
 BUILD_DIR = ./build/b8008
 PROG_DIR = ./test_programs
 
-.PHONY: all clean assemble test-b8008 test-b8008-top test-interrupt test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help show-programs
 
 all: help
 
@@ -27,11 +27,13 @@ help:
 	@echo "============================================"
 	@echo ""
 	@echo "Assembler:"
-	@echo "  make assemble PROG=file.asm  - Assemble program and create .hex/.mem files"
-	@echo "  make assemble file.asm       - Alternative syntax"
+	@echo "  make assemble PROG=file.asm      - Assemble test program (in test_programs/)"
+	@echo "  make assemble-sample PROG=name   - Assemble sample program (in test_programs/samples/)"
+	@echo "  make show-programs               - List available programs"
 	@echo ""
 	@echo "Integration Tests:"
 	@echo "  make test-b8008           - Test b8008 top-level (progressive integration)"
+	@echo "  make test-serial PROG=x   - Test serial I/O programs (bitbang UART capture)"
 	@echo ""
 	@echo "Module Tests:"
 	@echo "  make test-pc              - Test program counter"
@@ -117,7 +119,69 @@ show-programs:
 	@echo "Available test programs:"
 	@ls -1 $(PROG_DIR)/*.mem 2>/dev/null | xargs -I {} basename {} .mem | sed 's/^/  /'
 	@echo ""
+	@echo "Sample programs (serial I/O):"
+	@ls -1 $(PROG_DIR)/samples/*.mem 2>/dev/null | xargs -I {} basename {} .mem | sed 's/^/  /' || echo "  (none assembled yet)"
+	@echo ""
 	@echo "Usage: make test-b8008-top PROG=<program_name>"
+	@echo "       make test-serial PROG=<sample_name>"
+
+# ============================================================================
+# SERIAL I/O TEST (for sample programs with bitbanged UART)
+# ============================================================================
+# Runs sample programs that output serial data via bitbanged I/O
+# Captures and decodes the serial output in simulation
+#
+# Usage:
+#   make test-serial PROG=mandelbrot       - Run shooting mandelbrot game
+#   make test-serial PROG=pi          - Run pi calculation
+#   make test-serial PROG=mandelbrot  - Run mandelbrot renderer
+#
+SERIAL_PROG ?= mandelbrot
+SERIAL_ROM = test_programs/samples/$(SERIAL_PROG).mem
+SERIAL_TIME ?= 30min
+START_ADDR ?= 64
+
+test-serial: $(BUILD_DIR)
+	@echo "========================================="
+	@echo "Testing Serial I/O Program"
+	@echo "Program: $(SERIAL_ROM)"
+	@echo "Sim time: $(SERIAL_TIME)"
+	@echo "========================================="
+	@echo ""
+	@if [ ! -f "$(SERIAL_ROM)" ]; then \
+		echo "ERROR: $(SERIAL_ROM) not found!"; \
+		echo "First assemble the program:"; \
+		echo "  make assemble-sample PROG=$(SERIAL_PROG)"; \
+		exit 1; \
+	fi
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/phase_clocks.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/state_timing_generator.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/interrupt_ready_ff.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/program_counter.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/mem_mux_refresh.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_addr_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/condition_flags.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/io_buffer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_4kx8.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/ram_4kx8.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/serial_capture.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_serial_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_serial_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_serial_tb -gROM_FILE=$(SERIAL_ROM) -gSTART_ADDR=$(START_ADDR) --stop-time=$(SERIAL_TIME)
 
 # ============================================================================
 # INDIVIDUAL MODULE TESTS
@@ -366,6 +430,41 @@ assemble:
 # Allow using the .asm filename as a target
 %.asm:
 	@:
+
+# ============================================================================
+# SAMPLE PROGRAM ASSEMBLER
+# ============================================================================
+# Assemble sample programs (in test_programs/samples/) that may need includes
+# Usage: make assemble-sample PROG=mandelbrot
+#        make assemble-sample PROG=pi
+#        make assemble-sample PROG=stars
+#
+# These programs use bitbanged serial I/O and may require ASL include files
+ASL_INCLUDE = ~/Development/asl-current/include
+SAMPLE_DIR = $(PROG_DIR)/samples
+
+assemble-sample:
+	@if [ -z "$(PROG)" ]; then \
+		echo "Error: Please specify a sample program"; \
+		echo "Usage: make assemble-sample PROG=mandelbrot"; \
+		echo ""; \
+		echo "Available samples:"; \
+		ls -1 $(SAMPLE_DIR)/*.asm 2>/dev/null | xargs -I {} basename {} .asm | sed 's/^/  /' || echo "  (none)"; \
+		exit 1; \
+	fi; \
+	BASENAME=$(PROG); \
+	echo "========================================="; \
+	echo "Assembling sample: $$BASENAME.asm"; \
+	echo "========================================="; \
+	cd $(SAMPLE_DIR) && \
+	$(ASL) -cpu 8008new -i $(ASL_INCLUDE) -L $$BASENAME.asm && \
+	$(P2HEX) $$BASENAME.p $$BASENAME.hex -r 0-4095 && \
+	python3 ../../$(HEX2MEM) $$BASENAME.hex $$BASENAME.mem && \
+	echo "" && \
+	echo "Output files created:" && \
+	echo "  $(SAMPLE_DIR)/$$BASENAME.lst - Assembly listing" && \
+	echo "  $(SAMPLE_DIR)/$$BASENAME.hex - Intel HEX format" && \
+	echo "  $(SAMPLE_DIR)/$$BASENAME.mem - Memory initialization file"
 
 clean:
 	@rm -rf $(BUILD_DIR)

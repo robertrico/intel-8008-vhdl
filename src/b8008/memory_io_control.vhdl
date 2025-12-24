@@ -138,6 +138,7 @@ entity memory_io_control is
         pc_increment_lower : out std_logic;  -- Increment PC lower byte (T1)
         pc_increment_upper : out std_logic;  -- Increment PC upper byte (T2 if carry)
         pc_carry_in        : in  std_logic;  -- Carry flag from PC
+        pc_lower_byte      : in  std_logic_vector(7 downto 0);  -- PC lower byte for carry prediction
         pc_load            : out std_logic;  -- Load PC from data_in
         pc_hold            : out std_logic   -- Hold PC (wait states)
     );
@@ -280,7 +281,8 @@ begin
             instr_needs_immediate, instr_needs_address,
             instr_sss_field, instr_ddd_field, instr_is_alu, ir_loaded_from_interrupt,
             instr_is_call, instr_is_ret, instr_is_rst,
-            instr_writes_reg, instr_reads_reg, pc_was_loaded, suppress_pc_inc_next_cycle)
+            instr_writes_reg, instr_reads_reg, pc_was_loaded, suppress_pc_inc_next_cycle,
+            pc_lower_byte, pc_carry_in)
     begin
         -- Defaults: all outputs inactive
         ir_load               <= '0';
@@ -355,12 +357,19 @@ begin
                 pc_increment_upper <= '1';
             end if;
 
-            -- CALL: Increment PC one more time at cycle 3 T3 (before stack push at T4)
+            -- CALL: Increment PC one more time at cycle 3 T3/T4 (before stack push at T4 second half)
             -- At cycle 3 T1, PC points to address high byte (e.g. 0x0104 for CALL at 0x0102)
             -- We need PC to point to the NEXT instruction (0x0105) before pushing to stack
+            -- IMPORTANT: Also handle carry from lower byte (e.g., 0x00FF -> 0x0100)
+            -- Use two-phase increment like T1/T2: lower at T3, upper at T4 first half if carry
             if state_t3 = '1' and current_cycle = 3 and instr_is_call = '1' then
                 pc_increment_lower <= '1';
-                report "MEM_IO: Incrementing PC at T3 cycle 3 for CALL (to compute return address)";
+                report "MEM_IO: Incrementing PC lower at T3 cycle 3 for CALL (to compute return address)";
+            end if;
+            -- CALL: Increment upper byte at T4 first half if carry occurred from T3 lower increment
+            if state_t4 = '1' and state_half = '0' and current_cycle = 3 and instr_is_call = '1' and pc_carry_in = '1' then
+                pc_increment_upper <= '1';
+                report "MEM_IO: Incrementing PC upper at T4 cycle 3 for CALL (carry from lower)";
             end if;
 
             -- RST: Increment PC at cycle 1 T4 first half (before stack push at T4 second half)
@@ -618,13 +627,16 @@ begin
                 end if;
 
             elsif current_cycle = 3 then
-                -- Third cycle of CALL - push to stack during T4
+                -- Third cycle of CALL - push to stack during T4 second half
+                -- NOTE: We push at second half because at first half we may need to
+                -- increment the PC upper byte if there was a carry from T3 lower increment.
+                -- This ensures the correct return address is pushed to the stack.
                 if instr_is_call = '1' then
-                    -- IMPORTANT: Only push/write during first half of T4 to avoid double-push
-                    if state_half = '0' then
+                    -- Push during second half of T4 (after PC upper increment if any)
+                    if state_half = '1' then
                         stack_push         <= '1';
                         stack_write        <= '1';  -- Write PC to stack
-                        report "MEM_IO: T4 cycle 3 CALL - pushing return address to stack";
+                        report "MEM_IO: T4 cycle 3 CALL - pushing return address to stack (second half)";
                     end if;
                 end if;
                 -- JMP loads PC during T5, handled below
