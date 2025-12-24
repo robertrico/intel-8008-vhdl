@@ -14,18 +14,37 @@
 ; Sign Flag: Set when result bit 7 = 1 (negative in 2's complement)
 ; Parity Flag: Set when result has even number of 1 bits
 ;
+; Uses OUT 31 checkpoints for assertion-based verification.
+;
+; Checkpoint Results:
+;   CP1:  After JP     - B=0x01 (jumped on positive)
+;   CP2:  After JM     - C=0x02 (jumped on minus)
+;   CP3:  After JP!    - did not jump on negative (correct)
+;   CP4:  After JM!    - did not jump on positive (correct)
+;   CP5:  After JPE    - D=0x03 (jumped on even parity)
+;   CP6:  After JPO    - E=0x04 (jumped on odd parity)
+;   CP7:  After JPE!   - did not jump on odd parity (correct)
+;   CP8:  After JPO!   - did not jump on even parity (correct)
+;   CP9:  After RP     - L=0xAA (returned on positive)
+;   CP10: After RM     - L=0xBB (returned on minus)
+;   CP11: After RPE    - L=0xCC (returned on even parity)
+;   CP12: After RPO    - L=0xDD (returned on odd parity)
+;   CP13: Final        - A=0x00 (success)
+;
 ; Expected Results (in registers at halt):
 ;   A: 0x00 (success indicator)
 ;   B: 0x01 (test 1 passed marker)
 ;   C: 0x02 (test 2 passed marker)
-;   D: 0x03 (test 3 passed marker)
-;   E: 0x04 (test 4 passed marker)
+;   D: 0x03 (test 5 passed marker)
+;   E: 0x04 (test 6 passed marker)
 ;   H: 0x10 (RAM pointer high)
 ;   L: 0x08 (final test marker)
-;
 
         cpu     8008new
         page    0
+
+; Checkpoint port constant
+CHKPT   equ     31              ; Port 31 = checkpoint/assertion port
 
 ; Reset vector
         org     0000h
@@ -48,6 +67,9 @@ MAIN:
 
 TEST1_PASS:
         MVI     B,01h               ; B = 1 (test 1 passed marker)
+        ; CHECKPOINT 1: JP worked (jumped on positive)
+        MVI     A,01h
+        OUT     CHKPT               ; CP1: B=0x01, SF=0
 
         ;===========================================
         ; TEST 2: JM - Jump on Minus (sign=1)
@@ -60,6 +82,9 @@ TEST1_PASS:
 
 TEST2_PASS:
         MVI     C,02h               ; C = 2 (test 2 passed marker)
+        ; CHECKPOINT 2: JM worked (jumped on minus)
+        MVI     A,02h
+        OUT     CHKPT               ; CP2: C=0x02, SF=1
 
         ;===========================================
         ; TEST 3: JP should NOT jump when negative
@@ -67,7 +92,9 @@ TEST2_PASS:
         MVI     A,0FFh              ; A = 0xFF (-1, negative)
         ORI     00h                 ; Set flags
         JP      FAIL                ; Should NOT jump (sign=1)
-        ; Fall through is correct
+        ; CHECKPOINT 3: JP correctly did not jump on negative
+        MVI     A,03h
+        OUT     CHKPT               ; CP3: SF=1
 
         ;===========================================
         ; TEST 4: JM should NOT jump when positive
@@ -75,7 +102,9 @@ TEST2_PASS:
         MVI     A,01h               ; A = 0x01 (positive)
         ORI     00h                 ; Set flags
         JM      FAIL                ; Should NOT jump (sign=0)
-        ; Fall through is correct
+        ; CHECKPOINT 4: JM correctly did not jump on positive
+        MVI     A,04h
+        OUT     CHKPT               ; CP4: SF=0
 
         ;===========================================
         ; TEST 5: JPE - Jump on Parity Even
@@ -88,6 +117,9 @@ TEST2_PASS:
 
 TEST5_PASS:
         MVI     D,03h               ; D = 3 (test 5 passed marker)
+        ; CHECKPOINT 5: JPE worked (jumped on even parity)
+        MVI     A,05h
+        OUT     CHKPT               ; CP5: D=0x03, PF=1
 
         ;===========================================
         ; TEST 6: JPO - Jump on Parity Odd
@@ -100,6 +132,9 @@ TEST5_PASS:
 
 TEST6_PASS:
         MVI     E,04h               ; E = 4 (test 6 passed marker)
+        ; CHECKPOINT 6: JPO worked (jumped on odd parity)
+        MVI     A,06h
+        OUT     CHKPT               ; CP6: E=0x04, PF=0
 
         ;===========================================
         ; TEST 7: JPE should NOT jump on odd parity
@@ -107,7 +142,9 @@ TEST6_PASS:
         MVI     A,01h               ; A = 0x01 (1 bit set = odd parity)
         ORI     00h                 ; Set flags
         JPE     FAIL                ; Should NOT jump
-        ; Fall through is correct
+        ; CHECKPOINT 7: JPE correctly did not jump on odd parity
+        MVI     A,07h
+        OUT     CHKPT               ; CP7: PF=0
 
         ;===========================================
         ; TEST 8: JPO should NOT jump on even parity
@@ -115,7 +152,9 @@ TEST6_PASS:
         MVI     A,03h               ; A = 0x03 (2 bits set = even parity)
         ORI     00h                 ; Set flags
         JPO     FAIL                ; Should NOT jump
-        ; Fall through is correct
+        ; CHECKPOINT 8: JPO correctly did not jump on even parity
+        MVI     A,08h
+        OUT     CHKPT               ; CP8: PF=1
 
         ;===========================================
         ; TEST 9: RP - Return on Positive
@@ -124,6 +163,11 @@ TEST6_PASS:
         MVI     A,40h               ; A = 0x40 (positive)
         ORI     00h                 ; Set flags (positive)
         CALL    SUB_RP              ; Call subroutine
+        ; CHECKPOINT 9: RP returned correctly
+        MOV     L,A                 ; Save A to L
+        MVI     A,09h
+        OUT     CHKPT               ; CP9: L=0xAA
+        MOV     A,L                 ; Restore A
         CPI     0AAh                ; Check A = 0xAA (marker)
         JNZ     FAIL
 
@@ -134,6 +178,11 @@ TEST6_PASS:
         MVI     A,0C0h              ; A = 0xC0 (negative, bit7=1)
         ORI     00h                 ; Set flags (negative)
         CALL    SUB_RM              ; Call subroutine
+        ; CHECKPOINT 10: RM returned correctly
+        MOV     L,A                 ; Save A to L
+        MVI     A,0Ah
+        OUT     CHKPT               ; CP10: L=0xBB
+        MOV     A,L                 ; Restore A
         CPI     0BBh                ; Check A = 0xBB (marker)
         JNZ     FAIL
 
@@ -144,6 +193,11 @@ TEST6_PASS:
         MVI     A,33h               ; A = 0x33 = 00110011 (4 bits = even)
         ORI     00h                 ; Set flags
         CALL    SUB_RPE             ; Call subroutine
+        ; CHECKPOINT 11: RPE returned correctly
+        MOV     L,A                 ; Save A to L
+        MVI     A,0Bh
+        OUT     CHKPT               ; CP11: L=0xCC
+        MOV     A,L                 ; Restore A
         CPI     0CCh                ; Check A = 0xCC (marker)
         JNZ     FAIL
 
@@ -154,6 +208,11 @@ TEST6_PASS:
         MVI     A,31h               ; A = 0x31 = 00110001 (3 bits = odd)
         ORI     00h                 ; Set flags
         CALL    SUB_RPO             ; Call subroutine
+        ; CHECKPOINT 12: RPO returned correctly
+        MOV     L,A                 ; Save A to L
+        MVI     A,0Ch
+        OUT     CHKPT               ; CP12: L=0xDD
+        MOV     A,L                 ; Restore A
         CPI     0DDh                ; Check A = 0xDD (marker)
         JNZ     FAIL
 
@@ -162,6 +221,9 @@ TEST6_PASS:
         ;===========================================
         MVI     H,10h               ; H = 0x10 (RAM pointer marker)
         MVI     L,08h               ; L = 0x08 (final test marker)
+        ; CHECKPOINT 13: Final success
+        MVI     A,0Dh
+        OUT     CHKPT               ; CP13: success
         MVI     A,00h               ; A = 0 (success)
         JMP     DONE
 

@@ -1,93 +1,128 @@
 #!/bin/bash
 
-# ============================================
+# ============================================================================
 # SIGN AND PARITY TEST VERIFICATION SCRIPT
-# ============================================
-# This script verifies the b8008 CPU correctly
-# executes the sign_parity_test_as.asm program
+# ============================================================================
+# Comprehensive sign and parity flag test with checkpoint assertions
+#
+# Program: sign_parity_test_as.asm
+#
+# Tests sign and parity flag-based conditional instructions:
+#   - JP  (Jump on Positive - sign flag clear)
+#   - JM  (Jump on Minus - sign flag set)
+#   - JPE (Jump on Parity Even)
+#   - JPO (Jump on Parity Odd)
+#   - RP  (Return on Positive)
+#   - RM  (Return on Minus)
+#   - RPE (Return on Parity Even)
+#   - RPO (Return on Parity Odd)
+#
+# Checkpoint Results:
+#   CP1:  After JP     - B=0x01 (jumped on positive)
+#   CP2:  After JM     - C=0x02 (jumped on minus)
+#   CP3:  After JP!    - did not jump on negative (correct)
+#   CP4:  After JM!    - did not jump on positive (correct)
+#   CP5:  After JPE    - D=0x03 (jumped on even parity)
+#   CP6:  After JPO    - E=0x04 (jumped on odd parity)
+#   CP7:  After JPE!   - did not jump on odd parity (correct)
+#   CP8:  After JPO!   - did not jump on even parity (correct)
+#   CP9:  After RP     - L=0xAA (returned on positive)
+#   CP10: After RM     - L=0xBB (returned on minus)
+#   CP11: After RPE    - L=0xCC (returned on even parity)
+#   CP12: After RPO    - L=0xDD (returned on odd parity)
+#   CP13: Final        - success
+#
+# Final Register State:
+#   A: 0x00, B: 0x01, C: 0x02, D: 0x03, E: 0x04, H: 0x10, L: 0x08
+# ============================================================================
 
-echo "==========================================="
-echo "B8008 Sign and Parity Test Verification"
-echo "==========================================="
-echo ""
+# Source the checkpoint library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/checkpoint_lib.sh"
 
 # Run the test
-echo "Running test (this takes a few seconds)..."
-make test-b8008-top PROG=sign_parity_test_as SIM_TIME=30ms 2>&1 > sign_parity_test.log
+run_test "sign_parity_test_as" "30ms"
+
+# List all checkpoints found
+list_checkpoints
 
 echo ""
-echo "=== Expected Results ==="
-echo "  A = 0x00 (success indicator)"
-echo "  B = 0x01 (test 1 passed marker)"
-echo "  H = 0x10 (RAM pointer high)"
-echo "  L = 0x08 (final test marker)"
-echo ""
+echo "=== Sign Flag Jump Tests ==="
 
-echo "=== Final Register State ==="
-tail -50 sign_parity_test.log | grep -E "Reg\.(A|B)" | tail -1
-tail -50 sign_parity_test.log | grep -E "Reg\.(H|L)" | tail -1
+# CP1: JP worked (jumped on positive)
+assert_checkpoint 1 \
+    "B=0x01" \
+    "SF=0"
 
-echo ""
-echo "=== Test Summary ==="
+# CP2: JM worked (jumped on minus)
+assert_checkpoint 2 \
+    "C=0x02" \
+    "SF=1"
 
-# Check final register values
-PASS=true
+# CP3: JP correctly did not jump on negative
+assert_checkpoint 3 \
+    "SF=1"
 
-FINAL_A=$(tail -50 sign_parity_test.log | grep "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-F]+).*/\1/')
-FINAL_B=$(tail -50 sign_parity_test.log | grep "Reg\.B = " | tail -1 | sed -E 's/.*Reg\.B = (0x[0-9A-F]+).*/\1/')
-FINAL_H=$(tail -50 sign_parity_test.log | grep "Reg\.H = " | tail -1 | sed -E 's/.*Reg\.H = (0x[0-9A-F]+).*/\1/')
-FINAL_L=$(tail -50 sign_parity_test.log | grep "Reg\.L = " | tail -1 | sed -E 's/.*Reg\.L = (0x[0-9A-F]+).*/\1/')
-
-if [ "$FINAL_A" = "0x00" ]; then
-    echo "  [PASS] A = 0x00 (success indicator)"
-else
-    echo "  [FAIL] A = $FINAL_A (expected 0x00)"
-    PASS=false
-fi
-
-if [ "$FINAL_B" = "0x01" ]; then
-    echo "  [PASS] B = 0x01 (test 1 passed marker)"
-else
-    echo "  [FAIL] B = $FINAL_B (expected 0x01)"
-    PASS=false
-fi
-
-if [ "$FINAL_H" = "0x10" ]; then
-    echo "  [PASS] H = 0x10 (RAM pointer high)"
-else
-    echo "  [FAIL] H = $FINAL_H (expected 0x10)"
-    PASS=false
-fi
-
-if [ "$FINAL_L" = "0x08" ]; then
-    echo "  [PASS] L = 0x08 (final test marker)"
-else
-    echo "  [FAIL] L = $FINAL_L (expected 0x08)"
-    PASS=false
-fi
+# CP4: JM correctly did not jump on positive
+assert_checkpoint 4 \
+    "SF=0"
 
 echo ""
-if [ "$PASS" = true ]; then
-    echo "==========================================="
-    echo "ALL SIGN/PARITY TESTS PASSED!"
-    echo "==========================================="
-    echo ""
-    echo "Instructions tested:"
-    echo "  - JP  (Jump on Positive)"
-    echo "  - JM  (Jump on Minus)"
-    echo "  - JPE (Jump on Parity Even)"
-    echo "  - JPO (Jump on Parity Odd)"
-    echo "  - RP  (Return on Positive)"
-    echo "  - RM  (Return on Minus)"
-    echo "  - RPE (Return on Parity Even)"
-    echo "  - RPO (Return on Parity Odd)"
-    echo "  - ORI (OR Immediate - used to set flags)"
-else
-    echo "==========================================="
-    echo "SOME TESTS FAILED - Check output above"
-    echo "==========================================="
-fi
+echo "=== Parity Flag Jump Tests ==="
+
+# CP5: JPE worked (jumped on even parity)
+assert_checkpoint 5 \
+    "D=0x03" \
+    "PF=1"
+
+# CP6: JPO worked (jumped on odd parity)
+assert_checkpoint 6 \
+    "E=0x04" \
+    "PF=0"
+
+# CP7: JPE correctly did not jump on odd parity
+assert_checkpoint 7 \
+    "PF=0"
+
+# CP8: JPO correctly did not jump on even parity
+assert_checkpoint 8 \
+    "PF=1"
 
 echo ""
-echo "Full output saved to: sign_parity_test.log"
-echo "==========================================="
+echo "=== Conditional Return Tests ==="
+
+# CP9: RP returned correctly (A=0xAA saved to L)
+assert_checkpoint 9 \
+    "L=0xAA"
+
+# CP10: RM returned correctly (A=0xBB saved to L)
+assert_checkpoint 10 \
+    "L=0xBB"
+
+# CP11: RPE returned correctly (A=0xCC saved to L)
+assert_checkpoint 11 \
+    "L=0xCC"
+
+# CP12: RPO returned correctly (A=0xDD saved to L)
+assert_checkpoint 12 \
+    "L=0xDD"
+
+echo ""
+echo "=== Final State ==="
+
+# CP13: Final success checkpoint
+assert_checkpoint 13
+
+# Verify final state via traditional method
+assert_final_state \
+    "A=0x00" \
+    "B=0x01" \
+    "C=0x02" \
+    "D=0x03" \
+    "E=0x04" \
+    "H=0x10" \
+    "L=0x08"
+
+# Print summary and exit
+print_summary
+exit $?
