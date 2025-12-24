@@ -34,7 +34,7 @@ echo "=== Search Result ==="
 
 # CP1: Found the period at position 212 (0xD4)
 assert_checkpoint 1 \
-    "E=0xD4"
+    "D=0xD4"
 
 echo ""
 echo "=== Final State ==="

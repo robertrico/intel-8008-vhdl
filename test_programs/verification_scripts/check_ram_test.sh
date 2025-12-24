@@ -60,9 +60,9 @@ assert_checkpoint 3 \
 echo ""
 echo "=== Verification Phase ==="
 
-# CP4: After VERIFY (L = B = 0xFF, first inverted value)
+# CP4: After VERIFY (D = A = 0xF0, last inverted value)
 assert_checkpoint 4 \
-    "L=0xFF"
+    "D=0xF0"
 
 echo ""
 echo "=== Final State ==="
