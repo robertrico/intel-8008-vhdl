@@ -119,7 +119,11 @@ Verify instruction timing matches Intel spec:
   - Max frequency: 217 MHz (clk_in), 227 MHz (phi2) - easily meets 12 MHz target
 - [x] Timing closure verified: PASS at 12 MHz
 - [x] Bitstream generation: 1.8 MB .bit file ready
-- [ ] Create b8008 version of blinky project
+- [x] Create b8008 version of blinky project
+  - `make project P=blinky` builds complete system
+  - 112 LUTs, 63 FFs (includes ROM + RAM + CPU)
+  - Max frequency: 218 MHz (100 MHz target) - PASS
+  - Bitstream: 276 KB
 
 ### [ ] Run Historical 8008 Software
 Find and run real 8008 programs:

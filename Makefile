@@ -72,7 +72,12 @@ help:
 	@echo "b8008 - Block-based Intel 8008"
 	@echo "============================================"
 	@echo ""
-	@echo "FPGA Synthesis:"
+	@echo "FPGA Projects:"
+	@echo "  make project P=blinky     - Build FPGA project (in projects/blinky/)"
+	@echo "  make project P=blinky T=synth  - Run specific target"
+	@echo "  (Available targets: assemble, synth, pnr, bit, prog, clean)"
+	@echo ""
+	@echo "Core Synthesis (CPU only):"
 	@echo "  make synth                - Synthesize with GHDL+Yosys"
 	@echo "  make pnr                  - Place and route (nextpnr-ecp5)"
 	@echo "  make bit                  - Generate bitstream"
@@ -586,6 +591,33 @@ prog: $(BIT)
 prog-flash: $(BIT)
 	@echo "=== Programming SPI Flash ==="
 	$(LOADER) -f $(BIT)
+
+# ============================================================================
+# FPGA PROJECTS (Delegation to project-specific Makefiles)
+# ============================================================================
+# Usage: make project P=<project_name> [T=<target>]
+# Examples:
+#   make project P=blinky           - Build blinky (default: all)
+#   make project P=blinky T=synth   - Just synthesize
+#   make project P=blinky T=prog    - Program FPGA
+
+P ?= blinky
+T ?= all
+
+.PHONY: project list-projects
+
+project:
+	@if [ ! -d "projects/$(P)" ]; then \
+		echo "ERROR: Project '$(P)' not found in projects/"; \
+		echo "Available projects:"; \
+		ls -1 projects/ | grep -v "\.mk$$" | grep -v legacy | sed 's/^/  /'; \
+		exit 1; \
+	fi
+	$(MAKE) -C projects/$(P) $(T)
+
+list-projects:
+	@echo "Available FPGA projects:"
+	@ls -1 projects/ | grep -v "\.mk$$" | grep -v legacy | sed 's/^/  /'
 
 # ============================================================================
 # CLEANUP
