@@ -4,11 +4,13 @@ This document tracks what needs to be done before the b8008 is ready for FPGA ha
 
 ## Current Status
 
-- **23/23 verification tests pass**
+- **24/24 verification tests pass**
 - **All 48 instruction types implemented** (28 unique operation categories)
 - **Block-based architecture complete**
 - **Stack depth bug fixed** (RET was reading from wrong level)
 - **Interrupt handling tested** (RST 0 bootstrap + RST 7 runtime interrupt)
+- **Conditional RET bug fixed** (RZ/RNZ/etc. were ignoring condition flags)
+- **Serial I/O tested** (hello_8008.asm outputs "HI\r\n0123456789 B8008-OK\r\n")
 - **Estimated opcode coverage: ~90-95%** (see Confidence Report below)
 
 ---
@@ -109,12 +111,15 @@ Verify instruction timing matches Intel spec:
 - 2-cycle (8 states): MVI, MOV r,M, MOV M,r, ALU M, INP
 - 3-cycle (11 states): JMP, CALL, MVI M
 
-### [ ] FPGA Synthesis Test
-Before hardware deployment:
-- Synthesize b8008 with Yosys
-- Check resource utilization
-- Verify timing closure
-- Create b8008 version of blinky project
+### [x] FPGA Synthesis Test
+- [x] GHDL synthesis: 6665 lines Verilog netlist
+- [x] Added `make synth` target to Makefile
+- [x] Yosys+nextpnr: ECP5 85k place & route complete
+  - Device utilization: 106 LUTs, 46 FFs, 106 I/O (0% of 85k device)
+  - Max frequency: 217 MHz (clk_in), 227 MHz (phi2) - easily meets 12 MHz target
+- [x] Timing closure verified: PASS at 12 MHz
+- [x] Bitstream generation: 1.8 MB .bit file ready
+- [ ] Create b8008 version of blinky project
 
 ### [ ] Run Historical 8008 Software
 Find and run real 8008 programs:
@@ -200,6 +205,7 @@ Note: INR/DCR have 6 variants each (B,C,D,E,H,L) - no INR A or DCR A exists.
 | `interrupt_test_as.asm` | Bootstrap RST 0, runtime RST 7 interrupt | PASS |
 | `hlt_01_as.asm` | HLT opcode 0x01 | PASS |
 | `hlt_ff_as.asm` | HLT opcode 0xFF | PASS |
+| `hello_8008.asm` | Serial I/O, MOV A,M, PUTS routine, conditional RET | PASS |
 
 ---
 
@@ -225,46 +231,8 @@ Before FPGA deployment, ALL of the following must be true:
 1. [x] All high priority items complete (INR/DCR test, MOV r,r test)
 2. [x] All medium priority items complete (I/O, ALU coverage, interrupt test)
 3. [x] Opcode coverage reaches 90%+ (currently ~95%)
-4. [ ] Synthesis completes without errors
-5. [ ] Timing analysis passes
-6. [ ] At least one test program runs on hardware
+4. [x] GHDL synthesis completes without errors (6665 lines Verilog)
+5. [x] Yosys/nextpnr place & route (ECP5 85k: 106 LUTs, 46 FFs)
+6. [x] Timing analysis passes (217 MHz / 227 MHz, target 12 MHz)
+7. [ ] At least one test program runs on hardware
 
----
-
-## hello_8008.asm PUTS routine not outputting string
-
-**Status**: Investigating
-
-**Symptom**: 
-- Program outputs "HI<CR><LF>0123456789 <CR><LF>" correctly
-- But skips the "B8008-OK" string from PUTS routine
-- PUTS calls MOV A,M, CPI 00H, RZ - and RZ returns immediately
-- This means MOV A,M is reading 0x00 instead of 'B' (0x42)
-
-**Hypothesis**: RAM/Memory address issue
-- String is at address 0x0200 in the .mem file (verified - bytes 42 38 30 30 38 2D 4F 4B 00)
-- H and L registers are loaded with 0x02 and 0x00 (MVI H,02H / MVI L,00H at 0x66/0x68)
-- MOV A,M (LrM) is a 2-cycle memory indirect instruction
-- ahl_pointer.vhdl selects H:L registers during cycle 2 T1/T2 for address output
-
-**Possible causes to investigate**:
-1. ahl_pointer cycle selection: `instr_needs_address` vs `instr_needs_immediate` for LrM
-   - LrM sets `instr_needs_immediate='1'` but NOT `instr_needs_address`
-   - ahl_pointer uses `instr_needs_address` to decide cycle 2 vs cycle 3
-   - But ahl_pointer also checks `instr_is_mem_indirect` which IS set for LrM
-   
-2. RAM not loading address 0x0200 correctly
-   - ram_4kx8 only has 12-bit address (0-4095), 0x200=512 is valid
-   - Check if RAM init_ram_from_file actually loads all 521 lines
-   
-3. Memory bus timing during MOV A,M cycle 2
-   - Verify latched_address captures H:L correctly during T1/T2
-   - Check if data is read from RAM at correct time (T3?)
-
-4. Register file H/L not being written correctly by MVI instructions
-   - Trace register writes to verify H=0x02 and L=0x00
-
-**Next steps**:
-- Add debug output to ahl_pointer to verify it's activating during MOV A,M
-- Add debug output to show actual address being sent to RAM during cycle 2
-- Verify RAM contents at address 0x0200 after initialization
