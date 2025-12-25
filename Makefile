@@ -16,8 +16,8 @@ ASL = ~/Development/asl-current/asl
 P2HEX = ~/Development/asl-current/p2hex
 HEX2MEM = ./hex_to_mem.py
 
-# FPGA settings (ECP5 - adjust for your board)
-DEVICE   := 85k
+# FPGA settings (ECP5-5G Versa LFE5UM5G-45F)
+DEVICE   := um5g-45k
 PACKAGE  := CABGA381
 SPEED    := 8
 
