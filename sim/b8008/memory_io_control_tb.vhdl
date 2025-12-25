@@ -32,7 +32,7 @@ architecture test of memory_io_control_tb is
             status_s1             : in std_logic;
             status_s2             : in std_logic;
             cycle_type            : in std_logic_vector(1 downto 0);
-            current_cycle         : in integer range 1 to 3;
+            current_cycle         : in integer range 0 to 3;
             advance_state         : in std_logic;
             instr_is_hlt_flag     : in std_logic;
             instr_needs_immediate : in std_logic;
@@ -103,7 +103,7 @@ architecture test of memory_io_control_tb is
     signal status_s1             : std_logic := '0';
     signal status_s2             : std_logic := '0';
     signal cycle_type            : std_logic_vector(1 downto 0) := "00";
-    signal current_cycle         : integer range 1 to 3 := 1;
+    signal current_cycle         : integer range 0 to 3 := 0;
     signal advance_state         : std_logic := '0';
     signal instr_is_hlt_flag     : std_logic := '0';
     signal instr_needs_immediate : std_logic := '0';
@@ -246,7 +246,7 @@ begin
         report "Test 1: PCI cycle T3 state (instruction fetch)";
 
         cycle_type   <= "00";  -- PCI
-        current_cycle <= 1;
+        current_cycle <= 0;
         state_t3     <= '1';
         wait for 50 ns;
 
@@ -373,7 +373,7 @@ begin
         report "";
         report "Test 7: T4 cycle 2 - Write register after immediate load";
 
-        current_cycle      <= 2;
+        current_cycle      <= 1;
         instr_writes_reg   <= '1';
         instr_ddd_field    <= "011";  -- D register
         state_t4           <= '1';
@@ -399,7 +399,7 @@ begin
         report "";
         report "Test 8: T4 cycle 3 - Stack push for CALL";
 
-        current_cycle <= 3;
+        current_cycle <= 2;
         instr_is_call <= '1';
         state_t4      <= '1';
         wait for 50 ns;
@@ -420,7 +420,7 @@ begin
         report "";
         report "Test 9: T4 - Stack pop for RET";
 
-        current_cycle <= 1;
+        current_cycle <= 0;
         instr_is_ret  <= '1';
         state_t4      <= '1';
         wait for 50 ns;
@@ -441,7 +441,7 @@ begin
         report "";
         report "Test 10: T4 - Stack push for RST";
 
-        current_cycle <= 1;
+        current_cycle <= 0;
         instr_is_rst  <= '1';
         state_t4      <= '1';
         wait for 50 ns;
@@ -463,7 +463,7 @@ begin
         report "Test 11: T4 cycle 1 - Register read for MOV";
 
         cycle_type       <= "00";  -- PCI (reset to safe value)
-        current_cycle    <= 1;
+        current_cycle    <= 0;
         instr_reads_reg  <= '1';
         instr_writes_reg <= '1';
         instr_is_alu     <= '0';

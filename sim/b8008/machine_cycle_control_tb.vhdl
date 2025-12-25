@@ -45,7 +45,7 @@ architecture test of machine_cycle_control_tb is
             cycle_type : out std_logic_vector(1 downto 0);  -- D6, D7 (only valid during T2)
 
             -- Cycle tracking (for observation/debug)
-            current_cycle : out integer range 1 to 3  -- Which cycle of instruction (1, 2, or 3)
+            current_cycle : out integer range 0 to 3  -- Which cycle of instruction (1, 2, or 3)
         );
     end component;
 
@@ -70,7 +70,7 @@ architecture test of machine_cycle_control_tb is
     signal advance_state     : std_logic;
     signal instr_is_hlt_flag : std_logic;
     signal cycle_type        : std_logic_vector(1 downto 0);
-    signal current_cycle     : integer range 1 to 3;
+    signal current_cycle     : integer range 0 to 3;
 
     -- Test control
     signal done : boolean := false;
@@ -148,7 +148,7 @@ begin
 
         -- Simulate Cycle 1: PCI
         simulate_state(state_t1);
-        if current_cycle /= 1 then
+        if current_cycle /= 0 then
             report "  ERROR: Should be in cycle 1" severity error;
             errors := errors + 1;
         end if;
@@ -212,7 +212,7 @@ begin
 
         -- Cycle 2: PCR (fetch immediate data)
         simulate_state(state_t1);
-        if current_cycle /= 2 then
+        if current_cycle /= 1 then
             report "  ERROR: Should be in cycle 2" severity error;
             errors := errors + 1;
         else
@@ -273,7 +273,7 @@ begin
 
         -- Cycle 3: PCR (high byte of address)
         simulate_state(state_t1);
-        if current_cycle /= 3 then
+        if current_cycle /= 2 then
             report "  ERROR: Should be in cycle 3" severity error;
             errors := errors + 1;
         else

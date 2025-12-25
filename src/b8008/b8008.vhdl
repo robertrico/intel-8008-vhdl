@@ -69,7 +69,7 @@ entity b8008 is
         debug_reg_h           : out std_logic_vector(7 downto 0);
         debug_reg_l           : out std_logic_vector(7 downto 0);
         -- Control state
-        debug_cycle           : out integer range 1 to 3;
+        debug_cycle           : out std_logic_vector(1 downto 0);  -- Cycle 1-3 (encoded as 00, 01, 10)
         debug_pc              : out std_logic_vector(13 downto 0);
         debug_ir              : out std_logic_vector(7 downto 0);
         debug_needs_address   : out std_logic;
@@ -150,7 +150,7 @@ architecture structural of b8008 is
             advance_state         : out std_logic;
             instr_is_hlt_flag     : out std_logic;
             cycle_type            : out std_logic_vector(1 downto 0);
-            current_cycle         : out integer range 1 to 3
+            current_cycle         : out integer range 0 to 3
         );
     end component;
 
@@ -200,7 +200,7 @@ architecture structural of b8008 is
             status_s1             : in std_logic;
             status_s2             : in std_logic;
             cycle_type            : in std_logic_vector(1 downto 0);
-            current_cycle         : in integer range 1 to 3;
+            current_cycle         : in integer range 0 to 3;
             advance_state         : in std_logic;
             instr_is_hlt_flag     : in std_logic;
             instr_needs_immediate : in std_logic;
@@ -283,7 +283,7 @@ architecture structural of b8008 is
         port (
             state_t1              : in std_logic;
             state_t2              : in std_logic;
-            current_cycle         : in integer range 1 to 3;
+            current_cycle         : in integer range 0 to 3;
             instr_is_mem_indirect : in std_logic;
             instr_needs_address   : in std_logic;
             ahl_select            : out std_logic_vector(2 downto 0);
@@ -432,7 +432,7 @@ architecture structural of b8008 is
             instr_writes_reg      : in std_logic;
             instr_is_write        : in std_logic;
             instr_is_io           : in std_logic;
-            current_cycle         : in integer range 1 to 3;
+            current_cycle         : in integer range 0 to 3;
             state_half            : in std_logic;
             interrupt             : in std_logic;
             load_reg_a            : out std_logic;
@@ -544,7 +544,7 @@ architecture structural of b8008 is
 
     -- Machine cycle control signals
     -- Note: cycle_type is now an output port, not an internal signal
-    signal current_cycle    : integer range 1 to 3;
+    signal current_cycle    : integer range 0 to 3;
     signal advance_state    : std_logic;
     signal instr_is_hlt_flag : std_logic;  -- Latched HLT flag from machine_cycle_control
 
@@ -735,9 +735,9 @@ begin
     -- - Per isa.json: INP/OUT cycle 2, T1: "REG.A TO OUT", T2: "REG.b TO OUT"
     -- Otherwise during T1/T2, output selected_address (PC or Stack)
     data_bus <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (ahl_active = '1') and
-                                                                      not (instr_is_io = '1' and current_cycle = 2)) else
+                                                                      not (instr_is_io = '1' and current_cycle = 1)) else
                 (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (ahl_active = '1') and
-                                                                                      not (instr_is_io = '1' and current_cycle = 2)) else
+                                                                                      not (instr_is_io = '1' and current_cycle = 1)) else
                 (others => 'Z');
 
     -- Debug outputs
@@ -748,7 +748,7 @@ begin
     debug_reg_e         <= debug_reg_e_actual;
     debug_reg_h         <= debug_reg_h_actual;
     debug_reg_l         <= debug_reg_l_actual;
-    debug_cycle         <= current_cycle;
+    debug_cycle         <= std_logic_vector(to_unsigned(current_cycle, 2));  -- 0->00, 1->01, 2->10
     debug_pc            <= std_logic_vector(pc_addr);
     debug_ir            <= instr_byte;
     debug_needs_address <= instr_needs_address;

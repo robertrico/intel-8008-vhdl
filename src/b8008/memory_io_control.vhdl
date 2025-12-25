@@ -58,7 +58,7 @@ entity memory_io_control is
 
         -- From Machine Cycle Control
         cycle_type        : in std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
-        current_cycle     : in integer range 1 to 3;
+        current_cycle     : in integer range 0 to 3;  -- 0=cycle1, 1=cycle2, 2=cycle3
         advance_state     : in std_logic;
         instr_is_hlt_flag : in std_logic;
 
@@ -222,18 +222,18 @@ begin
                 -- LMI: cycle 2 T5, about to enter cycle 3 (uses H:L)
                 -- INP/OUT: cycle 1 T5, about to enter cycle 2 (I/O port, not PC)
                 if instr_is_mem_indirect = '1' then
-                    if current_cycle = 1 and instr_needs_address = '0' then
+                    if current_cycle = 0 and instr_needs_address = '0' then
                         -- LrM/LMr: cycle 2 will use H:L
                         suppress_pc_inc_next_cycle <= '1';
                         report "MEM_IO: Setting suppress_pc_inc_next_cycle for LrM/LMr cycle 2";
-                    elsif current_cycle = 2 and instr_needs_address = '1' then
+                    elsif current_cycle = 1 and instr_needs_address = '1' then
                         -- LMI: cycle 3 will use H:L
                         suppress_pc_inc_next_cycle <= '1';
                         report "MEM_IO: Setting suppress_pc_inc_next_cycle for LMI cycle 3";
                     end if;
                 end if;
                 -- I/O instructions: cycle 2 uses I/O port address, not PC
-                if instr_is_io = '1' and current_cycle = 1 then
+                if instr_is_io = '1' and current_cycle = 0 then
                     suppress_pc_inc_next_cycle <= '1';
                     report "MEM_IO: Setting suppress_pc_inc_next_cycle for I/O cycle 2";
                 end if;
@@ -250,16 +250,22 @@ begin
                 -- This is set EARLY to avoid race conditions with T1 increment
                 -- Only for JMP/CALL (instr_needs_address='1' AND NOT LMI)
                 -- LMI has instr_needs_address='1' but is a write operation - PC is not loaded
-                if current_cycle = 3 and instr_needs_address = '1' and instr_is_write = '0' then
+                if current_cycle = 2 and instr_needs_address = '1' and instr_is_write = '0' then
                     if eval_condition = '0' or condition_met = '1' then
                         pc_was_loaded <= '1';
                         report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 3 (PC will be loaded at T5)";
                     end if;
                 end if;
                 -- Set pc_was_loaded for RET/RST at T3 of cycle 1
-                if current_cycle = 1 and (instr_is_ret = '1' or instr_is_rst = '1') then
+                -- For conditional RET (RZ, RNZ, etc.), only set if condition is met
+                if current_cycle = 0 and instr_is_rst = '1' then
+                    -- RST is unconditional
                     pc_was_loaded <= '1';
-                    report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 1 for RET/RST";
+                    report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 1 for RST";
+                elsif current_cycle = 0 and instr_is_ret = '1' and (eval_condition = '0' or condition_met = '1') then
+                    -- RET: only set if unconditional or condition met
+                    pc_was_loaded <= '1';
+                    report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 1 for RET (condition met)";
                 end if;
             end if;
             -- Use prev_state_t2 to detect T2 from the PREVIOUS phi1 cycle
@@ -362,12 +368,12 @@ begin
             -- We need PC to point to the NEXT instruction (0x0105) before pushing to stack
             -- IMPORTANT: Also handle carry from lower byte (e.g., 0x00FF -> 0x0100)
             -- Use two-phase increment like T1/T2: lower at T3, upper at T4 first half if carry
-            if state_t3 = '1' and current_cycle = 3 and instr_is_call = '1' then
+            if state_t3 = '1' and current_cycle = 2 and instr_is_call = '1' then
                 pc_increment_lower <= '1';
                 report "MEM_IO: Incrementing PC lower at T3 cycle 3 for CALL (to compute return address)";
             end if;
             -- CALL: Increment upper byte at T4 first half if carry occurred from T3 lower increment
-            if state_t4 = '1' and state_half = '0' and current_cycle = 3 and instr_is_call = '1' and pc_carry_in = '1' then
+            if state_t4 = '1' and state_half = '0' and current_cycle = 2 and instr_is_call = '1' and pc_carry_in = '1' then
                 pc_increment_upper <= '1';
                 report "MEM_IO: Incrementing PC upper at T4 cycle 3 for CALL (carry from lower)";
             end if;
@@ -377,7 +383,7 @@ begin
             -- NEXT instruction (PC+1) before pushing to stack as return address.
             -- Note: We check at T4 (not T3) because at T3 rising edge, the IR is still
             -- being loaded. By T4, the IR has the RST opcode and instr_is_rst is stable.
-            if state_t4 = '1' and state_half = '0' and current_cycle = 1 and instr_is_rst = '1' then
+            if state_t4 = '1' and state_half = '0' and current_cycle = 0 and instr_is_rst = '1' then
                 pc_increment_lower <= '1';
                 report "MEM_IO: Incrementing PC at T4 cycle 1 for RST (to compute return address)";
             end if;
@@ -387,7 +393,7 @@ begin
             -- RET/RST: T5 of cycle 1
             -- NOTE: LMI also has instr_needs_address='1' but is a write operation - PC should NOT be loaded
             if state_t5 = '1' then
-                if current_cycle = 3 and instr_needs_address = '1' and instr_is_write = '0' then
+                if current_cycle = 2 and instr_needs_address = '1' and instr_is_write = '0' then
                     -- JMP/CALL: Load PC from Reg.a+Reg.b during T5 of cycle 3
                     -- Only load if unconditional OR condition is met
                     if eval_condition = '0' or condition_met = '1' then
@@ -398,9 +404,10 @@ begin
                             report "MEM_IO: Setting pc_load at T5 cycle 3 for JMP";
                         end if;
                     end if;
-                elsif instr_is_ret = '1' then
+                elsif instr_is_ret = '1' and (eval_condition = '0' or condition_met = '1') then
                     -- RET: Load PC from stack during T5 of cycle 1
                     -- T4 reads from stack, T5 loads PC to avoid timing issues
+                    -- Only load if unconditional OR condition is met
                     pc_load <= '1';
                     report "MEM_IO: Setting pc_load at T5 cycle 1 for RET";
                 elsif instr_is_rst = '1' then
@@ -423,8 +430,8 @@ begin
             -- - LrM/LMr: cycle 2 uses H:L address
             -- - LMI (MVI M): cycle 3 uses H:L address (cycle 2 uses PC for immediate)
             if instr_is_mem_indirect = '1' and
-               ((current_cycle = 2 and instr_needs_address = '0') or   -- LrM/LMr: cycle 2
-                (current_cycle = 3 and instr_needs_address = '1')) then  -- LMI: cycle 3
+               ((current_cycle = 1 and instr_needs_address = '0') or   -- LrM/LMr: cycle 2
+                (current_cycle = 2 and instr_needs_address = '1')) then  -- LMI: cycle 3
                 -- Output L register during T1 (ahl_pointer selects L via final_scratchpad_addr)
                 scratchpad_read     <= '1';
                 regfile_to_bus      <= '1';  -- Register file drives internal bus
@@ -434,7 +441,7 @@ begin
 
             -- Special case: I/O cycle 2 T1 - output REG.A (accumulator) to data bus
             -- Per isa.json: INP/OUT cycle 2, T1: "REG.A TO OUT"
-            if instr_is_io = '1' and current_cycle = 2 then
+            if instr_is_io = '1' and current_cycle = 1 then
                 scratchpad_select   <= "000";  -- A register (accumulator)
                 scratchpad_read     <= '1';
                 regfile_to_bus      <= '1';  -- Register file drives internal bus
@@ -452,8 +459,8 @@ begin
             -- Special case: During cycle 2/3 T1/T2 of memory indirect operations,
             -- output H/L registers to data bus for external address latch
             if instr_is_mem_indirect = '1' and
-               ((current_cycle = 2 and instr_needs_address = '0') or   -- LrM/LMr: cycle 2
-                (current_cycle = 3 and instr_needs_address = '1')) then  -- LMI: cycle 3
+               ((current_cycle = 1 and instr_needs_address = '0') or   -- LrM/LMr: cycle 2
+                (current_cycle = 2 and instr_needs_address = '1')) then  -- LMI: cycle 3
                 -- Output H register during T2 (ahl_pointer selects H via final_scratchpad_addr)
                 scratchpad_read     <= '1';
                 regfile_to_bus      <= '1';  -- Register file drives internal bus
@@ -465,7 +472,7 @@ begin
             -- Per isa.json: INP/OUT cycle 2, T2: "REG.b TO OUT"
             -- Reg.b contains the port number from instruction bits (loaded at cycle 1 T3)
             -- This is handled by register_alu_control output_reg_b signal
-            if instr_is_io = '1' and current_cycle = 2 then
+            if instr_is_io = '1' and current_cycle = 1 then
                 io_buffer_enable    <= '1';
                 io_buffer_direction <= '1';  -- Internal bus drives data bus (write direction)
                 report "MEM_IO: T2 cycle 2 I/O - outputting REG.b (port number) to data bus";
@@ -478,7 +485,7 @@ begin
             -- Register file access for single-cycle instructions
             -- NOTE: During PCI (instruction fetch), don't access register file at T3!
             -- The instruction is still being loaded, so decoder signals aren't stable yet.
-            if current_cycle = 1 and cycle_type /= CYCLE_PCI then
+            if current_cycle = 0 and cycle_type /= CYCLE_PCI then
                 if instr_reads_reg = '1' then
                     -- ALU operations, MOV, etc. - read source register
                     scratchpad_select <= instr_sss_field;
@@ -526,7 +533,7 @@ begin
                     -- - Register file (LMr) - read from SSS register
                     -- - Reg.b (LMI) - immediate data loaded at cycle 2 T3
                     -- For LMI (3-cycle mem write with immediate), Reg.b drives bus via register_alu_control
-                    if current_cycle = 3 and instr_needs_immediate = '1' then
+                    if current_cycle = 2 and instr_needs_immediate = '1' then
                         -- LMI: Reg.b drives bus (handled by register_alu_control output_reg_b)
                         -- Don't enable scratchpad read - let Reg.b drive
                         null;
@@ -564,7 +571,7 @@ begin
             -- S2=0, S1=1, S0=1
             -- Used for multi-cycle instructions
 
-            if current_cycle = 1 then
+            if current_cycle = 0 then
                 -- First cycle T4: Handle single-cycle ALU ops, RET/RST instructions
                 if instr_is_alu = '1' and instr_needs_immediate = '0' and instr_reads_reg = '1' then
                     -- Single-cycle ALU operations (INR, DCR, rotate, binary ALU with register)
@@ -580,10 +587,9 @@ begin
                     end if;
                     scratchpad_read   <= '1';
                     regfile_to_bus    <= '1';
-                elsif instr_is_ret = '1' then
+                elsif instr_is_ret = '1' and (eval_condition = '0' or condition_met = '1') then
                     -- RET/RFc/RTc: Pop stack during T4 (only if condition met for conditional returns)
-                    -- The condition_met signal is already handled by machine_cycle_control
-                    -- which only enables T4/T5 if the condition is met
+                    -- For conditional returns (RZ, RNZ, etc.), only execute if condition is met
                     -- IMPORTANT: Pop in first half, read in second half to get correct stack level
                     -- The Intel 8008 stack semantics: decrement SP FIRST, then read from new level
                     if state_half = '0' then
@@ -612,7 +618,7 @@ begin
                     report "MEM_IO: T4 cycle 1 MOV, reading SSS=" & integer'image(to_integer(unsigned(instr_sss_field))) & " to bus for Reg.b";
                 end if;
 
-            elsif current_cycle = 2 then
+            elsif current_cycle = 1 then
                 -- Second cycle T4: Per isa.json, T4 = "X" (hold/no-op) for LrI, LrM, INP
                 -- Register write happens at T5, not T4!
                 -- Only ALU immediate ops use T4 to read accumulator for ALU input
@@ -626,7 +632,7 @@ begin
                     report "MEM_IO: T4 cycle 2 ALU immediate, reading accumulator to bus for Reg.a";
                 end if;
 
-            elsif current_cycle = 3 then
+            elsif current_cycle = 2 then
                 -- Third cycle of CALL - push to stack during T4 second half
                 -- NOTE: We push at second half because at first half we may need to
                 -- increment the PC upper byte if there was a carry from T3 lower increment.
@@ -648,7 +654,7 @@ begin
             -- S2=1, S1=0, S0=1
 
             -- Single-cycle ALU operations (cycle 1): Write result back to register
-            if current_cycle = 1 and instr_is_alu = '1' and instr_writes_reg = '1' and instr_needs_immediate = '0' then
+            if current_cycle = 0 and instr_is_alu = '1' and instr_writes_reg = '1' and instr_needs_immediate = '0' then
                 -- INR, DCR, rotate, binary ALU ops - write ALU result to destination register
                 scratchpad_select <= instr_ddd_field;  -- Destination register
                 scratchpad_write  <= '1';
@@ -658,7 +664,7 @@ begin
 
             -- Two-cycle ALU immediate operations (cycle 2): Write ALU result back to A register
             -- ADI, SUI, NDI, XRI, ORI - immediate value loaded in T3, ALU executes in T5
-            if current_cycle = 2 and instr_is_alu = '1' and instr_writes_reg = '1' and instr_needs_immediate = '1' then
+            if current_cycle = 1 and instr_is_alu = '1' and instr_writes_reg = '1' and instr_needs_immediate = '1' then
                 scratchpad_select <= instr_ddd_field;  -- Destination register (A = 000)
                 scratchpad_write  <= '1';
                 bus_to_regfile    <= '1';  -- ALU result (on internal bus) writes to A register
@@ -670,7 +676,7 @@ begin
             -- Two-cycle non-ALU register writes (cycle 2): LrI (MVI), LrM, INP
             -- Per isa.json: T3=DATA TO REG.b, T5=REG.b TO DDD
             -- Reg.b is output by register_alu_control at T5 cycle 2
-            if current_cycle = 2 and instr_writes_reg = '1' and instr_is_alu = '0' and instr_needs_immediate = '1' then
+            if current_cycle = 1 and instr_writes_reg = '1' and instr_is_alu = '0' and instr_needs_immediate = '1' then
                 scratchpad_select <= instr_ddd_field;  -- Destination register
                 scratchpad_write  <= '1';
                 bus_to_regfile    <= '1';  -- Reg.b (on internal bus) writes to destination
@@ -680,7 +686,7 @@ begin
 
             -- MOV register-to-register: Write Reg.b to destination register
             -- Per isa.json T5: "REG. b TO DDD"
-            if current_cycle = 1 and instr_writes_reg = '1' and instr_reads_reg = '1' and
+            if current_cycle = 0 and instr_writes_reg = '1' and instr_reads_reg = '1' and
                instr_is_alu = '0' and instr_needs_immediate = '0' then
                 -- MOV DDD,SSS - Reg.b (loaded at T4 from SSS) now writes to DDD
                 scratchpad_select <= instr_ddd_field;  -- Destination register
@@ -691,7 +697,7 @@ begin
 
             -- JMP/CALL: Load PC from temp registers during T5 of cycle 3
             -- NOTE: LMI also has instr_needs_address='1' but is a write operation - PC should NOT be loaded
-            if current_cycle = 3 and instr_needs_address = '1' and instr_is_write = '0' then
+            if current_cycle = 2 and instr_needs_address = '1' and instr_is_write = '0' then
                 pc_load_from_regs  <= '1';  -- Load PC from Reg.a+Reg.b
                 if instr_is_call = '1' then
                     report "MEM_IO: Setting pc_load_from_regs at T5 cycle 3 for CALL";
@@ -701,7 +707,8 @@ begin
             end if;
 
             -- RET: Keep pc_load_from_stack set during T5 (was set during T4)
-            if instr_is_ret = '1' then
+            -- Only if unconditional OR condition is met
+            if instr_is_ret = '1' and (eval_condition = '0' or condition_met = '1') then
                 pc_load_from_stack <= '1';  -- Load PC from stack
                 select_stack       <= '1';  -- Use stack for address
             end if;

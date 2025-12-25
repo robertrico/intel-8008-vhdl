@@ -4,20 +4,66 @@
 # Simple, modular build system for block-based 8008 design
 # ============================================================================
 
-# Tools
-GHDL = ~/oss-cad-suite/bin/ghdl
+# Tools (use oss-cad-suite)
+OSS_CAD_SUITE := $(HOME)/oss-cad-suite/bin
+GHDL     = $(OSS_CAD_SUITE)/ghdl
+YOSYS    = $(OSS_CAD_SUITE)/yosys
+NEXTPNR  = $(OSS_CAD_SUITE)/nextpnr-ecp5
+ECPPACK  = $(OSS_CAD_SUITE)/ecppack
+LOADER   = $(OSS_CAD_SUITE)/openFPGALoader
 GHDL_FLAGS = --std=08 --work=work
 ASL = ~/Development/asl-current/asl
 P2HEX = ~/Development/asl-current/p2hex
 HEX2MEM = ./hex_to_mem.py
 
+# FPGA settings (ECP5 - adjust for your board)
+DEVICE   := 85k
+PACKAGE  := CABGA381
+SPEED    := 8
+
 # Directories
 SRC_DIR = ./src/b8008
 TEST_DIR = ./sim/b8008
 BUILD_DIR = ./build/b8008
+SYNTH_DIR = ./build/synth
 PROG_DIR = ./test_programs
 
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help show-programs
+# Synthesis output files
+JSON := $(SYNTH_DIR)/b8008.json
+CFG  := $(SYNTH_DIR)/b8008.config
+BIT  := $(SYNTH_DIR)/b8008.bit
+SVF  := $(SYNTH_DIR)/b8008.svf
+
+# All b8008 VHDL source files (order matters for GHDL)
+B8008_SRCS = \
+	$(SRC_DIR)/b8008_types.vhdl \
+	$(SRC_DIR)/program_counter.vhdl \
+	$(SRC_DIR)/stack_pointer.vhdl \
+	$(SRC_DIR)/stack_memory.vhdl \
+	$(SRC_DIR)/stack_addr_mux.vhdl \
+	$(SRC_DIR)/stack_addr_decoder.vhdl \
+	$(SRC_DIR)/instruction_register.vhdl \
+	$(SRC_DIR)/instruction_decoder.vhdl \
+	$(SRC_DIR)/condition_flags.vhdl \
+	$(SRC_DIR)/register_file.vhdl \
+	$(SRC_DIR)/scratchpad_decoder.vhdl \
+	$(SRC_DIR)/scratchpad_addr_mux.vhdl \
+	$(SRC_DIR)/sss_ddd_selector.vhdl \
+	$(SRC_DIR)/ahl_pointer.vhdl \
+	$(SRC_DIR)/temp_registers.vhdl \
+	$(SRC_DIR)/alu.vhdl \
+	$(SRC_DIR)/carry_lookahead.vhdl \
+	$(SRC_DIR)/io_buffer.vhdl \
+	$(SRC_DIR)/mem_mux_refresh.vhdl \
+	./src/components/phase_clocks.vhdl \
+	$(SRC_DIR)/state_timing_generator.vhdl \
+	$(SRC_DIR)/machine_cycle_control.vhdl \
+	$(SRC_DIR)/memory_io_control.vhdl \
+	$(SRC_DIR)/register_alu_control.vhdl \
+	$(SRC_DIR)/interrupt_ready_ff.vhdl \
+	$(SRC_DIR)/b8008.vhdl
+
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help show-programs synth pnr bit prog prog-flash
 
 all: help
 
@@ -25,6 +71,13 @@ help:
 	@echo "============================================"
 	@echo "b8008 - Block-based Intel 8008"
 	@echo "============================================"
+	@echo ""
+	@echo "FPGA Synthesis:"
+	@echo "  make synth                - Synthesize with GHDL+Yosys"
+	@echo "  make pnr                  - Place and route (nextpnr-ecp5)"
+	@echo "  make bit                  - Generate bitstream"
+	@echo "  make prog                 - Program via JTAG (volatile)"
+	@echo "  make prog-flash           - Program SPI flash (persistent)"
 	@echo ""
 	@echo "Assembler:"
 	@echo "  make assemble PROG=file.asm      - Assemble test program (in test_programs/)"
@@ -466,6 +519,78 @@ assemble-sample:
 	echo "  $(SAMPLE_DIR)/$$BASENAME.hex - Intel HEX format" && \
 	echo "  $(SAMPLE_DIR)/$$BASENAME.mem - Memory initialization file"
 
+# ============================================================================
+# FPGA SYNTHESIS
+# ============================================================================
+# Uses GHDL to synthesize VHDL -> Verilog, then Yosys for ECP5 synthesis
+# This avoids the broken GHDL-Yosys plugin on macOS
+
+$(SYNTH_DIR):
+	@mkdir -p $(SYNTH_DIR)
+
+# Synthesize with GHDL+Yosys
+synth: $(JSON)
+
+# Step 1: Analyze all VHDL sources
+.PHONY: analyze
+analyze: | $(SYNTH_DIR)
+	@echo "=== Analyzing VHDL sources ==="
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(B8008_SRCS)
+
+# Step 2: GHDL synth to Verilog (the key: --out=verilog)
+$(SYNTH_DIR)/b8008.v: $(B8008_SRCS) | $(SYNTH_DIR)
+	@echo "=== Synthesizing b8008 with GHDL ==="
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(B8008_SRCS)
+	$(GHDL) --synth $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) --out=verilog b8008 > $@
+	@echo "Verilog output: $@"
+	@wc -l $@
+
+# Step 3: Yosys synthesis for ECP5 (reads Verilog, no plugin needed)
+# Note: GHDL generates gate_mdff/gate_midff primitives for multi-edge detection
+#       Include the gate primitive definitions from src/synth/ghdl_gates.v
+$(JSON): $(SYNTH_DIR)/b8008.v
+	@echo "=== Running Yosys synthesis for ECP5 ==="
+	$(YOSYS) -p "read_verilog ./src/synth/ghdl_gates.v $<; synth_ecp5 -top b8008 -json $@" 2>&1 | tee $(SYNTH_DIR)/synth.log
+	@echo ""
+	@echo "Synthesis complete: $@"
+	@grep -E "Number of cells|LUT|DFF|CARRY|MULT" $(SYNTH_DIR)/synth.log || true
+
+# Place and route with nextpnr
+pnr: $(CFG)
+
+$(CFG): $(JSON)
+	@echo "=== Place & Route with nextpnr-ecp5 ==="
+	@if [ ! -f "$(JSON)" ]; then \
+		echo "ERROR: $(JSON) not found. Run 'make synth' first."; \
+		exit 1; \
+	fi
+	$(NEXTPNR) --$(DEVICE) --package $(PACKAGE) --speed $(SPEED) \
+		--json $(JSON) --textcfg $@ \
+		--timing-allow-fail
+	@echo "Place & route complete: $@"
+
+# Generate bitstream
+bit: $(BIT)
+
+$(BIT): $(CFG)
+	@echo "=== Generating Bitstream ==="
+	$(ECPPACK) --input $< --bit $@ --svf $(SVF)
+	@echo "Bitstream ready: $@"
+
+# Program via JTAG (volatile - lost on power cycle)
+prog: $(BIT)
+	@echo "=== Programming via JTAG (SRAM) ==="
+	$(LOADER) $(BIT)
+
+# Program SPI flash (persistent)
+prog-flash: $(BIT)
+	@echo "=== Programming SPI Flash ==="
+	$(LOADER) -f $(BIT)
+
+# ============================================================================
+# CLEANUP
+# ============================================================================
+
 clean:
-	@rm -rf $(BUILD_DIR)
+	@rm -rf $(BUILD_DIR) $(SYNTH_DIR)
 	@rm -f *.cf *.o work-obj*.cf

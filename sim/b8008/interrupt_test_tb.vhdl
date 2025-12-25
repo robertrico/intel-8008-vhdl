@@ -53,7 +53,7 @@ architecture testbench of interrupt_test_tb is
             debug_reg_e         : out std_logic_vector(7 downto 0);
             debug_reg_h         : out std_logic_vector(7 downto 0);
             debug_reg_l         : out std_logic_vector(7 downto 0);
-            debug_cycle         : out integer range 1 to 3;
+            debug_cycle         : out std_logic_vector(1 downto 0);
             debug_pc            : out std_logic_vector(13 downto 0);
             debug_ir            : out std_logic_vector(7 downto 0);
             debug_needs_address : out std_logic;
@@ -89,7 +89,7 @@ architecture testbench of interrupt_test_tb is
     signal debug_reg_e         : std_logic_vector(7 downto 0);
     signal debug_reg_h         : std_logic_vector(7 downto 0);
     signal debug_reg_l         : std_logic_vector(7 downto 0);
-    signal debug_cycle         : integer range 1 to 3;
+    signal debug_cycle         : std_logic_vector(1 downto 0);
     signal debug_pc            : std_logic_vector(13 downto 0);
     signal debug_ir            : std_logic_vector(7 downto 0);
     signal debug_needs_address : std_logic;

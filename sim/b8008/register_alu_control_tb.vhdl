@@ -35,7 +35,7 @@ architecture test of register_alu_control_tb is
             instr_writes_reg      : in std_logic;
 
             -- Machine cycle control input
-            current_cycle : in integer range 1 to 3;
+            current_cycle : in integer range 0 to 3;
 
             -- Interrupt input
             interrupt : in std_logic;
@@ -66,7 +66,7 @@ architecture test of register_alu_control_tb is
     signal instr_uses_temp_regs  : std_logic := '0';
     signal instr_needs_immediate : std_logic := '0';
     signal instr_writes_reg      : std_logic := '0';
-    signal current_cycle : integer range 1 to 3 := 1;
+    signal current_cycle : integer range 0 to 3 := 0;
     signal interrupt : std_logic := '0';
 
     -- Outputs
@@ -164,7 +164,7 @@ begin
         instr_is_alu_op <= '1';
         instr_uses_temp_regs <= '1';
         instr_needs_immediate <= '0';
-        current_cycle <= 1;
+        current_cycle <= 0;
         interrupt <= '0';
 
         -- T1: Address output (not relevant to ALU)
@@ -234,7 +234,7 @@ begin
         instr_is_alu_op <= '1';
         instr_uses_temp_regs <= '0';  -- Immediate ops don't use temp_regs at C1 T4
         instr_needs_immediate <= '1';
-        current_cycle <= 1;
+        current_cycle <= 0;
         wait for 100 ns;
 
         -- Cycle 1, T3: Fetch instruction (no temp reg loading for immediate ops at C1)
@@ -251,7 +251,7 @@ begin
         wait for phi2_period / 2;
 
         -- Move to Cycle 2
-        current_cycle <= 2;
+        current_cycle <= 1;
         wait for 100 ns;
 
         -- Cycle 2, T3: Fetch immediate data into Reg.b
@@ -308,7 +308,7 @@ begin
         instr_is_alu_op <= '0';  -- Not an ALU operation
         instr_uses_temp_regs <= '1';  -- MOV uses temp regs
         instr_needs_immediate <= '0';
-        current_cycle <= 1;
+        current_cycle <= 0;
         wait for 100 ns;
 
         set_state(status_s0, status_s1, status_s2, "T5 ");

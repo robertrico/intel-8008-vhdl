@@ -30,8 +30,8 @@ entity ahl_pointer is
         state_t1      : in std_logic;  -- T1 state (output L register)
         state_t2      : in std_logic;  -- T2 state (output H register)
 
-        -- Cycle tracking
-        current_cycle : in integer range 1 to 3;  -- Current machine cycle
+        -- Cycle tracking (0=cycle1, 1=cycle2, 2=cycle3)
+        current_cycle : in integer range 0 to 3;  -- Current machine cycle
 
         -- Instruction type
         instr_is_mem_indirect : in std_logic;  -- '1' when SSS or DDD = "111" (M)
@@ -61,7 +61,8 @@ begin
         -- Which cycle uses H:L for memory address?
         -- - LrM/LMr (2-cycle): cycle 2 uses H:L (instr_needs_address = '0')
         -- - LMI (3-cycle): cycle 3 uses H:L (instr_needs_address = '1')
-        variable hl_cycle : integer range 2 to 3;
+        -- Cycle encoding: 0=cycle1, 1=cycle2, 2=cycle3
+        variable hl_cycle : integer range 0 to 3;
     begin
         -- Defaults: inactive, don't override SSS/DDD
         ahl_select <= (others => '0');
@@ -69,9 +70,9 @@ begin
 
         -- Determine which cycle should use H:L address
         if instr_needs_address = '1' then
-            hl_cycle := 3;  -- LMI: H:L at cycle 3
+            hl_cycle := 2;  -- LMI: H:L at cycle 3 (encoded as 2)
         else
-            hl_cycle := 2;  -- LrM/LMr: H:L at cycle 2
+            hl_cycle := 1;  -- LrM/LMr: H:L at cycle 2 (encoded as 1)
         end if;
 
         -- During the appropriate cycle of memory indirect operations:

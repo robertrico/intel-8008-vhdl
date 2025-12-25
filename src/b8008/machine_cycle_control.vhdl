@@ -45,14 +45,15 @@ entity machine_cycle_control is
         cycle_type : out std_logic_vector(1 downto 0);  -- D6, D7 (only valid during T2)
 
         -- Cycle tracking (for observation/debug)
-        current_cycle : out integer range 1 to 3  -- Which cycle of instruction (1, 2, or 3)
+        -- Cycles encoded as: 0=cycle1, 1=cycle2, 2=cycle3
+        current_cycle : out integer range 0 to 3  -- Which cycle of instruction (0, 1, or 2)
     );
 end entity machine_cycle_control;
 
 architecture rtl of machine_cycle_control is
 
-    -- Internal cycle counter
-    signal cycle_count : integer range 1 to 3 := 1;
+    -- Internal cycle counter (0=cycle1, 1=cycle2, 2=cycle3)
+    signal cycle_count : integer range 0 to 3 := 0;
 
     -- Determine if we need to continue to next cycle
     signal needs_cycle_2 : std_logic;
@@ -89,11 +90,13 @@ begin
     -- Determine if current cycle needs T4/T5 states
     -- This depends on both the instruction type AND which cycle we're in
     -- Cycle 1: Use instr_needs_t4t5 for 1-cycle extended instructions (RET, RST, ALU ops)
+    --          BUT for conditional RET (RZ, RNZ, etc.), only execute T4/T5 if condition is met
     -- Cycle 2+: Use instr_needs_t4t5 for multi-cycle instructions (JMP, CALL, LrM, etc.)
     -- SPECIAL: In cycle 3 of conditional branches, T4/T5 only execute if condition is met
-    needs_t4t5_this_cycle <= '1' when (cycle_count = 1 and instr_needs_t4t5 = '1') else  -- Cycle 1: for extended 1-cycle instructions
-                             '1' when (cycle_count = 2 and instr_needs_t4t5 = '1') else  -- Cycle 2: always if decoder says so
-                             '1' when (cycle_count = 3 and instr_needs_t4t5 = '1' and
+    needs_t4t5_this_cycle <= '1' when (cycle_count = 0 and instr_needs_t4t5 = '1' and
+                                      (condition_met = '1' or eval_condition = '0')) else  -- Cycle 1: only if condition met (for RZ, RNZ, etc.)
+                             '1' when (cycle_count = 1 and instr_needs_t4t5 = '1') else  -- Cycle 2: always if decoder says so
+                             '1' when (cycle_count = 2 and instr_needs_t4t5 = '1' and
                                       (condition_met = '1' or eval_condition = '0')) else  -- Cycle 3: only if condition met (or unconditional)
                              '0';
 
@@ -110,7 +113,7 @@ begin
     process(state_t2)
     begin
         if rising_edge(state_t2) then
-            if cycle_count = 1 then
+            if cycle_count = 0 then
                 -- First cycle is always PCI
                 cycle_type_latch <= "00";
                 report "MCycle: T2 cycle_type=PCI (cycle 1)";
@@ -119,8 +122,8 @@ begin
                 cycle_type_latch <= "10";
                 report "MCycle: T2 cycle_type=PCC (I/O)";
             elsif instr_is_write = '1' and
-                  ((cycle_count = 2 and instr_needs_address = '0') or  -- LMr: cycle 2 is write
-                   (cycle_count = 3 and instr_needs_address = '1')) then  -- LMI: cycle 3 is write
+                  ((cycle_count = 1 and instr_needs_address = '0') or  -- LMr: cycle 2 is write
+                   (cycle_count = 2 and instr_needs_address = '1')) then  -- LMI: cycle 3 is write
                 -- Memory write: PCW
                 -- LMr (MOV M,r): 2-cycle, cycle 2 is write
                 -- LMI (MVI M): 3-cycle, cycle 3 is write (cycle 2 is read for immediate)
@@ -162,14 +165,14 @@ begin
             report "MCycle: T3 rising, cycle=" & integer'image(cycle_count) &
                    " needs_t4t5_this=" & std_logic'image(needs_t4t5_this_cycle);
             if needs_t4t5_this_cycle = '0' and
-               ((cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done (skip cycle 1!)
-                (cycle_count = 3)) then                           -- Three-cycle done
+               ((cycle_count = 1 and needs_cycle_3 = '0') or      -- Two-cycle done (skip cycle 1!)
+                (cycle_count = 2)) then                           -- Three-cycle done
                 advance_latch <= '1';
                 report "MCycle: Setting advance_latch at T3 (short cycle complete)";
             -- Special case: HLT instruction completes at T3 cycle 1
             -- Set advance_latch for machine_cycle_control advance tracking, but
             -- state transition is handled by transition_to_stopped signal
-            elsif instr_is_hlt = '1' and cycle_count = 1 then
+            elsif instr_is_hlt = '1' and cycle_count = 0 then
                 advance_latch <= '1';
                 instr_is_hlt_latch <= '1';  -- Latch HLT flag for interrupt wake
                 report "MCycle: Setting advance_latch at T3 for HLT";
@@ -180,7 +183,7 @@ begin
             -- By T4, instruction has been decoded so we can check instr_needs_t4t5
             report "MCycle: T4 rising, cycle=" & integer'image(cycle_count) &
                    " needs_t4t5_this=" & std_logic'image(needs_t4t5_this_cycle);
-            if instr_is_hlt = '0' and cycle_count = 1 and needs_t4t5_this_cycle = '0' and needs_cycle_2 = '0' then
+            if instr_is_hlt = '0' and cycle_count = 0 and needs_t4t5_this_cycle = '0' and needs_cycle_2 = '0' then
                 -- Single-cycle instruction that doesn't need T5 - complete at T4
                 advance_latch <= '1';
                 report "MCycle: Setting advance_latch at T4 (short single-cycle complete)";
@@ -190,9 +193,9 @@ begin
             -- Set at T5 when cycle is complete (extended cycles end here)
             report "MCycle: T5 rising, cycle=" & integer'image(cycle_count);
             if instr_is_hlt = '0' and
-               ((cycle_count = 1 and needs_cycle_2 = '0') or      -- Single-cycle done
-                (cycle_count = 2 and needs_cycle_3 = '0') or      -- Two-cycle done
-                (cycle_count = 3)) then                           -- Three-cycle done
+               ((cycle_count = 0 and needs_cycle_2 = '0') or      -- Single-cycle done
+                (cycle_count = 1 and needs_cycle_3 = '0') or      -- Two-cycle done
+                (cycle_count = 2)) then                           -- Three-cycle done
                 advance_latch <= '1';
                 report "MCycle: Setting advance_latch at T5 (extended cycle complete)";
             end if;
@@ -206,23 +209,23 @@ begin
     begin
         if rising_edge(state_t1i) then
             -- T1I is interrupt acknowledge - this is the cycle 1 instruction fetch
-            -- Set cycle counter to 1 (it should already be, but ensure it)
-            cycle_count <= 1;
+            -- Set cycle counter to 0 (cycle 1)
+            cycle_count <= 0;
         elsif rising_edge(state_t1) then
             -- We're entering T1 (start of new cycle or new instruction)
             report "MCycle: T1 rising, cycle=" & integer'image(cycle_count) &
                    " needs_cycle_2=" & std_logic'image(needs_cycle_2) &
                    " needs_cycle_3=" & std_logic'image(needs_cycle_3) &
                    " instr_needs_address=" & std_logic'image(instr_needs_address);
-            if cycle_count = 1 and needs_cycle_2 = '1' then
+            if cycle_count = 0 and needs_cycle_2 = '1' then
                 -- Continue to cycle 2
-                cycle_count <= 2;
-            elsif cycle_count = 2 and needs_cycle_3 = '1' then
+                cycle_count <= 1;
+            elsif cycle_count = 1 and needs_cycle_3 = '1' then
                 -- Continue to cycle 3
-                cycle_count <= 3;
+                cycle_count <= 2;
             else
                 -- Start new instruction (reset to cycle 1)
-                cycle_count <= 1;
+                cycle_count <= 0;
             end if;
         end if;
     end process;

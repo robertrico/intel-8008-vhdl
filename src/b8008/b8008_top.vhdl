@@ -57,7 +57,7 @@ entity b8008_top is
         debug_reg_e         : out std_logic_vector(7 downto 0);  -- E register
         debug_reg_h         : out std_logic_vector(7 downto 0);  -- H register
         debug_reg_l         : out std_logic_vector(7 downto 0);  -- L register
-        debug_cycle         : out integer range 1 to 3;
+        debug_cycle         : out std_logic_vector(1 downto 0);
         debug_pc            : out std_logic_vector(13 downto 0);
         debug_ir            : out std_logic_vector(7 downto 0);
         debug_needs_address : out std_logic;
@@ -99,7 +99,7 @@ architecture structural of b8008_top is
             debug_reg_e         : out std_logic_vector(7 downto 0);
             debug_reg_h         : out std_logic_vector(7 downto 0);
             debug_reg_l         : out std_logic_vector(7 downto 0);
-            debug_cycle         : out integer range 1 to 3;
+            debug_cycle         : out std_logic_vector(1 downto 0);
             debug_pc            : out std_logic_vector(13 downto 0);
             debug_ir            : out std_logic_vector(7 downto 0);
             debug_needs_address : out std_logic;

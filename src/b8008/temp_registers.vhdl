@@ -56,8 +56,10 @@ begin
 
     -- Bidirectional internal bus control
     -- Drive bus when output enabled, otherwise high-impedance
-    internal_bus <= reg_a when output_reg_a = '1' else (others => 'Z');
-    internal_bus <= reg_b when output_reg_b = '1' else (others => 'Z');
+    -- NOTE: Only one should be enabled at a time (mutual exclusion by control logic)
+    internal_bus <= reg_a when output_reg_a = '1' else
+                    reg_b when output_reg_b = '1' else
+                    (others => 'Z');
 
     -- Latch Reg.a on phi2 rising edge when enabled
     -- DUMB: just load whatever is on internal_bus

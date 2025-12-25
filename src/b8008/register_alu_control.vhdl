@@ -38,7 +38,7 @@ entity register_alu_control is
         instr_is_io           : in std_logic;  -- I/O operation (INP, OUT)
 
         -- Machine cycle control input
-        current_cycle : in integer range 1 to 3;
+        current_cycle : in integer range 0 to 3;  -- 0=cycle1, 1=cycle2, 2=cycle3
 
         -- State half for timing (0=first half, 1=second half of each state)
         state_half : in std_logic;
@@ -109,15 +109,15 @@ begin
     -- Cycle 3 T3: address high byte goes to Reg.a, NOT Reg.b!
     -- Cycle 1 T4: source register operand (for register ALU operations AND MOV register-to-register)
     -- NOTE: Don't gate on phi2 here - let the temp registers sample on phi2 rising edge
-    load_reg_b <= '1' when (state_is_t3 = '1' and current_cycle = 1) else  -- All C1 T3: opcode to Reg.b (per isa.json)
-                  '1' when (state_is_t3 = '1' and current_cycle = 2 and (instr_uses_temp_regs = '1' or instr_needs_immediate = '1')) else
-                  '1' when (state_is_t4 = '1' and current_cycle = 1 and instr_uses_temp_regs = '1' and instr_needs_immediate = '0') else
+    load_reg_b <= '1' when (state_is_t3 = '1' and current_cycle = 0) else  -- All C1 T3: opcode to Reg.b (per isa.json)
+                  '1' when (state_is_t3 = '1' and current_cycle = 1 and (instr_uses_temp_regs = '1' or instr_needs_immediate = '1')) else
+                  '1' when (state_is_t4 = '1' and current_cycle = 0 and instr_uses_temp_regs = '1' and instr_needs_immediate = '0') else
                   '0';
 
     -- Debug: Report Reg.b loading (combinational, triggers whenever signals change)
     process(state_is_t3, current_cycle, instr_uses_temp_regs, instr_needs_immediate, load_reg_b)
     begin
-        if state_is_t3 = '1' and current_cycle = 2 then
+        if state_is_t3 = '1' and current_cycle = 1 then
             report "REG_ALU_CTRL: Cycle 2 T3 - instr_uses_temp_regs=" & std_logic'image(instr_uses_temp_regs) &
                    " instr_needs_immediate=" & std_logic'image(instr_needs_immediate) &
                    " load_reg_b=" & std_logic'image(load_reg_b);
@@ -132,7 +132,7 @@ begin
     --
     -- Cycle 3 T3: address high byte (for JMP/CALL)
     -- NOTE: Don't gate on phi2 here - let the temp registers sample on phi2 rising edge
-    load_reg_a <= '1' when (state_is_t3 = '1' and current_cycle = 3 and instr_uses_temp_regs = '1') else
+    load_reg_a <= '1' when (state_is_t3 = '1' and current_cycle = 2 and instr_uses_temp_regs = '1') else
                   '0';
 
     -- ALU enable: T5 during ALU operations
@@ -141,16 +141,16 @@ begin
     -- IMPORTANT: For 2-cycle ALU ops (immediate/memory), ALU runs in cycle 2 T5, NOT cycle 1 T5
     -- For 1-cycle ALU ops (register), ALU runs in cycle 1 T5
     alu_enable <= '1' when (state_is_t5 = '1' and instr_is_alu_op = '1' and
-                            ((current_cycle = 1 and instr_needs_immediate = '0') or   -- 1-cycle: reg ALU
-                             (current_cycle = 2 and instr_needs_immediate = '1')))    -- 2-cycle: imm/mem ALU
+                            ((current_cycle = 0 and instr_needs_immediate = '0') or   -- 1-cycle: reg ALU
+                             (current_cycle = 1 and instr_needs_immediate = '1')))    -- 2-cycle: imm/mem ALU
                   else '0';
 
     -- Update flags: Same timing as ALU enable (flags updated after ALU operation)
     -- NOTE: Only update on SECOND HALF of T5 to ensure ALU result is stable
     -- The condition_flags module latches on phi2 rising edge
     update_flags <= '1' when (state_is_t5 = '1' and state_half = '1' and instr_is_alu_op = '1' and
-                              ((current_cycle = 1 and instr_needs_immediate = '0') or   -- 1-cycle: reg ALU
-                               (current_cycle = 2 and instr_needs_immediate = '1')))    -- 2-cycle: imm/mem ALU
+                              ((current_cycle = 0 and instr_needs_immediate = '0') or   -- 1-cycle: reg ALU
+                               (current_cycle = 1 and instr_needs_immediate = '1')))    -- 2-cycle: imm/mem ALU
                     else '0';
 
     -- Debug: Report when we're trying to update flags
@@ -180,12 +180,12 @@ begin
     --    Per isa.json: T3=DATA TO REG.b, T5=REG.b TO DDD (or REG.A for INP)
     -- 4. I/O cycle 2 T2: Reg.b (contains port number from instruction) outputs to data bus
     --    Per isa.json: INP/OUT cycle 2, T2: "REG.b TO OUT"
-    output_reg_b  <= '1' when (state_is_t5 = '1' and current_cycle = 1 and instr_writes_reg = '1' and instr_uses_temp_regs = '1' and
+    output_reg_b  <= '1' when (state_is_t5 = '1' and current_cycle = 0 and instr_writes_reg = '1' and instr_uses_temp_regs = '1' and
                                instr_is_alu_op = '0' and instr_needs_immediate = '0') else
-                     '1' when (state_is_t3 = '1' and current_cycle = 3 and instr_is_write = '1' and instr_needs_immediate = '1') else
-                     '1' when (state_is_t5 = '1' and current_cycle = 2 and instr_writes_reg = '1' and
+                     '1' when (state_is_t3 = '1' and current_cycle = 2 and instr_is_write = '1' and instr_needs_immediate = '1') else
+                     '1' when (state_is_t5 = '1' and current_cycle = 1 and instr_writes_reg = '1' and
                                instr_is_alu_op = '0' and instr_needs_immediate = '1') else
-                     '1' when (state_is_t2 = '1' and current_cycle = 2 and instr_is_io = '1') else  -- I/O T2: port number out
+                     '1' when (state_is_t2 = '1' and current_cycle = 1 and instr_is_io = '1') else  -- I/O T2: port number out
                      '0';
 
     -- ALU result drives bus during T5 for ALU operations
