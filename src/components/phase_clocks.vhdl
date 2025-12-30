@@ -46,12 +46,12 @@ architecture rtl of phase_clocks is
     constant PHI2_DIVIDER : integer := 60;    -- 0.6 µs PHI2 pulse width
     constant DEAD_DIVIDER : integer := 40;    -- 0.4 µs dead time
 
-    signal counter : integer := 0;
-    signal current_phase : clk_phase;
+    signal counter : integer range 0 to 127 := 0;
+    signal current_phase : clk_phase := PHI_1;
 
     -- Internal signals to avoid glitches
-    signal phi1_next : std_logic;
-    signal phi2_next : std_logic;
+    signal phi1_next : std_logic := '1';
+    signal phi2_next : std_logic := '0';
 
     -- SYNC signal: toggles every complete phi1+phi2 cycle
     -- High during one clock cycle, low during next clock cycle

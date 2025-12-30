@@ -108,6 +108,7 @@ architecture structural of b8008 is
         port (
             phi1                  : in std_logic;
             phi2                  : in std_logic;
+            reset                 : in std_logic;
             advance_state         : in std_logic;
             interrupt_pending     : in std_logic;
             ready                 : in std_logic;
@@ -801,6 +802,7 @@ begin
         port map (
             phi1                  => phi1,
             phi2                  => phi2,
+            reset                 => reset,
             advance_state         => advance_state,
             interrupt_pending     => interrupt_pending,
             ready                 => ready_status,

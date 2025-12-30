@@ -23,6 +23,10 @@ entity state_timing_generator is
         phi1 : in std_logic;
         phi2 : in std_logic;
 
+        -- Reset input for FPGA deterministic startup
+        -- (The real 8008 powers up in STOPPED state; reset provides same behavior)
+        reset : in std_logic;
+
         -- Control inputs
         advance_state         : in std_logic;  -- Advance to next state
         interrupt_pending     : in std_logic;  -- Interrupt waiting to be serviced
@@ -172,9 +176,13 @@ begin
 
     -- State machine and cycle counter (sequential)
     -- Advances on falling edge of phi2 (end of each clock cycle)
-    process(phi2)
+    -- Reset forces STOPPED state for deterministic FPGA startup
+    process(phi2, reset)
     begin
-        if falling_edge(phi2) then
+        if reset = '1' then
+            current_state <= S_STOPPED;
+            cycle_count <= '0';
+        elsif falling_edge(phi2) then
             -- Only advance if READY is high
             if ready = '1' then
                 if cycle_count = '0' then

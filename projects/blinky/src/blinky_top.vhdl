@@ -8,6 +8,9 @@
 --   - Maps I/O port 8 to LEDs
 --   - Runs blinky.asm program
 --
+-- IMPORTANT: Only use 100MHz clk for phase_clocks generation and POR.
+--            All other logic must use phi1 or phi2.
+--
 -- Copyright (c) 2025 Robert Rico
 --------------------------------------------------------------------------------
 
@@ -17,36 +20,14 @@ use ieee.numeric_std.all;
 
 entity blinky_top is
     port (
-        -- System clock and reset
-        clk         : in  std_logic;  -- 100 MHz system clock
-        rst         : in  std_logic;  -- Active-low reset (from SW3-1)
+        -- System clock (100 MHz LVDS)
+        clk         : in  std_logic;
 
-        -- Board LEDs (active low)
-        led_E16     : out std_logic;  -- Main blinky LED (LED0 from I/O port 8)
-        led_D17     : out std_logic;  -- SYNC indicator
-        led_D18     : out std_logic;  -- Phi1 clock (dim = running)
-        led_E18     : out std_logic;  -- Phi2 clock (dim = running)
-        led_F17     : out std_logic;  -- LED1 from I/O port 8
-        led_F18     : out std_logic;  -- State T1 indicator
-        led_E17     : out std_logic;  -- State T3 indicator
-        led_F16     : out std_logic;  -- I/O cycle indicator
-        led_M20     : out std_logic;  -- Interrupt pending
-        led_L18     : out std_logic;  -- Always-on reference
+        -- DIP switches (directly active - active low means ON='0')
+        sw          : in  std_logic_vector(7 downto 0);
 
-        -- Button input
-        speed_btn   : in  std_logic;
-
-        -- CPU debug outputs (directly from b8008 for logic analyzer)
-        cpu_d       : out std_logic_vector(7 downto 0);  -- Data bus
-        cpu_s0      : out std_logic;
-        cpu_s1      : out std_logic;
-        cpu_s2      : out std_logic;
-        cpu_sync    : out std_logic;
-        cpu_phi1    : out std_logic;
-        cpu_phi2    : out std_logic;
-        cpu_ready   : out std_logic;
-        cpu_int     : out std_logic;
-        cpu_data_en : out std_logic
+        -- Board LEDs (active low: '0' = ON)
+        led         : out std_logic_vector(7 downto 0)
     );
 end entity blinky_top;
 
@@ -98,9 +79,16 @@ architecture rtl of blinky_top is
     --------------------------------------------------------------------------------
     -- Internal Signals
     --------------------------------------------------------------------------------
-    -- Clock and reset
-    signal reset_sync   : std_logic_vector(1 downto 0) := (others => '1');
-    signal reset_int    : std_logic;  -- Internal reset (active high)
+    -- POR active signal - active high during reset, cleared after counter expires
+    -- Use inverted logic: por_active starts '1', cleared to '0' when done
+    signal por_active   : std_logic := '1';
+
+    -- Reset from switch (synchronized to phi1)
+    signal reset_sync   : std_logic_vector(2 downto 0) := (others => '1');
+    signal reset_sw     : std_logic;  -- Reset from switch (active high)
+    signal reset_int    : std_logic;  -- Combined reset: POR or switch (active high)
+
+    -- CPU signals
     signal phi1         : std_logic;
     signal phi2         : std_logic;
     signal sync_sig     : std_logic;
@@ -109,8 +97,9 @@ architecture rtl of blinky_top is
     signal s2_sig       : std_logic;
 
     -- Bootstrap interrupt control
-    signal bootstrap_int    : std_logic;  -- Interrupt signal for bootstrap
-    signal bootstrap_done   : std_logic := '0';
+    signal bootstrap_int     : std_logic := '0';
+    signal bootstrap_done    : std_logic := '0';
+    signal bootstrap_counter : unsigned(7 downto 0) := (others => '0');
 
     -- CPU debug signals
     signal address_sig      : std_logic_vector(13 downto 0);
@@ -122,11 +111,6 @@ architecture rtl of blinky_top is
     signal io_port_9    : std_logic_vector(7 downto 0);
     signal io_port_10   : std_logic_vector(7 downto 0);
 
-    -- T-state decode
-    signal is_t1        : std_logic;
-    signal is_t3        : std_logic;
-    signal is_io        : std_logic;
-
     -- Unused signals (required by port map)
     signal debug_reg_a, debug_reg_b, debug_reg_c : std_logic_vector(7 downto 0);
     signal debug_reg_d, debug_reg_e, debug_reg_h, debug_reg_l : std_logic_vector(7 downto 0);
@@ -137,43 +121,85 @@ architecture rtl of blinky_top is
     signal debug_flag_carry, debug_flag_zero, debug_flag_sign, debug_flag_parity : std_logic;
     signal ram_byte_0   : std_logic_vector(7 downto 0);
 
+    -- Slow counter for visible LED blinking (debug) - runs on phi1
+    -- Divides ~455kHz phi1 by 2^18 = ~1.7Hz for human-visible blinking
+    signal slow_counter : unsigned(17 downto 0) := (others => '0');
+
+    -- Raw clock counter - proves 100MHz is reaching FPGA
+    -- Divides 100MHz by 2^26 = ~1.5Hz
+    signal clk_counter : unsigned(25 downto 0) := (others => '0');
+
+    -- Debug: Track if we ever see non-STOPPED states
+    signal seen_not_stopped : std_logic := '0';  -- Latches if we ever exit STOPPED
+    signal reset_pulse_count : unsigned(3 downto 0) := (others => '0');  -- Count resets after POR
+
 begin
 
     --------------------------------------------------------------------------------
-    -- Reset Synchronization
+    -- Power-On Reset (POR) - ONLY place where clk is used directly
     --------------------------------------------------------------------------------
-    -- Synchronize external reset to avoid metastability
-    -- SW3 switches are active-low: '0' = ON = normal operation, '1' = OFF = reset
+    -- FPGA flip-flops may power up in random states. This counter ensures
+    -- we hold reset for ~10ms after power-up to allow everything to stabilize.
+    -- NOTE: Must use clk here because phi1/phi2 are held static during reset!
+    --
+    -- Use inverted logic: por_active starts '1' (in reset), cleared to '0' when done
+    -- This works regardless of FF initial state since we're clearing, not setting
     process(clk)
     begin
         if rising_edge(clk) then
-            reset_sync <= reset_sync(0) & rst;
+            clk_counter <= clk_counter + 1;
+            -- Clear por_active when bit 19 goes high (after ~5ms)
+            if clk_counter(19) = '1' then
+                por_active <= '0';
+            end if;
         end if;
     end process;
 
-    -- Convert active-low reset to active-high for b8008
-    reset_int <= reset_sync(1);  -- '1' = reset active
+    --------------------------------------------------------------------------------
+    -- Reset Synchronization (using clk)
+    --------------------------------------------------------------------------------
+    -- SW3-1 (sw[0]) directly controls reset
+    -- DIP switch: ON position (arrow up) = '0', OFF position (arrow down) = '1'
+    -- We want: sw ON (='0') = normal operation, sw OFF (='1') = reset
+    -- So reset_sw = sw(0) directly (no inversion needed)
+    -- NOTE: Must use clk here because phi1 is static during reset!
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            reset_sync <= reset_sync(1 downto 0) & sw(0);
+        end if;
+    end process;
+
+    reset_sw <= reset_sync(2);  -- '1' = reset active (switch OFF/down)
+
+    -- Combined reset: active during POR or when switch requests reset
+    reset_int <= por_active or reset_sw;
 
     --------------------------------------------------------------------------------
-    -- Bootstrap Interrupt Control
+    -- Bootstrap Interrupt Control (using phi2)
     --------------------------------------------------------------------------------
     -- The 8008 requires a bootstrap interrupt (RST 0) to start execution at 0x0000
-    -- Generate interrupt after reset releases, clear after T1I state detected
-    process(clk, reset_int)
+    -- Generate interrupt after reset releases, hold for several phi2 cycles to ensure
+    -- the CPU's interrupt_ready_ff latches it, then clear after T1I detected
+    process(phi2, reset_int)
     begin
         if reset_int = '1' then
-            bootstrap_int  <= '0';  -- Don't assert during reset
-            bootstrap_done <= '0';
-        elsif rising_edge(clk) then
+            bootstrap_int     <= '0';
+            bootstrap_done    <= '0';
+            bootstrap_counter <= (others => '0');
+        elsif rising_edge(phi2) then
             if bootstrap_done = '0' then
-                -- Assert interrupt to trigger bootstrap
+                -- Assert interrupt and count cycles
                 bootstrap_int <= '1';
+                bootstrap_counter <= bootstrap_counter + 1;
 
-                -- Clear interrupt after T1I state detected (S2='1', S1='1', S0='0')
-                -- This is when the interrupt has been acknowledged and RST 0 jammed
-                if s2_sig = '1' and s1_sig = '1' and s0_sig = '0' then
-                    bootstrap_int  <= '0';
-                    bootstrap_done <= '1';
+                -- Hold interrupt for at least 16 cycles, then wait for T1I
+                if bootstrap_counter >= 16 then
+                    -- Clear interrupt after T1I state detected (S2='1', S1='1', S0='0')
+                    if s2_sig = '1' and s1_sig = '1' and s0_sig = '0' then
+                        bootstrap_int  <= '0';
+                        bootstrap_done <= '1';
+                    end if;
                 end if;
             end if;
         end if;
@@ -222,64 +248,76 @@ begin
         );
 
     --------------------------------------------------------------------------------
-    -- State Decode
+    -- Slow clock divider for visible LED debugging (using phi1)
     --------------------------------------------------------------------------------
-    -- T1: S2=0, S1=1, S0=0 (binary 010)
-    is_t1 <= '1' when (s2_sig = '0' and s1_sig = '1' and s0_sig = '0') else '0';
+    process(phi1)
+    begin
+        if rising_edge(phi1) then
+            slow_counter <= slow_counter + 1;
+        end if;
+    end process;
 
-    -- T3: S2=0, S1=0, S0=1 (binary 001)
-    is_t3 <= '1' when (s2_sig = '0' and s1_sig = '0' and s0_sig = '1') else '0';
+    --------------------------------------------------------------------------------
+    -- Debug: Track if we ever exit STOPPED state (S0=1, S1=1)
+    -- STOPPED has S0=1, S1=1. Any other state will have different S0/S1 values.
+    --------------------------------------------------------------------------------
+    process(phi2, reset_int)
+    begin
+        if reset_int = '1' then
+            seen_not_stopped <= '0';
+        elsif rising_edge(phi2) then
+            -- If we see anything other than STOPPED state, latch it
+            -- STOPPED: S0=1, S1=1. If either is 0, we're not in STOPPED.
+            if s0_sig = '0' or s1_sig = '0' then
+                seen_not_stopped <= '1';
+            end if;
+        end if;
+    end process;
 
-    -- I/O cycle detection (simplified: check address range during T3)
-    is_io <= '1' when (is_t3 = '1' and address_sig(13 downto 12) /= "00") else '0';
+    --------------------------------------------------------------------------------
+    -- Debug: Count reset pulses after POR completes
+    -- If reset_int pulses after por_active goes low, increment counter
+    --------------------------------------------------------------------------------
+    process(phi2)
+        variable prev_reset : std_logic := '0';
+    begin
+        if rising_edge(phi2) then
+            -- Detect rising edge of reset_int AFTER POR is done
+            if por_active = '0' and reset_int = '1' and prev_reset = '0' then
+                if reset_pulse_count < 15 then
+                    reset_pulse_count <= reset_pulse_count + 1;
+                end if;
+            end if;
+            prev_reset := reset_int;
+        end if;
+    end process;
 
     --------------------------------------------------------------------------------
     -- LED Outputs (active low: '0' = LED ON)
     --------------------------------------------------------------------------------
-    -- E16: Main blinky LED - LED0 from I/O port 8
-    -- The blinky.asm program outputs 0xFE (LED on) or 0xFF (LED off) to port 8
-    -- Since LEDs are active low, invert the bit: '0' in register = LED on
-    led_E16 <= io_port_8(0);  -- Direct pass-through (0xFE bit0=0 -> LED ON)
+    -- LED[0] (D25): S2 status bit - completes the state picture
+    -- STOPPED: S2=0, T1I: S2=1, T1: S2=0, T2: S2=1
+    led(0) <= not s2_sig;
 
-    -- D17: SYNC indicator (appears dim when running)
-    led_D17 <= not sync_sig;
+    -- LED[1] (D24): seen_not_stopped - ON = we ever exited STOPPED state
+    led(1) <= not seen_not_stopped;
 
-    -- D18: Phi1 clock indicator (dim = running fast)
-    led_D18 <= not phi1;
+    -- LED[2] (D22): slow_counter on phi1 - blinks ~1.7Hz if CPU clocks running
+    led(2) <= not slow_counter(17);
 
-    -- E18: Phi2 clock indicator (dim = running fast)
-    led_E18 <= not phi2;
+    -- LED[3] (D21): reset_int - OFF = running, ON = in reset
+    led(3) <= reset_int;
 
-    -- F17: LED1 from I/O port 8 (should stay off)
-    led_F17 <= io_port_8(1);
+    -- LED[4] (D26): bootstrap_int - ON = pending, OFF = cleared
+    led(4) <= not bootstrap_int;
 
-    -- F18: T1 state indicator
-    led_F18 <= not is_t1;
+    -- LED[5] (D27): CPU interrupt pending from b8008_top
+    led(5) <= not int_pending_sig;
 
-    -- E17: T3 state indicator
-    led_E17 <= not is_t3;
+    -- LED[6] (D28): S0 status bit (shows CPU state)
+    led(6) <= not s0_sig;
 
-    -- F16: I/O cycle indicator
-    led_F16 <= not is_io;
-
-    -- M20: Interrupt pending
-    led_M20 <= not int_pending_sig;
-
-    -- L18: Always-on reference (tied to NOT reset = on when running)
-    led_L18 <= reset_int;  -- Off when running (active-low LED, reset='0' during run)
-
-    --------------------------------------------------------------------------------
-    -- CPU Debug Outputs (directly connected)
-    --------------------------------------------------------------------------------
-    cpu_d       <= data_sig;
-    cpu_s0      <= s0_sig;
-    cpu_s1      <= s1_sig;
-    cpu_s2      <= s2_sig;
-    cpu_sync    <= sync_sig;
-    cpu_phi1    <= phi1;
-    cpu_phi2    <= phi2;
-    cpu_ready   <= '1';  -- Always ready
-    cpu_int     <= bootstrap_int;
-    cpu_data_en <= '1';  -- Bus always active
+    -- LED[7] (D29): S1 status bit (shows CPU state)
+    led(7) <= not s1_sig;
 
 end architecture rtl;
