@@ -71,7 +71,9 @@ entity b8008_top is
         -- I/O port debug outputs (for verification)
         debug_io_port_8     : out std_logic_vector(7 downto 0);
         debug_io_port_9     : out std_logic_vector(7 downto 0);
-        debug_io_port_10    : out std_logic_vector(7 downto 0)
+        debug_io_port_10    : out std_logic_vector(7 downto 0);
+        -- State timing debug
+        debug_state_half    : out std_logic   -- Which half of 2-cycle state (0=first, 1=second)
     );
 end entity b8008_top;
 
@@ -109,7 +111,9 @@ architecture structural of b8008_top is
             debug_flag_carry    : out std_logic;
             debug_flag_zero     : out std_logic;
             debug_flag_sign     : out std_logic;
-            debug_flag_parity   : out std_logic
+            debug_flag_parity   : out std_logic;
+            -- State timing debug
+            debug_state_half    : out std_logic
         );
     end component;
 
@@ -290,7 +294,8 @@ begin
             debug_flag_carry    => debug_flag_carry,
             debug_flag_zero     => debug_flag_zero,
             debug_flag_sign     => debug_flag_sign,
-            debug_flag_parity   => debug_flag_parity
+            debug_flag_parity   => debug_flag_parity,
+            debug_state_half    => debug_state_half
         );
 
     -- ========================================================================

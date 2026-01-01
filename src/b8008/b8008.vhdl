@@ -80,7 +80,9 @@ entity b8008 is
         debug_flag_carry      : out std_logic;
         debug_flag_zero       : out std_logic;
         debug_flag_sign       : out std_logic;
-        debug_flag_parity     : out std_logic
+        debug_flag_parity     : out std_logic;
+        -- State timing debug
+        debug_state_half      : out std_logic   -- Which half of 2-cycle state (0=first, 1=second)
     );
 end entity b8008;
 
@@ -758,6 +760,7 @@ begin
     debug_flag_zero     <= flag_zero;
     debug_flag_sign     <= flag_sign;
     debug_flag_parity   <= flag_parity;
+    debug_state_half    <= state_half;
 
     -- PC control record construction
     pc_control.increment_lower <= pc_increment_lower;

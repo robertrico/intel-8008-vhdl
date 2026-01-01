@@ -26,8 +26,27 @@ entity blinky_top is
         -- DIP switches (directly active - active low means ON='0')
         sw          : in  std_logic_vector(7 downto 0);
 
-        -- Board LEDs (active low: '0' = ON)
-        led         : out std_logic_vector(7 downto 0)
+        -- Button input
+        speed_btn   : in  std_logic;
+
+        -- CPU debug outputs (directly from b8008 for logic analyzer)
+        cpu_d       : out std_logic_vector(7 downto 0);  -- Data bus
+        cpu_s0      : out std_logic;
+        cpu_s1      : out std_logic;
+        cpu_s2      : out std_logic;
+        cpu_sync    : out std_logic;
+        cpu_phi1    : out std_logic;
+        cpu_phi2    : out std_logic;
+        cpu_ready   : out std_logic;
+        cpu_int     : out std_logic;
+
+        -- Additional debug outputs for oscilloscope/logic analyzer
+        dbg_reset_int      : out std_logic;  -- Internal reset signal (primary suspect!)
+        dbg_bootstrap_int  : out std_logic;  -- Bootstrap interrupt active
+        dbg_bootstrap_done : out std_logic;  -- Bootstrap completed
+        dbg_state_half     : out std_logic;  -- Which half of 2-cycle state
+        dbg_int_pending    : out std_logic;  -- CPU interrupt pending
+        dbg_pc             : out std_logic_vector(7 downto 0)  -- PC low byte
     );
 end entity blinky_top;
 
@@ -72,7 +91,8 @@ architecture rtl of blinky_top is
             debug_flag_parity   : out std_logic;
             debug_io_port_8     : out std_logic_vector(7 downto 0);
             debug_io_port_9     : out std_logic_vector(7 downto 0);
-            debug_io_port_10    : out std_logic_vector(7 downto 0)
+            debug_io_port_10    : out std_logic_vector(7 downto 0);
+            debug_state_half    : out std_logic
         );
     end component;
 
@@ -115,11 +135,12 @@ architecture rtl of blinky_top is
     signal debug_reg_a, debug_reg_b, debug_reg_c : std_logic_vector(7 downto 0);
     signal debug_reg_d, debug_reg_e, debug_reg_h, debug_reg_l : std_logic_vector(7 downto 0);
     signal debug_cycle  : std_logic_vector(1 downto 0);
-    signal debug_pc     : std_logic_vector(13 downto 0);
+    signal debug_pc_sig : std_logic_vector(13 downto 0);
     signal debug_ir     : std_logic_vector(7 downto 0);
     signal debug_needs_address : std_logic;
     signal debug_flag_carry, debug_flag_zero, debug_flag_sign, debug_flag_parity : std_logic;
     signal ram_byte_0   : std_logic_vector(7 downto 0);
+    signal state_half_sig : std_logic;
 
     -- Slow counter for visible LED blinking (debug) - runs on phi1
     -- Divides ~455kHz phi1 by 2^18 = ~1.7Hz for human-visible blinking
@@ -234,7 +255,7 @@ begin
             debug_reg_h         => debug_reg_h,
             debug_reg_l         => debug_reg_l,
             debug_cycle         => debug_cycle,
-            debug_pc            => debug_pc,
+            debug_pc            => debug_pc_sig,
             debug_ir            => debug_ir,
             debug_needs_address => debug_needs_address,
             debug_int_pending   => int_pending_sig,
@@ -244,7 +265,8 @@ begin
             debug_flag_parity   => debug_flag_parity,
             debug_io_port_8     => io_port_8,
             debug_io_port_9     => io_port_9,
-            debug_io_port_10    => io_port_10
+            debug_io_port_10    => io_port_10,
+            debug_state_half    => state_half_sig
         );
 
     --------------------------------------------------------------------------------
@@ -319,5 +341,35 @@ begin
 
     -- LED[7] (D29): S1 status bit (shows CPU state)
     led(7) <= not s1_sig;
+
+    -- M20: Interrupt pending
+    led_M20 <= not int_pending_sig;
+
+    -- L18: Always-on reference (tied to NOT reset = on when running)
+    led_L18 <= reset_int;  -- Off when running (active-low LED, reset='0' during run)
+
+    --------------------------------------------------------------------------------
+    -- CPU Debug Outputs (directly connected)
+    --------------------------------------------------------------------------------
+    cpu_d       <= data_sig;
+    cpu_s0      <= s0_sig;
+    cpu_s1      <= s1_sig;
+    cpu_s2      <= s2_sig;
+    cpu_sync    <= sync_sig;
+    cpu_phi1    <= phi1;
+    cpu_phi2    <= phi2;
+    cpu_ready   <= '1';  -- Always ready
+    cpu_int     <= bootstrap_int;
+
+    --------------------------------------------------------------------------------
+    -- Additional Debug Outputs (for oscilloscope/logic analyzer)
+    --------------------------------------------------------------------------------
+    -- These are the key signals to investigate the T1I->STOPPED mystery
+    dbg_reset_int      <= reset_int;       -- Primary suspect: is reset pulsing?
+    dbg_bootstrap_int  <= bootstrap_int;   -- Bootstrap interrupt signal
+    dbg_bootstrap_done <= bootstrap_done;  -- Has bootstrap completed?
+    dbg_state_half     <= state_half_sig;  -- Which half of 2-cycle state
+    dbg_int_pending    <= int_pending_sig; -- CPU interrupt pending signal
+    dbg_pc             <= debug_pc_sig(7 downto 0);  -- PC low byte for address verification
 
 end architecture rtl;
