@@ -29,6 +29,7 @@ sim/output.txt
 *.bit
 *.config
 *.v
+!src/synth/**/*.v
 
 # JSON synthesis files (but keep isa.json)
 *.json
