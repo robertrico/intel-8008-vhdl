@@ -136,6 +136,8 @@ architecture structural of b8008 is
 
     component machine_cycle_control is
         port (
+            phi1                  : in std_logic;
+            reset                 : in std_logic;
             state_t1              : in std_logic;
             state_t2              : in std_logic;
             state_t3              : in std_logic;
@@ -153,7 +155,8 @@ architecture structural of b8008 is
             advance_state         : out std_logic;
             instr_is_hlt_flag     : out std_logic;
             cycle_type            : out std_logic_vector(1 downto 0);
-            current_cycle         : out integer range 0 to 3
+            current_cycle         : out integer range 0 to 3;
+            next_cycle            : out integer range 0 to 3
         );
     end component;
 
@@ -204,6 +207,7 @@ architecture structural of b8008 is
             status_s2             : in std_logic;
             cycle_type            : in std_logic_vector(1 downto 0);
             current_cycle         : in integer range 0 to 3;
+            next_cycle            : in integer range 0 to 3;
             advance_state         : in std_logic;
             instr_is_hlt_flag     : in std_logic;
             instr_needs_immediate : in std_logic;
@@ -275,6 +279,8 @@ architecture structural of b8008 is
 
     component program_counter is
         port (
+            phi1      : in  std_logic;
+            reset     : in  std_logic;
             control   : in  pc_control_t;
             data_in   : in  address_t;
             pc_out    : out address_t;
@@ -287,6 +293,7 @@ architecture structural of b8008 is
             state_t1              : in std_logic;
             state_t2              : in std_logic;
             current_cycle         : in integer range 0 to 3;
+            next_cycle            : in integer range 0 to 3;
             instr_is_mem_indirect : in std_logic;
             instr_needs_address   : in std_logic;
             ahl_select            : out std_logic_vector(2 downto 0);
@@ -548,6 +555,7 @@ architecture structural of b8008 is
     -- Machine cycle control signals
     -- Note: cycle_type is now an output port, not an internal signal
     signal current_cycle    : integer range 0 to 3;
+    signal next_cycle       : integer range 0 to 3;  -- Predicted next cycle (valid at T1 start)
     signal advance_state    : std_logic;
     signal instr_is_hlt_flag : std_logic;  -- Latched HLT flag from machine_cycle_control
 
@@ -737,8 +745,9 @@ begin
     -- During I/O cycle 2, io_buffer drives data_bus with A register (T1) or Reg.b (T2)
     -- - Per isa.json: INP/OUT cycle 2, T1: "REG.A TO OUT", T2: "REG.b TO OUT"
     -- Otherwise during T1/T2, output selected_address (PC or Stack)
+    -- NOTE: Use next_cycle for T1 check because current_cycle hasn't updated yet at T1 start
     data_bus <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (ahl_active = '1') and
-                                                                      not (instr_is_io = '1' and current_cycle = 1)) else
+                                                                      not (instr_is_io = '1' and next_cycle = 1)) else
                 (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (ahl_active = '1') and
                                                                                       not (instr_is_io = '1' and current_cycle = 1)) else
                 (others => 'Z');
@@ -841,6 +850,8 @@ begin
 
     u_machine_cycle : machine_cycle_control
         port map (
+            phi1                  => phi1,
+            reset                 => reset,
             state_t1              => state_t1,
             state_t2              => state_t2,
             state_t3              => state_t3,
@@ -858,7 +869,8 @@ begin
             advance_state         => advance_state,
             instr_is_hlt_flag     => instr_is_hlt_flag,
             cycle_type            => cycle_type,
-            current_cycle         => current_cycle
+            current_cycle         => current_cycle,
+            next_cycle            => next_cycle
         );
 
     u_instr_decoder : instruction_decoder
@@ -907,6 +919,7 @@ begin
             status_s2             => status_s2,
             cycle_type            => cycle_type,
             current_cycle         => current_cycle,
+            next_cycle            => next_cycle,
             advance_state         => advance_state,
             instr_is_hlt_flag     => instr_is_hlt_flag,
             instr_needs_immediate => instr_needs_immediate,
@@ -966,6 +979,8 @@ begin
 
     u_program_counter : program_counter
         port map (
+            phi1      => phi1,
+            reset     => reset,
             control   => pc_control,
             data_in   => pc_data_in,
             pc_out    => pc_addr,
@@ -977,6 +992,7 @@ begin
             state_t1              => state_t1,
             state_t2              => state_t2,
             current_cycle         => current_cycle,
+            next_cycle            => next_cycle,
             instr_is_mem_indirect => instr_is_mem_indirect,
             instr_needs_address   => instr_needs_address,
             ahl_select            => ahl_scratchpad_addr,

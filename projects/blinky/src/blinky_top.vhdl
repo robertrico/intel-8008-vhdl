@@ -29,6 +29,11 @@ entity blinky_top is
         -- Button input
         speed_btn   : in  std_logic;
 
+        -- LED outputs (directly active - directly active, accent active low)
+        led         : out std_logic_vector(7 downto 0);
+        led_M20     : out std_logic;
+        led_L18     : out std_logic;
+
         -- CPU debug outputs (directly from b8008 for logic analyzer)
         cpu_d       : out std_logic_vector(7 downto 0);  -- Data bus
         cpu_s0      : out std_logic;

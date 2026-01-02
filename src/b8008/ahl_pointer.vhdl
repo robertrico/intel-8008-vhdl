@@ -32,6 +32,7 @@ entity ahl_pointer is
 
         -- Cycle tracking (0=cycle1, 1=cycle2, 2=cycle3)
         current_cycle : in integer range 0 to 3;  -- Current machine cycle
+        next_cycle    : in integer range 0 to 3;  -- Predicted next cycle (valid at T1 start)
 
         -- Instruction type
         instr_is_mem_indirect : in std_logic;  -- '1' when SSS or DDD = "111" (M)
@@ -57,12 +58,14 @@ architecture rtl of ahl_pointer is
 begin
 
     -- Combinational logic for scratchpad address selection
-    process(state_t1, state_t2, current_cycle, instr_is_mem_indirect, instr_needs_address)
+    -- NOTE: Use next_cycle during T1 because current_cycle hasn't updated yet at T1 start
+    process(state_t1, state_t2, current_cycle, next_cycle, instr_is_mem_indirect, instr_needs_address)
         -- Which cycle uses H:L for memory address?
         -- - LrM/LMr (2-cycle): cycle 2 uses H:L (instr_needs_address = '0')
         -- - LMI (3-cycle): cycle 3 uses H:L (instr_needs_address = '1')
         -- Cycle encoding: 0=cycle1, 1=cycle2, 2=cycle3
         variable hl_cycle : integer range 0 to 3;
+        variable effective_cycle : integer range 0 to 3;
     begin
         -- Defaults: inactive, don't override SSS/DDD
         ahl_select <= (others => '0');
@@ -75,9 +78,16 @@ begin
             hl_cycle := 1;  -- LrM/LMr: H:L at cycle 2 (encoded as 1)
         end if;
 
+        -- Use next_cycle during T1 (current_cycle hasn't updated yet), current_cycle otherwise
+        if state_t1 = '1' then
+            effective_cycle := next_cycle;
+        else
+            effective_cycle := current_cycle;
+        end if;
+
         -- During the appropriate cycle of memory indirect operations:
         -- Override scratchpad selection to read H and L for address output
-        if current_cycle = hl_cycle and instr_is_mem_indirect = '1' then
+        if effective_cycle = hl_cycle and instr_is_mem_indirect = '1' then
             if state_t1 = '1' then
                 -- T1: Select L register to output lower address byte
                 ahl_select <= ADDR_L;

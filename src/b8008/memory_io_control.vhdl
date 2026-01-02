@@ -59,6 +59,7 @@ entity memory_io_control is
         -- From Machine Cycle Control
         cycle_type        : in std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
         current_cycle     : in integer range 0 to 3;  -- 0=cycle1, 1=cycle2, 2=cycle3
+        next_cycle        : in integer range 0 to 3;  -- Predicted next cycle (valid at T1 start)
         advance_state     : in std_logic;
         instr_is_hlt_flag : in std_logic;
 
@@ -363,17 +364,22 @@ begin
                 pc_increment_upper <= '1';
             end if;
 
-            -- CALL: Increment PC one more time at cycle 3 T3/T4 (before stack push at T4 second half)
+            -- CALL: Increment PC one more time at cycle 3 T3 first half (before stack push at T4 second half)
             -- At cycle 3 T1, PC points to address high byte (e.g. 0x0104 for CALL at 0x0102)
             -- We need PC to point to the NEXT instruction (0x0105) before pushing to stack
             -- IMPORTANT: Also handle carry from lower byte (e.g., 0x00FF -> 0x0100)
-            -- Use two-phase increment like T1/T2: lower at T3, upper at T4 first half if carry
-            if state_t3 = '1' and current_cycle = 2 and instr_is_call = '1' then
+            -- Use two-phase increment like T1/T2: lower at T3 first half, upper at T4 first half if carry
+            -- NOTE: state_half = '0' ensures we only increment ONCE during T3 (first half only)
+            -- NOTE: Only increment if unconditional OR condition is met
+            if state_t3 = '1' and state_half = '0' and current_cycle = 2 and instr_is_call = '1' and
+               (eval_condition = '0' or condition_met = '1') then
                 pc_increment_lower <= '1';
-                report "MEM_IO: Incrementing PC lower at T3 cycle 3 for CALL (to compute return address)";
+                report "MEM_IO: Incrementing PC lower at T3 first half cycle 3 for CALL (to compute return address)";
             end if;
             -- CALL: Increment upper byte at T4 first half if carry occurred from T3 lower increment
-            if state_t4 = '1' and state_half = '0' and current_cycle = 2 and instr_is_call = '1' and pc_carry_in = '1' then
+            -- NOTE: Only increment if unconditional OR condition is met
+            if state_t4 = '1' and state_half = '0' and current_cycle = 2 and instr_is_call = '1' and pc_carry_in = '1' and
+               (eval_condition = '0' or condition_met = '1') then
                 pc_increment_upper <= '1';
                 report "MEM_IO: Incrementing PC upper at T4 cycle 3 for CALL (carry from lower)";
             end if;
@@ -429,9 +435,10 @@ begin
             -- output H/L registers to data bus for external address latch
             -- - LrM/LMr: cycle 2 uses H:L address
             -- - LMI (MVI M): cycle 3 uses H:L address (cycle 2 uses PC for immediate)
+            -- NOTE: Use next_cycle because current_cycle hasn't updated yet at T1 start
             if instr_is_mem_indirect = '1' and
-               ((current_cycle = 1 and instr_needs_address = '0') or   -- LrM/LMr: cycle 2
-                (current_cycle = 2 and instr_needs_address = '1')) then  -- LMI: cycle 3
+               ((next_cycle = 1 and instr_needs_address = '0') or   -- LrM/LMr: cycle 2
+                (next_cycle = 2 and instr_needs_address = '1')) then  -- LMI: cycle 3
                 -- Output L register during T1 (ahl_pointer selects L via final_scratchpad_addr)
                 scratchpad_read     <= '1';
                 regfile_to_bus      <= '1';  -- Register file drives internal bus
@@ -441,7 +448,8 @@ begin
 
             -- Special case: I/O cycle 2 T1 - output REG.A (accumulator) to data bus
             -- Per isa.json: INP/OUT cycle 2, T1: "REG.A TO OUT"
-            if instr_is_io = '1' and current_cycle = 1 then
+            -- NOTE: Use next_cycle because current_cycle hasn't updated yet at T1 start
+            if instr_is_io = '1' and next_cycle = 1 then
                 scratchpad_select   <= "000";  -- A register (accumulator)
                 scratchpad_read     <= '1';
                 regfile_to_bus      <= '1';  -- Register file drives internal bus
@@ -637,7 +645,8 @@ begin
                 -- NOTE: We push at second half because at first half we may need to
                 -- increment the PC upper byte if there was a carry from T3 lower increment.
                 -- This ensures the correct return address is pushed to the stack.
-                if instr_is_call = '1' then
+                -- NOTE: Only push if unconditional OR condition is met
+                if instr_is_call = '1' and (eval_condition = '0' or condition_met = '1') then
                     -- Push during second half of T4 (after PC upper increment if any)
                     if state_half = '1' then
                         stack_push         <= '1';
@@ -711,6 +720,7 @@ begin
             if instr_is_ret = '1' and (eval_condition = '0' or condition_met = '1') then
                 pc_load_from_stack <= '1';  -- Load PC from stack
                 select_stack       <= '1';  -- Use stack for address
+                stack_read         <= '1';  -- Keep stack output valid for PC load
             end if;
 
             -- RST: Load PC from RST vector during T5 (stack push happened in T4)

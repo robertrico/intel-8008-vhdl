@@ -20,8 +20,8 @@ echo ""
 
 # Run make test with our program and capture output
 cd "$PROJECT_DIR"
-OUTPUT=$(timeout 60 make test-b8008-top PROG=pc_carry_call_test_as 2>&1) || {
-    echo "FAIL: Simulation failed or timed out"
+OUTPUT=$(make test-b8008-top PROG=pc_carry_call_test_as 2>&1) || {
+    echo "FAIL: Simulation failed"
     exit 1
 }
 

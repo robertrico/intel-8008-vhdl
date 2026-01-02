@@ -12,8 +12,8 @@ NEXTPNR  = $(OSS_CAD_SUITE)/nextpnr-ecp5
 ECPPACK  = $(OSS_CAD_SUITE)/ecppack
 LOADER   = $(OSS_CAD_SUITE)/openFPGALoader
 GHDL_FLAGS = --std=08 --work=work
-ASL = ~/Development/asl-current/asl
-P2HEX = ~/Development/asl-current/p2hex
+ASL = ~/Development/as_assembler/asl
+P2HEX = ~/Development/as_assembler/p2hex
 HEX2MEM = ./hex_to_mem.py
 
 # FPGA settings (ECP5-5G Versa LFE5UM5G-45F)
@@ -498,7 +498,7 @@ assemble:
 #        make assemble-sample PROG=stars
 #
 # These programs use bitbanged serial I/O and may require ASL include files
-ASL_INCLUDE = ~/Development/asl-current/include
+ASL_INCLUDE = ~/Development/as_assembler/include
 SAMPLE_DIR = $(PROG_DIR)/samples
 
 assemble-sample:
