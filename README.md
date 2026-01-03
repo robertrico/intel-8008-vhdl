@@ -2,8 +2,8 @@
 
 A modular VHDL implementation of the Intel 8008 microprocessor (1972) following the original block diagram architecture.
 
-[![Status](https://img.shields.io/badge/status-verification-yellow)]()
-[![Tests](https://img.shields.io/badge/tests-11%2F11%20passing-green)]()
+[![Status](https://img.shields.io/badge/status-hardware%20validated-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-24%2F24%20passing-green)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE.txt)
 
 ## Quick Start
@@ -21,20 +21,19 @@ make show-programs
 
 ## Project Status
 
-**All 28 instruction categories implemented. 11/11 automated tests passing.**
-
-See [TODO.md](TODO.md) for verification roadmap before hardware deployment.
+**Hardware validated on ECP5 FPGA. All 28 instruction categories implemented. 24/24 automated tests passing.**
 
 | Component | Status |
 |-----------|--------|
-| Instruction Decoder | Complete |
-| ALU (8 operations + 4 rotates) | Complete |
-| Register File (A,B,C,D,E,H,L) | Complete |
-| Program Counter | Complete |
-| 8-Level Stack | Complete |
-| Condition Flags (C,Z,S,P) | Complete |
-| I/O (INP/OUT) | Complete |
-| Interrupts | Implemented, untested |
+| Instruction Decoder | ✅ Complete |
+| ALU (8 operations + 4 rotates) | ✅ Hardware validated |
+| Register File (A,B,C,D,E,H,L) | ✅ Complete |
+| Program Counter | ✅ Complete |
+| 8-Level Stack | ✅ Complete |
+| Condition Flags (C,Z,S,P) | ✅ Complete |
+| I/O (INP/OUT) | ✅ Hardware validated |
+| RAM (1KB) | ✅ Hardware validated |
+| Interrupts (bootstrap) | ✅ Hardware validated |
 
 ## Architecture
 
@@ -73,21 +72,21 @@ b8008 follows the Intel 8008 block diagram with explicit, simple modules:
 
 ```
 intel-8008-vhdl/
-├── src/b8008/              # Core implementation (25 VHDL files)
+├── src/b8008/              # Core implementation (26 VHDL files)
 │   ├── b8008.vhdl          # Top-level integration
 │   ├── instruction_decoder.vhdl
 │   ├── alu.vhdl
 │   ├── register_file.vhdl
 │   ├── program_counter.vhdl
 │   └── ...
+├── projects/               # FPGA projects (hardware validated)
+│   ├── blinky/             # LED blink test
+│   ├── logic_blinky/       # ALU logical operations test
+│   └── example/            # Template for new projects
 ├── sim/b8008/              # Testbenches
 ├── test_programs/          # Assembly test programs
 │   └── verification_scripts/  # Automated test runners
 ├── docs/                   # Documentation
-│   ├── instruction_coverage.md
-│   ├── INTERRUPTS.md
-│   └── LEGACY.md
-├── TODO.md                 # Verification roadmap
 └── CLAUDE.md               # AI assistant instructions
 ```
 
@@ -128,6 +127,51 @@ make clean
 ./test_programs/verification_scripts/check_rotate_test.sh
 ./test_programs/verification_scripts/check_rst_test.sh
 ```
+
+## FPGA Deployment
+
+### Hardware Validated Projects
+
+| Project | Description | Status |
+|---------|-------------|--------|
+| `blinky` | LED blink test | ✅ Working |
+| `logic_blinky` | ALU logical ops (AND, OR, XOR) | ✅ Working |
+| `example` | Template for new projects | ✅ Ready |
+
+### Running on Hardware
+
+```bash
+# Build and program an existing project
+cd projects/blinky
+make all          # Assemble + synthesize + place & route + bitstream
+make prog         # Program FPGA via JTAG
+
+# Quick reprogram (no rebuild)
+make prog-quick
+```
+
+### Creating New Projects
+
+```bash
+# Copy the example template
+cp -r projects/example projects/my_project
+cd projects/my_project
+
+# Edit these files:
+# 1. Makefile - change ASM := my_project.asm
+# 2. src/example_top.vhdl - change ROM_FILE and entity name
+# 3. Write your program in my_project.asm
+
+make clean && make all && make prog
+```
+
+See `projects/example/README.md` for detailed instructions.
+
+### Target Hardware
+
+- **Board**: Lattice ECP5-5G Versa Development Kit
+- **Device**: LFE5UM5G-45F (ECP5 85k)
+- **Clock**: 100 MHz LVDS → 455 kHz CPU clock (via phase_clocks)
 
 ## Writing Test Programs
 
