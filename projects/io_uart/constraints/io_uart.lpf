@@ -1,0 +1,215 @@
+# ECP5-5G Versa Development Kit Constraints
+# Board: LFE5UM5G-45F-VERSA-EVN
+# Device: LFE5UM5G-45F-8BG381C
+# Project: b8008 IO UART Demo
+
+# ====================================================================================
+# Clock Input
+# ====================================================================================
+
+# 100 MHz LVDS Oscillator (X1)
+LOCATE COMP "clk" SITE "P3";
+IOBUF PORT "clk" IO_TYPE=LVDS;
+
+# ====================================================================================
+# UART Interface
+# ====================================================================================
+# Connect FTDI USB-to-serial adapter:
+#   FPGA TX (uart_tx) -> FTDI RX
+#   FPGA RX (uart_rx) -> FTDI TX
+#   GND -> GND
+# Settings: 115200 baud, 8N1
+
+LOCATE COMP "uart_tx" SITE "B19";
+IOBUF PORT "uart_tx" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "uart_rx" SITE "B12";
+IOBUF PORT "uart_rx" IO_TYPE=LVCMOS33 PULLMODE=UP;
+
+# ====================================================================================
+# General Purpose LEDs (active low: '0' = ON)
+# ====================================================================================
+
+# LED0 - D25 (Yellow)
+LOCATE COMP "led[0]" SITE "E16";
+IOBUF PORT "led[0]" IO_TYPE=LVCMOS25;
+
+# LED1 - D24 (Yellow)
+LOCATE COMP "led[1]" SITE "D17";
+IOBUF PORT "led[1]" IO_TYPE=LVCMOS25;
+
+# LED2 - D22 (Green)
+LOCATE COMP "led[2]" SITE "D18";
+IOBUF PORT "led[2]" IO_TYPE=LVCMOS25;
+
+# LED3 - D21 (Green)
+LOCATE COMP "led[3]" SITE "E18";
+IOBUF PORT "led[3]" IO_TYPE=LVCMOS25;
+
+# LED4 - D26 (Red)
+LOCATE COMP "led[4]" SITE "F17";
+IOBUF PORT "led[4]" IO_TYPE=LVCMOS25;
+
+# LED5 - D27 (Red)
+LOCATE COMP "led[5]" SITE "F18";
+IOBUF PORT "led[5]" IO_TYPE=LVCMOS25;
+
+# LED6 - D28 (Red)
+LOCATE COMP "led[6]" SITE "E17";
+IOBUF PORT "led[6]" IO_TYPE=LVCMOS25;
+
+# LED7 - D29 (Red)
+LOCATE COMP "led[7]" SITE "F16";
+IOBUF PORT "led[7]" IO_TYPE=LVCMOS25;
+
+# ====================================================================================
+# DIP Switches (SW3)
+# ====================================================================================
+
+# SW3-1 (Bank 7 - 1.5V) - Reset control
+LOCATE COMP "sw[0]" SITE "H2";
+IOBUF PORT "sw[0]" IO_TYPE=LVCMOS15;
+
+# SW3-2 (Bank 7 - 1.5V)
+LOCATE COMP "sw[1]" SITE "K3";
+IOBUF PORT "sw[1]" IO_TYPE=LVCMOS15;
+
+# SW3-3 (Bank 7 - 1.5V)
+LOCATE COMP "sw[2]" SITE "G3";
+IOBUF PORT "sw[2]" IO_TYPE=LVCMOS15;
+
+# SW3-4 (Bank 7 - 1.5V)
+LOCATE COMP "sw[3]" SITE "F2";
+IOBUF PORT "sw[3]" IO_TYPE=LVCMOS15;
+
+# SW3-5 (Bank 2 - 2.5V)
+LOCATE COMP "sw[4]" SITE "J18";
+IOBUF PORT "sw[4]" IO_TYPE=LVCMOS25;
+
+# SW3-6 (Bank 2 - 2.5V)
+LOCATE COMP "sw[5]" SITE "K18";
+IOBUF PORT "sw[5]" IO_TYPE=LVCMOS25;
+
+# SW3-7 (Bank 2 - 2.5V)
+LOCATE COMP "sw[6]" SITE "K19";
+IOBUF PORT "sw[6]" IO_TYPE=LVCMOS25;
+
+# SW3-8 (Bank 2 - 2.5V)
+LOCATE COMP "sw[7]" SITE "K20";
+IOBUF PORT "sw[7]" IO_TYPE=LVCMOS25;
+
+# ====================================================================================
+# Speed Button
+# ====================================================================================
+LOCATE COMP "speed_btn" SITE "A10";
+IOBUF PORT "speed_btn" IO_TYPE=LVCMOS33 PULLMODE=UP;
+
+# ====================================================================================
+# Additional LEDs
+# ====================================================================================
+
+# LED M20 - UART TX busy indicator
+LOCATE COMP "led_M20" SITE "M20";
+IOBUF PORT "led_M20" IO_TYPE=LVCMOS25;
+
+# LED L18 - Reset indicator
+LOCATE COMP "led_L18" SITE "L18";
+IOBUF PORT "led_L18" IO_TYPE=LVCMOS25;
+
+# ====================================================================================
+# CPU Data Bus (directly wired to logic analyzer)
+# ====================================================================================
+
+LOCATE COMP "cpu_d[0]" SITE "D6";
+IOBUF PORT "cpu_d[0]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[1]" SITE "E7";
+IOBUF PORT "cpu_d[1]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[2]" SITE "D7";
+IOBUF PORT "cpu_d[2]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[3]" SITE "B6";
+IOBUF PORT "cpu_d[3]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[4]" SITE "E9";
+IOBUF PORT "cpu_d[4]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[5]" SITE "D9";
+IOBUF PORT "cpu_d[5]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[6]" SITE "B8";
+IOBUF PORT "cpu_d[6]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[7]" SITE "C8";
+IOBUF PORT "cpu_d[7]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# ====================================================================================
+# CPU State Outputs (S0, S1, S2)
+# ====================================================================================
+
+LOCATE COMP "cpu_s0" SITE "D14";
+IOBUF PORT "cpu_s0" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_s1" SITE "E14";
+IOBUF PORT "cpu_s1" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_s2" SITE "D11";
+IOBUF PORT "cpu_s2" IO_TYPE=LVCMOS33;
+
+# ====================================================================================
+# CPU SYNC Output
+# ====================================================================================
+
+LOCATE COMP "cpu_sync" SITE "C10";
+IOBUF PORT "cpu_sync" IO_TYPE=LVCMOS33;
+
+# ====================================================================================
+# Phase Clocks
+# ====================================================================================
+
+LOCATE COMP "cpu_phi1" SITE "A9";
+IOBUF PORT "cpu_phi1" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_phi2" SITE "B10";
+IOBUF PORT "cpu_phi2" IO_TYPE=LVCMOS33;
+
+# ====================================================================================
+# CPU Control Signals
+# ====================================================================================
+
+LOCATE COMP "cpu_ready" SITE "D12";
+IOBUF PORT "cpu_ready" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_int" SITE "E12";
+IOBUF PORT "cpu_int" IO_TYPE=LVCMOS33;
+
+# ====================================================================================
+# Internal Debug Signals
+# ====================================================================================
+
+# Internal reset signal
+LOCATE COMP "dbg_reset_int" SITE "E8";
+IOBUF PORT "dbg_reset_int" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# Bootstrap interrupt active
+LOCATE COMP "dbg_bootstrap_int" SITE "D8";
+IOBUF PORT "dbg_bootstrap_int" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# Bootstrap completed
+LOCATE COMP "dbg_bootstrap_done" SITE "C7";
+IOBUF PORT "dbg_bootstrap_done" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# State timing (which half of 2-cycle state)
+LOCATE COMP "dbg_state_half" SITE "C6";
+IOBUF PORT "dbg_state_half" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# CPU interrupt pending
+LOCATE COMP "dbg_int_pending" SITE "E6";
+IOBUF PORT "dbg_int_pending" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# ====================================================================================
+# Configuration
+# ====================================================================================
+
+SYSCONFIG CONFIG_IOVOLTAGE=3.3 COMPRESS_CONFIG=ON MCCLK_FREQ=62;

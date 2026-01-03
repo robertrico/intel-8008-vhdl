@@ -13,7 +13,7 @@
 #   TEST         - Specify which testbench to run (e.g., make sim TEST=mytest)
 #   SIM_TIME     - Simulation duration (default: 100ms)
 #
-# Provides targets: help, assemble, sim, synth, pnr, bit, prog, prog-flash, clean
+# Provides targets: help, assemble, build, synth, pnr, bit, prog, prog-flash, clean
 # ============================================================================
 
 # Tools (inherit from environment or use defaults)
@@ -93,6 +93,9 @@ else
     ACTIVE_TB_SRC := $(TB_SRCS)
 endif
 
+# Memory file (ROM contents - baked into synthesis)
+MEM_FILE := $(basename $(ASM)).mem
+
 # Output files
 VERILOG := $(BUILD_DIR)/$(PROJECT).v
 JSON := $(BUILD_DIR)/$(PROJECT).json
@@ -111,7 +114,7 @@ TIMING_REPORT := $(REPORTS_DIR)/timing.txt
 UTIL_REPORT := $(REPORTS_DIR)/utilization.txt
 SIM_REPORT := $(REPORTS_DIR)/simulation.txt
 
-.PHONY: help all assemble sim synth pnr bit prog prog-flash clean clean-all reports list-tests
+.PHONY: help all build assemble sim synth pnr bit prog prog-flash clean clean-all reports list-tests
 
 help:
 	@echo "============================================"
@@ -119,14 +122,14 @@ help:
 	@echo "============================================"
 	@echo ""
 	@echo "Build Targets:"
-	@echo "  make all        - Full build (assemble + synth + pnr + bit)"
+	@echo "  make build      - Full build (assemble + synth + pnr + bit)"
 	@echo "  make assemble   - Assemble $(ASM) to .mem file"
-	@echo "  make synth      - Synthesize with GHDL+Yosys"
+	@echo "  make synth      - GHDL to Verilog, then Yosys to JSON"
 	@echo "  make pnr        - Place and route with nextpnr"
-	@echo "  make bit        - Generate bitstream"
+	@echo "  make bit        - Generate bitstream from config"
 	@echo ""
 	@echo "Programming:"
-	@echo "  make prog       - Program FPGA via JTAG (volatile)"
+	@echo "  make prog       - Program FPGA (just programs, no build)"
 	@echo "  make prog-flash - Program SPI flash (persistent)"
 	@echo ""
 	@echo "Simulation:"
@@ -141,48 +144,125 @@ help:
 	@echo "  make clean      - Remove build artifacts"
 	@echo "  make clean-all  - Remove all generated files"
 	@echo ""
-	@echo "Options:"
-	@echo "  SIM_TIME=<time> - Simulation duration (default: 100ms)"
-	@echo "  TEST=<name>     - Testbench to run"
-	@echo ""
 
-all: assemble synth pnr bit
+# 'all' and 'build' are synonyms - full build from scratch
+all: build
+
+build: assemble $(BIT)
 	@echo "=== Build complete: $(BIT) ==="
 
-$(BUILD_DIR):
+# Directory creation - these are phony to always check/create
+.PHONY: create-build-dir create-reports-dir
+create-build-dir:
 	@mkdir -p $(BUILD_DIR)
 
-.PHONY: create-reports-dir
 create-reports-dir:
 	@mkdir -p $(REPORTS_DIR)
 
 # ============================================================================
-# ASSEMBLE
+# ASSEMBLE - Convert .asm to .mem
 # ============================================================================
-assemble:
 ifdef ASM
+$(MEM_FILE): $(ASM)
 	@echo "=== Assembling $(ASM) ==="
 	$(ASL) -cpu 8008new -L $(ASM)
 	$(P2HEX) $(basename $(ASM)).p $(basename $(ASM)).hex -r 0-4095
 	python3 $(HEX2MEM) $(basename $(ASM)).hex $(basename $(ASM)).mem
-	@echo "Output: $(basename $(ASM)).mem"
+	@echo "Output: $(MEM_FILE)"
+
+assemble: $(MEM_FILE)
 else
+assemble:
 	@echo "No ASM file specified, skipping assembly"
 endif
+
+# ============================================================================
+# SYNTHESIZE - GHDL to Verilog, Yosys to JSON
+# ============================================================================
+# Verilog depends on VHDL sources AND the .mem file (ROM contents baked in)
+ifdef ASM
+$(VERILOG): $(ALL_SRCS) $(MEM_FILE) | create-build-dir
+else
+$(VERILOG): $(ALL_SRCS) | create-build-dir
+endif
+	@echo "=== GHDL: Synthesizing $(TOP) to Verilog ==="
+	$(GHDL) -a $(GHDL_FLAGS) $(ALL_SRCS)
+	$(GHDL) --synth $(GHDL_FLAGS) --out=verilog $(TOP) > $@
+	@echo "Verilog: $@ ($$(wc -l < $@) lines)"
+
+$(JSON): $(VERILOG) | create-build-dir create-reports-dir
+	@echo "=== Yosys: Synthesizing for ECP5 ==="
+	$(YOSYS) -p "read_verilog $(ROOT_DIR)/src/synth/ghdl_gates.v $<; hierarchy -check -top $(TOP); tribuf -logic; proc; opt -nodffe; synth_ecp5 -top $(TOP) -json $@" 2>&1 | tee $(SYNTH_REPORT)
+	@echo ""
+	@grep -E "Number of cells|LUT|DFF|CARRY" $(SYNTH_REPORT) || true
+
+synth: $(JSON)
+
+# ============================================================================
+# PLACE AND ROUTE
+# ============================================================================
+$(CONFIG): $(JSON) | create-reports-dir
+	@echo "=== Place & Route with nextpnr-ecp5 ==="
+	$(NEXTPNR) --$(DEVICE) --package $(PACKAGE) --speed $(SPEED) \
+		--json $(JSON) --lpf $(LPF) --textcfg $@ \
+		--timing-allow-fail 2>&1 | tee $(PNR_REPORT)
+	@grep -A 50 "Critical path report" $(PNR_REPORT) > $(TIMING_REPORT) 2>/dev/null || true
+	@grep -E "Max frequency|Max delay|Slack" $(PNR_REPORT) >> $(TIMING_REPORT) 2>/dev/null || true
+	@grep -B 2 -A 30 "Device utilisation" $(PNR_REPORT) > $(UTIL_REPORT) 2>/dev/null || true
+
+pnr: $(CONFIG)
+
+# ============================================================================
+# BITSTREAM
+# ============================================================================
+$(BIT): $(CONFIG)
+	@echo "=== Generating Bitstream ==="
+	$(ECPPACK) --input $< --bit $@ --svf $(SVF)
+	@echo "Bitstream ready: $@"
+
+bit: $(BIT)
+
+# ============================================================================
+# PROGRAM - Just programs, doesn't build
+# ============================================================================
+prog:
+	@if [ ! -f "$(BIT)" ]; then \
+		echo "ERROR: No bitstream found at $(BIT)"; \
+		echo "Run 'make build' first."; \
+		exit 1; \
+	fi
+ifdef ASM
+	@if [ ! -f "$(MEM_FILE)" ]; then \
+		echo "WARNING: No .mem file found. Run 'make assemble' first."; \
+	elif [ "$(MEM_FILE)" -nt "$(BIT)" ]; then \
+		echo "WARNING: $(MEM_FILE) is newer than $(BIT)"; \
+		echo "         ROM contents may be stale. Consider 'make build'."; \
+	fi
+endif
+	@echo "=== Programming via JTAG (SRAM) ==="
+	$(LOADER) -c ft2232 -m $(BIT)
+
+prog-flash:
+	@if [ ! -f "$(BIT)" ]; then \
+		echo "ERROR: No bitstream found at $(BIT)"; \
+		echo "Run 'make build' first."; \
+		exit 1; \
+	fi
+	@echo "=== Programming SPI Flash ==="
+	$(LOADER) -b versa_ecp5 $(BIT)
 
 # ============================================================================
 # SIMULATE
 # ============================================================================
 SIM_TIME ?= 100ms
 
-sim: assemble create-reports-dir | $(BUILD_DIR)
+sim: assemble | create-build-dir create-reports-dir
 	@echo "=== Running simulation: $(ACTIVE_TB) ==="
 	@echo "==========================================" > $(SIM_REPORT)
 	@echo "Simulation Report - $$(date)" >> $(SIM_REPORT)
 	@echo "Testbench: $(ACTIVE_TB)" >> $(SIM_REPORT)
 	@echo "Duration: $(SIM_TIME)" >> $(SIM_REPORT)
 	@echo "==========================================" >> $(SIM_REPORT)
-	@echo "" >> $(SIM_REPORT)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(ALL_SRCS) $(ACTIVE_TB_SRC)
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(ACTIVE_TB)
 	@set -o pipefail; $(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(ACTIVE_TB) \
@@ -192,12 +272,8 @@ sim: assemble create-reports-dir | $(BUILD_DIR)
 		--ieee-asserts=disable-at-0 \
 		2>&1 | tee -a $(SIM_REPORT); \
 	SIM_EXIT=$$?; \
-	echo "" >> $(SIM_REPORT); \
 	if [ $$SIM_EXIT -eq 0 ]; then \
 		echo "SIMULATION PASSED" | tee -a $(SIM_REPORT); \
-		echo "Waveform: $(WAVE_FILE)"; \
-		echo "Report: $(SIM_REPORT)"; \
-		echo "Opening GTKWave..."; \
 		if [ -f "$(GTKW_FILE)" ]; then \
 			nohup $(GTKWAVE) $(GTKW_FILE) > /dev/null 2>&1 & \
 		else \
@@ -205,7 +281,6 @@ sim: assemble create-reports-dir | $(BUILD_DIR)
 		fi; \
 	else \
 		echo "SIMULATION FAILED" | tee -a $(SIM_REPORT); \
-		echo "Opening GTKWave to inspect..."; \
 		if [ -f "$(GTKW_FILE)" ]; then \
 			nohup $(GTKWAVE) $(GTKW_FILE) > /dev/null 2>&1 & \
 		else \
@@ -221,82 +296,11 @@ list-tests:
 	@echo "Usage: make sim TEST=<testbench_name>"
 
 # ============================================================================
-# SYNTHESIZE
-# ============================================================================
-synth: $(JSON)
-
-$(VERILOG): $(ALL_SRCS) | $(BUILD_DIR)
-	@echo "=== Synthesizing $(TOP) with GHDL ==="
-	@# Don't use --workdir for synthesis - it breaks file_open for ROM loading
-	$(GHDL) -a $(GHDL_FLAGS) $(ALL_SRCS)
-	$(GHDL) --synth $(GHDL_FLAGS) --out=verilog $(TOP) > $@
-	@echo "Verilog: $@ ($$(wc -l < $@) lines)"
-
-$(JSON): $(VERILOG) create-reports-dir | $(BUILD_DIR)
-	@echo "=== Running Yosys synthesis for ECP5 ==="
-	@# tribuf -logic converts internal tri-state to mux logic
-	@# hierarchy -keep_portwidths prevents port optimization that breaks connections
-	@# opt -nodffe prevents DFF optimization that can break design
-	$(YOSYS) -p "read_verilog $(ROOT_DIR)/src/synth/ghdl_gates.v $<; hierarchy -check -top $(TOP); tribuf -logic; proc; opt -nodffe; synth_ecp5 -top $(TOP) -json $@" 2>&1 | tee $(SYNTH_REPORT)
-	@echo ""
-	@echo "Synthesis report: $(SYNTH_REPORT)"
-	@grep -E "Number of cells|LUT|DFF|CARRY" $(SYNTH_REPORT) || true
-
-# ============================================================================
-# PLACE AND ROUTE
-# ============================================================================
-pnr: $(CONFIG)
-
-$(CONFIG): $(JSON) create-reports-dir
-	@echo "=== Place & Route with nextpnr-ecp5 ==="
-	$(NEXTPNR) --$(DEVICE) --package $(PACKAGE) --speed $(SPEED) \
-		--json $(JSON) --lpf $(LPF) --textcfg $@ \
-		--timing-allow-fail 2>&1 | tee $(PNR_REPORT)
-	@echo ""
-	@echo "Extracting timing report..."
-	@grep -A 50 "Critical path report" $(PNR_REPORT) > $(TIMING_REPORT) 2>/dev/null || true
-	@grep -E "Max frequency|Max delay|Slack" $(PNR_REPORT) >> $(TIMING_REPORT) 2>/dev/null || true
-	@echo ""
-	@echo "Extracting utilization report..."
-	@grep -B 2 -A 30 "Device utilisation" $(PNR_REPORT) > $(UTIL_REPORT) 2>/dev/null || true
-	@echo "Place & route complete: $@"
-
-# ============================================================================
-# BITSTREAM
-# ============================================================================
-bit: $(BIT)
-
-$(BIT): $(CONFIG)
-	@echo "=== Generating Bitstream ==="
-	$(ECPPACK) --input $< --bit $@ --svf $(SVF)
-	@echo "Bitstream ready: $@"
-
-# ============================================================================
-# PROGRAM
-# ============================================================================
-prog: $(BIT)
-	@echo "=== Programming via JTAG (SRAM) ==="
-	$(LOADER) -c ft2232 -m $(BIT)
-
-# Quick program - just program existing bitstream, no rebuild check
-prog-quick:
-	@if [ ! -f "$(BIT)" ]; then \
-		echo "No bitstream found. Run 'make bit' first."; \
-		exit 1; \
-	fi
-	@echo "=== Quick Programming via JTAG (SRAM) ==="
-	$(LOADER) -c ft2232 -m $(BIT)
-
-prog-flash: $(BIT)
-	@echo "=== Programming SPI Flash ==="
-	$(LOADER) -b versa_ecp5 $(BIT)
-
-# ============================================================================
 # REPORTS
 # ============================================================================
 reports:
 	@if [ ! -d "$(REPORTS_DIR)" ]; then \
-		echo "No reports found. Run 'make all' first."; \
+		echo "No reports found. Run 'make build' first."; \
 		exit 1; \
 	fi
 	@echo "=========================================="
@@ -313,12 +317,6 @@ reports:
 		head -20 $(TIMING_REPORT); \
 		echo ""; \
 	fi
-	@echo "Full reports:"
-	@echo "  Simulation:   $(SIM_REPORT)"
-	@echo "  Synthesis:    $(SYNTH_REPORT)"
-	@echo "  PnR:          $(PNR_REPORT)"
-	@echo "  Timing:       $(TIMING_REPORT)"
-	@echo "  Utilization:  $(UTIL_REPORT)"
 
 # ============================================================================
 # CLEAN
@@ -326,10 +324,15 @@ reports:
 clean:
 	@rm -rf $(BUILD_DIR)
 	@rm -f *.cf *.o work-obj*.cf
+ifdef ASM
 	@rm -f $(basename $(ASM)).p $(basename $(ASM)).hex $(basename $(ASM)).lst 2>/dev/null || true
+endif
 	@echo "Cleaned $(PROJECT)"
 
 clean-all: clean
 	@rm -rf $(REPORTS_DIR)
 	@rm -f ./sim/*.ghw ./sim/*.vcd
+ifdef ASM
+	@rm -f $(MEM_FILE) 2>/dev/null || true
+endif
 	@echo "Cleaned all generated files"
