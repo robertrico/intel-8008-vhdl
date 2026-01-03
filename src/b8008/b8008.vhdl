@@ -40,8 +40,11 @@ entity b8008 is
 
         -- ====================================================================
         -- DATA BUS (Address and data are time-multiplexed on this bus)
+        -- Separate input/output for synthesis compatibility (GHDL doesn't synth inOut across hierarchy)
         -- ====================================================================
-        data_bus    : inout std_logic_vector(7 downto 0); -- 8-bit bidirectional data
+        data_bus_in  : in  std_logic_vector(7 downto 0);  -- Data from external memory/IO
+        data_bus_out : out std_logic_vector(7 downto 0);  -- Data/address to external memory/IO
+        data_bus_oe  : out std_logic;                     -- Output enable (active high = CPU drives bus)
 
         -- ====================================================================
         -- TIMING AND STATUS
@@ -519,10 +522,12 @@ architecture structural of b8008 is
 
     component io_buffer is
         port (
-            external_data : inout std_logic_vector(7 downto 0);
-            internal_bus  : inout std_logic_vector(7 downto 0);
-            enable        : in std_logic;
-            direction     : in std_logic
+            external_data_in  : in  std_logic_vector(7 downto 0);
+            external_data_out : out std_logic_vector(7 downto 0);
+            external_data_oe  : out std_logic;
+            internal_bus      : inout std_logic_vector(7 downto 0);
+            enable            : in std_logic;
+            direction         : in std_logic
         );
     end component;
 
@@ -668,6 +673,8 @@ architecture structural of b8008 is
     signal ir_output_enable     : std_logic;
     signal io_buffer_enable     : std_logic;
     signal io_buffer_direction  : std_logic;
+    signal io_buffer_data_out   : std_logic_vector(7 downto 0);  -- Data from io_buffer to external
+    signal io_buffer_oe         : std_logic;                     -- io_buffer output enable
     signal addr_select_sss      : std_logic_vector(2 downto 0);
     signal addr_select_ddd      : std_logic_vector(2 downto 0);
     signal scratchpad_select    : std_logic_vector(2 downto 0);
@@ -738,7 +745,7 @@ begin
     -- Scratchpad address multiplexer: AHL overrides SSS/DDD during cycle 2 T1/T2 of memory ops
     final_scratchpad_addr <= ahl_scratchpad_addr when ahl_active = '1' else scratchpad_select;
 
-    -- Data bus driver: T1/T2 output address, T3+ tri-state for io_buffer
+    -- Data bus driver: T1/T2 output address, T3+ io_buffer drives (when enabled)
     -- During H:L address cycles, io_buffer drives data_bus from internal_bus (H/L regs)
     -- - LrM/LMr (2-cycle): H:L at cycle 2 (instr_needs_address = '0')
     -- - LMI (3-cycle): H:L at cycle 3 (instr_needs_address = '1')
@@ -746,11 +753,24 @@ begin
     -- - Per isa.json: INP/OUT cycle 2, T1: "REG.A TO OUT", T2: "REG.b TO OUT"
     -- Otherwise during T1/T2, output selected_address (PC or Stack)
     -- NOTE: Use next_cycle for T1 check because current_cycle hasn't updated yet at T1 start
-    data_bus <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (ahl_active = '1') and
-                                                                      not (instr_is_io = '1' and next_cycle = 1)) else
-                (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (ahl_active = '1') and
-                                                                                      not (instr_is_io = '1' and current_cycle = 1)) else
-                (others => 'Z');
+    --
+    -- For synthesis: separate output data and output enable signals instead of tri-state
+    -- CPU drives during T1, T2 (address output), or when io_buffer outputs (T3 write)
+
+    -- Data bus output multiplexer
+    data_bus_out <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (ahl_active = '1') and
+                                                                          not (instr_is_io = '1' and next_cycle = 1)) else
+                    (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (ahl_active = '1') and
+                                                                                          not (instr_is_io = '1' and current_cycle = 1)) else
+                    -- During io_buffer output enabled, use io_buffer's output data
+                    io_buffer_data_out when io_buffer_oe = '1' else
+                    -- Default: output zeros (will be masked by OE anyway)
+                    (others => '0');
+
+    -- Data bus output enable: CPU drives during T1/T2 (address) or when io_buffer outputs
+    data_bus_oe <= '1' when (state_t1 = '1' and not (ahl_active = '1') and not (instr_is_io = '1' and next_cycle = 1)) else
+                   '1' when (state_t2 = '1' and not (ahl_active = '1') and not (instr_is_io = '1' and current_cycle = 1)) else
+                   io_buffer_oe;
 
     -- Debug outputs
     debug_reg_a         <= debug_reg_a_actual;
@@ -1222,10 +1242,12 @@ begin
 
     u_io_buffer : io_buffer
         port map (
-            external_data => data_bus,
-            internal_bus  => internal_bus,
-            enable        => io_buffer_enable,
-            direction     => io_buffer_direction
+            external_data_in  => data_bus_in,
+            external_data_out => io_buffer_data_out,
+            external_data_oe  => io_buffer_oe,
+            internal_bus      => internal_bus,
+            enable            => io_buffer_enable,
+            direction         => io_buffer_direction
         );
 
 end architecture structural;

@@ -48,47 +48,48 @@ architecture rtl of program_counter is
     signal pc_reg : address_t := (others => '0');
     signal carry_flag : std_logic := '0';
 
-    -- Computed next PC value (combinational)
-    signal next_pc : address_t;
+    -- Computed operation results (combinational, only valid when operation active)
+    signal pc_incremented_lower : address_t;
+    signal pc_incremented_upper : address_t;
     signal next_carry : std_logic;
+
+    -- Control signal for whether any operation is active
+    signal operation_active : std_logic;
 
 begin
 
-    -- Combinational: compute what the PC will be
-    -- This allows the output to reflect the new value immediately
-    process(pc_reg, control, data_in)
+    -- Determine if any operation is active
+    operation_active <= control.increment_lower or control.increment_upper or control.load;
+
+    -- Combinational: compute incremented values (always computed, selected by mux)
+    -- This avoids combinational loops by not feeding pc_reg back through next_pc
+    process(pc_reg)
         variable pc_lower : unsigned(7 downto 0);
         variable pc_upper : unsigned(5 downto 0);
     begin
-        pc_lower := unsigned(pc_reg(7 downto 0));
-        pc_upper := unsigned(pc_reg(13 downto 8));
-        next_carry <= '0';
+        pc_lower := pc_reg(7 downto 0);
+        pc_upper := pc_reg(13 downto 8);
 
-        if control.load = '1' then
-            -- Load takes priority
-            next_pc <= data_in;
-        elsif control.increment_upper = '1' then
-            -- Increment upper byte (carry handling)
-            pc_upper := pc_upper + 1;
-            next_pc <= pc_upper & pc_lower;
-        elsif control.increment_lower = '1' then
-            -- Increment lower byte
-            if pc_lower = x"FF" then
-                next_carry <= '1';
-            end if;
-            pc_lower := pc_lower + 1;
-            next_pc <= pc_upper & pc_lower;
+        -- Lower byte increment: keep upper, increment lower
+        pc_incremented_lower <= pc_upper & (pc_lower + 1);
+
+        -- Upper byte increment: increment upper, keep lower
+        pc_incremented_upper <= (pc_upper + 1) & pc_lower;
+
+        -- Carry detection
+        if pc_lower = x"FF" then
+            next_carry <= '1';
         else
-            -- Hold
-            next_pc <= pc_reg;
+            next_carry <= '0';
         end if;
     end process;
 
-    -- Output the computed next value when operation is active,
-    -- otherwise output the registered value
-    pc_out <= next_pc when (control.increment_lower = '1' or
-                            control.increment_upper = '1' or
-                            control.load = '1') else pc_reg;
+    -- Output mux: select between registered value and computed values
+    -- No combinational loop because pc_reg doesn't feed back through itself
+    pc_out <= data_in when control.load = '1' else
+              pc_incremented_upper when control.increment_upper = '1' else
+              pc_incremented_lower when control.increment_lower = '1' else
+              pc_reg;
 
     carry_out <= next_carry when control.increment_lower = '1' else carry_flag;
 
@@ -99,26 +100,27 @@ begin
             pc_reg <= (others => '0');
             carry_flag <= '0';
         elsif rising_edge(phi1) then
-            -- Update register with next value
-            pc_reg <= next_pc;
-
-            -- Update carry flag
-            if control.increment_lower = '1' then
+            -- Update register based on active operation
+            if control.load = '1' then
+                pc_reg <= data_in;
+                carry_flag <= '0';
+                report "PC: Loading 0x" & to_hstring(data_in);
+            elsif control.increment_upper = '1' then
+                pc_reg <= pc_incremented_upper;
+                carry_flag <= '0';
+                report "PC: Upper byte increment (carry), full PC = 0x" & to_hstring(pc_incremented_upper);
+            elsif control.increment_lower = '1' then
+                pc_reg <= pc_incremented_lower;
                 if unsigned(pc_reg(7 downto 0)) = x"FF" then
                     carry_flag <= '1';
                     report "PC: Lower byte increment 0x" & to_hstring(unsigned(pc_reg(7 downto 0))) & " -> 0x00 (CARRY)";
                 else
                     carry_flag <= '0';
                 end if;
-                report "PC: Lower byte = 0x" & to_hstring(unsigned(next_pc(7 downto 0))) &
-                       ", full PC = 0x" & to_hstring(next_pc);
-            elsif control.increment_upper = '1' then
-                carry_flag <= '0';
-                report "PC: Upper byte increment (carry), full PC = 0x" & to_hstring(next_pc);
-            elsif control.load = '1' then
-                carry_flag <= '0';
-                report "PC: Loading 0x" & to_hstring(data_in);
+                report "PC: Lower byte = 0x" & to_hstring(unsigned(pc_incremented_lower(7 downto 0))) &
+                       ", full PC = 0x" & to_hstring(pc_incremented_lower);
             end if;
+            -- When no operation active, pc_reg holds its value (implicit latch behavior)
         end if;
     end process;
 

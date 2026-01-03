@@ -236,7 +236,7 @@ begin
     --------------------------------------------------------------------------------
     u_system : b8008_top
         generic map (
-            ROM_FILE => "blinky.mem"
+            ROM_FILE => "./blinky.mem"
         )
         port map (
             clk_in      => clk,
@@ -320,32 +320,11 @@ begin
     end process;
 
     --------------------------------------------------------------------------------
-    -- LED Outputs (active low: '0' = LED ON)
+    -- LED Outputs (directly active, accent active low)
     --------------------------------------------------------------------------------
-    -- LED[0] (D25): S2 status bit - completes the state picture
-    -- STOPPED: S2=0, T1I: S2=1, T1: S2=0, T2: S2=1
-    led(0) <= not s2_sig;
-
-    -- LED[1] (D24): seen_not_stopped - ON = we ever exited STOPPED state
-    led(1) <= not seen_not_stopped;
-
-    -- LED[2] (D22): slow_counter on phi1 - blinks ~1.7Hz if CPU clocks running
-    led(2) <= not slow_counter(17);
-
-    -- LED[3] (D21): reset_int - OFF = running, ON = in reset
-    led(3) <= reset_int;
-
-    -- LED[4] (D26): bootstrap_int - ON = pending, OFF = cleared
-    led(4) <= not bootstrap_int;
-
-    -- LED[5] (D27): CPU interrupt pending from b8008_top
-    led(5) <= not int_pending_sig;
-
-    -- LED[6] (D28): S0 status bit (shows CPU state)
-    led(6) <= not s0_sig;
-
-    -- LED[7] (D29): S1 status bit (shows CPU state)
-    led(7) <= not s1_sig;
+    -- Drive LEDs from CPU I/O port 8 output (active low LEDs, active low data)
+    -- io_port_8 directly drives LEDs: 0xFE = LED0 on, 0xFF = all off
+    led <= io_port_8;
 
     -- M20: Interrupt pending
     led_M20 <= not int_pending_sig;

@@ -13,3 +13,6 @@ ASM := blinky.asm
 
 # Include common project rules
 include ../project.mk
+
+# Only use blinky_top.vhdl from local src
+PROJECT_SRCS := ./src/blinky_top.vhdl

@@ -3,11 +3,11 @@
 --------------------------------------------------------------------------------
 -- Data Bus Buffer for Intel 8008
 --
--- Bidirectional buffer between external data bus D[7:0] and internal data bus
+-- Buffer between external data bus D[7:0] and internal data bus
 -- - Controlled by Memory and I/O Control block
 -- - Can transfer data in either direction
--- - Tri-state outputs when not enabled
--- - DUMB module: just a bidirectional buffer with direction control
+-- - Uses separate input/output signals for synthesis compatibility
+-- - DUMB module: just a buffer with direction control
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -18,10 +18,12 @@ use work.b8008_types.all;
 
 entity io_buffer is
     port (
-        -- External data bus (to outside world)
-        external_data : inout std_logic_vector(7 downto 0);
+        -- External data bus (to outside world) - separate in/out for synthesis
+        external_data_in  : in  std_logic_vector(7 downto 0);  -- Data from external
+        external_data_out : out std_logic_vector(7 downto 0);  -- Data to external
+        external_data_oe  : out std_logic;                     -- Output enable for external bus
 
-        -- Internal data bus (to CPU internals)
+        -- Internal data bus (to CPU internals) - still uses tri-state internally
         internal_bus : inout std_logic_vector(7 downto 0);
 
         -- Control from Memory and I/O Control block
@@ -34,15 +36,16 @@ architecture rtl of io_buffer is
 
 begin
 
-    -- Bidirectional data transfer with direction control
+    -- Data transfer with direction control
     -- When enable=1 and direction=0: external data -> internal bus (READ)
     -- When enable=1 and direction=1: internal bus -> external data (WRITE)
-    -- When enable=0: both sides tri-stated
+    -- When enable=0: both sides tri-stated/disabled
 
-    -- Transfer external to internal (READ)
-    internal_bus <= external_data when (enable = '1' and direction = '0') else (others => 'Z');
+    -- Transfer external to internal (READ) - drive internal bus
+    internal_bus <= external_data_in when (enable = '1' and direction = '0') else (others => 'Z');
 
-    -- Transfer internal to external (WRITE)
-    external_data <= internal_bus when (enable = '1' and direction = '1') else (others => 'Z');
+    -- Transfer internal to external (WRITE) - output data and enable
+    external_data_out <= internal_bus;  -- Always output internal bus value
+    external_data_oe  <= '1' when (enable = '1' and direction = '1') else '0';
 
 end architecture rtl;

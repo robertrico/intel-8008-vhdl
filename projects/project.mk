@@ -227,13 +227,17 @@ synth: $(JSON)
 
 $(VERILOG): $(ALL_SRCS) | $(BUILD_DIR)
 	@echo "=== Synthesizing $(TOP) with GHDL ==="
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(ALL_SRCS)
-	$(GHDL) --synth $(GHDL_FLAGS) --workdir=$(BUILD_DIR) --out=verilog $(TOP) > $@
+	@# Don't use --workdir for synthesis - it breaks file_open for ROM loading
+	$(GHDL) -a $(GHDL_FLAGS) $(ALL_SRCS)
+	$(GHDL) --synth $(GHDL_FLAGS) --out=verilog $(TOP) > $@
 	@echo "Verilog: $@ ($$(wc -l < $@) lines)"
 
 $(JSON): $(VERILOG) create-reports-dir | $(BUILD_DIR)
 	@echo "=== Running Yosys synthesis for ECP5 ==="
-	$(YOSYS) -p "read_verilog $(ROOT_DIR)/src/synth/ghdl_gates.v $<; synth_ecp5 -top $(TOP) -json $@" 2>&1 | tee $(SYNTH_REPORT)
+	@# tribuf -logic converts internal tri-state to mux logic
+	@# hierarchy -keep_portwidths prevents port optimization that breaks connections
+	@# opt -nodffe prevents DFF optimization that can break design
+	$(YOSYS) -p "read_verilog $(ROOT_DIR)/src/synth/ghdl_gates.v $<; hierarchy -check -top $(TOP); tribuf -logic; proc; opt -nodffe; synth_ecp5 -top $(TOP) -json $@" 2>&1 | tee $(SYNTH_REPORT)
 	@echo ""
 	@echo "Synthesis report: $(SYNTH_REPORT)"
 	@grep -E "Number of cells|LUT|DFF|CARRY" $(SYNTH_REPORT) || true

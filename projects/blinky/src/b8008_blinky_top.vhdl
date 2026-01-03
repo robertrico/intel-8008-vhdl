@@ -1,18 +1,12 @@
 --------------------------------------------------------------------------------
--- b8008_top.vhdl
+-- b8008_blinky_top.vhdl
 --------------------------------------------------------------------------------
--- Top-level system integrating b8008 CPU with ROM and RAM
+-- Blinky-specific top-level with EMBEDDED ROM (for synthesis)
 --
 -- Memory Map:
---   0x0000 - 0x0FFF (4KB): ROM (program code)
+--   0x0000 - 0x0FFF (4KB): ROM (blinky program, embedded)
 --   0x1000 - 0x13FF (1KB): RAM (data storage)
 --   0x1400 - 0x3FFF:       Unmapped (returns 0x00)
---
--- This module connects:
---   - b8008 CPU core
---   - rom_4kx8 (4KB ROM for program storage)
---   - ram_1kx8 (1KB RAM for data storage)
---   - Address decode logic
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -22,11 +16,7 @@ use ieee.numeric_std.all;
 library work;
 use work.b8008_types.all;
 
-entity b8008_top is
-    generic (
-        -- ROM initialization file
-        ROM_FILE : string := "test_programs/alu_test_as.mem"
-    );
+entity b8008_blinky_top is
     port (
         -- External clock and reset
         clk_in      : in std_logic;
@@ -75,9 +65,9 @@ entity b8008_top is
         -- State timing debug
         debug_state_half    : out std_logic   -- Which half of 2-cycle state (0=first, 1=second)
     );
-end entity b8008_top;
+end entity b8008_blinky_top;
 
-architecture structural of b8008_top is
+architecture structural of b8008_blinky_top is
 
     -- Component: b8008 CPU
     component b8008 is
@@ -86,9 +76,7 @@ architecture structural of b8008_top is
             reset          : in std_logic;
             phi1_out       : out std_logic;
             phi2_out       : out std_logic;
-            data_bus_in    : in  std_logic_vector(7 downto 0);
-            data_bus_out   : out std_logic_vector(7 downto 0);
-            data_bus_oe    : out std_logic;
+            data_bus       : inout std_logic_vector(7 downto 0);
             sync_out       : out std_logic;
             s0_out         : out std_logic;
             s1_out         : out std_logic;
@@ -119,11 +107,8 @@ architecture structural of b8008_top is
         );
     end component;
 
-    -- Component: 4KB ROM
-    component rom_4kx8 is
-        generic (
-            ROM_FILE : string := "test_programs/alu_test_as.mem"
-        );
+    -- Component: Blinky ROM (embedded program)
+    component blinky_rom is
         port (
             ADDR     : in  std_logic_vector(11 downto 0);
             DATA_OUT : out std_logic_vector(7 downto 0);
@@ -146,9 +131,7 @@ architecture structural of b8008_top is
 
     -- Internal signals
     signal address_bus : std_logic_vector(13 downto 0);
-    signal data_bus    : std_logic_vector(7 downto 0);  -- Combined data bus (external bidirectional)
-    signal cpu_data_out : std_logic_vector(7 downto 0); -- Data from CPU
-    signal cpu_data_oe  : std_logic;                    -- CPU output enable
+    signal data_bus    : std_logic_vector(7 downto 0);
     signal phi1        : std_logic;
     signal phi2        : std_logic;
 
@@ -166,13 +149,6 @@ architecture structural of b8008_top is
     signal is_write     : std_logic;
     signal is_io        : std_logic;  -- I/O cycle (PCC)
     signal cycle_type   : std_logic_vector(1 downto 0);  -- 00=PCI, 01=PCR, 10=PCC, 11=PCW
-
-    -- Internal copies of state signals (VHDL-2008: cannot read from output ports)
-    -- These capture the CPU state outputs for internal logic use
-    signal s0_int       : std_logic;
-    signal s1_int       : std_logic;
-    signal s2_int       : std_logic;
-    signal sync_int     : std_logic;
 
     -- Bootstrap flag: jam RST 0 only during first T1I after reset
     signal bootstrap_done : std_logic := '0';
@@ -217,23 +193,17 @@ begin
     -- External latches capture the address so data can use same pins during T3
     -- Here we simulate this with internal latches
 
-    -- Drive output ports from internal signals (VHDL-2008 fix)
-    s0_out   <= s0_int;
-    s1_out   <= s1_int;
-    s2_out   <= s2_int;
-    sync_out <= sync_int;
-
-    -- Decode T-states from status signals (use internal signals)
+    -- Decode T-states from status signals
     -- T1: S2=0, S1=1, S0=0 (binary 010)
     -- T2: S2=1, S1=0, S0=0 (binary 100)
     -- T3: S2=0, S1=0, S0=1 (binary 001)
     -- T4: S2=1, S1=1, S0=1 (binary 111)
     -- T5: S2=1, S1=0, S0=1 (binary 101)
-    is_t1 <= '1' when (s2_int = '0' and s1_int = '1' and s0_int = '0') else '0';
-    is_t2 <= '1' when (s2_int = '1' and s1_int = '0' and s0_int = '0') else '0';
-    is_t3 <= '1' when (s2_int = '0' and s1_int = '0' and s0_int = '1') else '0';
-    is_t4 <= '1' when (s2_int = '1' and s1_int = '1' and s0_int = '1') else '0';
-    is_t5 <= '1' when (s2_int = '1' and s1_int = '0' and s0_int = '1') else '0';
+    is_t1 <= '1' when (s2_out = '0' and s1_out = '1' and s0_out = '0') else '0';
+    is_t2 <= '1' when (s2_out = '1' and s1_out = '0' and s0_out = '0') else '0';
+    is_t3 <= '1' when (s2_out = '0' and s1_out = '0' and s0_out = '1') else '0';
+    is_t4 <= '1' when (s2_out = '1' and s1_out = '1' and s0_out = '1') else '0';
+    is_t5 <= '1' when (s2_out = '1' and s1_out = '0' and s0_out = '1') else '0';
 
     -- Latch address during T1 and T2 (when CPU outputs address on data bus)
     -- Real 8008 behavior: address is time-multiplexed on 8-bit data bus
@@ -246,11 +216,11 @@ begin
         if reset = '1' then
             latched_address <= (others => '0');
         elsif rising_edge(phi1) then
-            if is_t1 = '1' and sync_int = '1' then
+            if is_t1 = '1' and sync_out = '1' then
                 -- T1 first half (SYNC high): Latch lower 8 bits from data bus
                 latched_address(7 downto 0) <= data_bus;
                 report "ADDR_LATCH: T1 lower byte = 0x" & to_hstring(unsigned(data_bus));
-            elsif is_t2 = '1' and sync_int = '1' then
+            elsif is_t2 = '1' and sync_out = '1' then
                 -- T2 first half (SYNC high): Latch upper 6 bits from data bus D[5:0]
                 latched_address(13 downto 8) <= data_bus(5 downto 0);
                 report "ADDR_LATCH: T2 upper byte = 0x" & to_hstring(unsigned(data_bus(5 downto 0))) &
@@ -272,7 +242,7 @@ begin
             bootstrap_done <= '0';
         elsif rising_edge(phi1) then
             -- When we're in T2 and bootstrap isn't done yet, T1I just completed
-            if bootstrap_done = '0' and s2_int = '1' and s1_int = '0' and s0_int = '0' then
+            if bootstrap_done = '0' and s2_out = '1' and s1_out = '0' and s0_out = '0' then
                 bootstrap_done <= '1';
             end if;
         end if;
@@ -288,13 +258,11 @@ begin
             reset       => reset,
             phi1_out    => phi1,
             phi2_out    => phi2,
-            data_bus_in  => data_bus,        -- CPU reads from combined data bus
-            data_bus_out => cpu_data_out,    -- CPU outputs to separate signal
-            data_bus_oe  => cpu_data_oe,     -- CPU output enable
-            sync_out    => sync_int,
-            s0_out      => s0_int,
-            s1_out      => s1_int,
-            s2_out      => s2_int,
+            data_bus    => data_bus,
+            sync_out    => sync_out,
+            s0_out      => s0_out,
+            s1_out      => s1_out,
+            s2_out      => s2_out,
             ready_in            => '1',      -- Always ready (no wait states)
             interrupt           => interrupt,
             debug_reg_a         => debug_reg_a,
@@ -321,12 +289,9 @@ begin
     -- MEMORY INSTANCES
     -- ========================================================================
 
-    -- ROM: 4KB at 0x0000-0x0FFF
+    -- ROM: 4KB at 0x0000-0x0FFF (Blinky program embedded)
     -- Uses LATCHED address (stable during T3 data transfer)
-    u_rom : rom_4kx8
-        generic map (
-            ROM_FILE => ROM_FILE
-        )
+    u_rom : blinky_rom
         port map (
             ADDR     => latched_address(11 downto 0),
             DATA_OUT => rom_data,
@@ -406,8 +371,7 @@ begin
 
     -- Output port latches - capture data written by OUT instruction
     -- OUT instruction: CPU drives data_bus with accumulator value during T3
-    -- Latch on phi2 (data is set up on phi2 rising edge of T3)
-    process(phi2, reset)
+    process(phi1, reset)
         variable port_base : integer;
     begin
         if reset = '1' then
@@ -416,7 +380,7 @@ begin
             io_output_port_10 <= (others => '0');
             checkpoint_id <= 0;
             last_checkpoint_pc <= (others => '1');
-        elsif rising_edge(phi2) then
+        elsif rising_edge(phi1) then
             -- Latch output data during T3 of I/O write (OUT instruction)
             -- OUT uses ports 8-31 (RR field non-zero in opcode 01RRMMM1)
             -- RR field is opcode bits 5:4 which map to address bits 13:12
@@ -475,22 +439,16 @@ begin
     --   T2: CPU outputs address upper byte on data bus (external hardware latches it)
     --   T3-T5: External hardware (ROM/RAM/IO) drives data bus for CPU to read
     -- During T1I (interrupt acknowledge), jam RST 0 instruction (0x05) for bootstrap
-    -- Data bus multiplexer: combines CPU output with memory/IO/interrupt data
-    -- Priority order:
-    -- 1. T1I: jam RST instruction (interrupt acknowledge)
-    -- 2. CPU output enabled: CPU is driving address (T1/T2) or data (T3 write)
-    -- 3. Memory/IO read: ROM, RAM, or I/O input during T3-T5
-    -- 4. Default: zeros (should not occur in normal operation)
-    --
+    -- Only jam during FIRST T1I after reset (bootstrap), then let ROM take over
+    -- IMPORTANT: Check is_io FIRST since I/O cycles have their own address format
+    -- (latched_address may fall in ROM/RAM range but it's actually I/O port data)
     -- RST instruction opcode = 00 AAA 101 where AAA is the vector (0-7)
     -- RST 0 = 0x05, RST 1 = 0x0D, RST 2 = 0x15, RST 3 = 0x1D, etc.
-    data_bus <= ("00" & int_vector & "101") when (s2_int = '1' and s1_int = '1' and s0_int = '0') else  -- T1I: jam RST instruction
-                cpu_data_out when cpu_data_oe = '1' else  -- CPU driving (address during T1/T2, or data during write T3)
-                io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1') and
-                                    latched_address(13 downto 12) = "00") else  -- INP: external drives bus during T3/T4/T5
-                rom_data when (is_io = '0' and rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM during T3/T4/T5
-                ram_data_out when (is_io = '0' and ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM during T3/T4/T5
-                (others => '0');  -- Default: zeros (should be masked by proper read timing)
+    data_bus <= ("00" & int_vector & "101") when (s2_out = '1' and s1_out = '1' and s0_out = '0') else  -- T1I: jam RST instruction based on int_vector
+                io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- I/O input drives bus during T3/T4/T5 (check first!)
+                rom_data when (rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM drives bus during T3/T4/T5
+                ram_data_out when (ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM drives bus during T3/T4/T5
+                (others => 'Z');  -- Tri-state during T1/T2 (CPU drives address)
 
     -- ========================================================================
     -- DEBUG OUTPUTS

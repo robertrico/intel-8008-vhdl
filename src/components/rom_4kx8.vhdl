@@ -81,17 +81,14 @@ architecture rtl of rom_4kx8 is
     signal rom : rom_array := load_rom(ROM_FILE);
 
 begin
-    process(ADDR, CS_N)
-    begin
-        if CS_N = '0' and ADDR /= "XXXXXXXXXXXX" and ADDR /= "ZZZZZZZZZZZZ" and
-           ADDR /= "UUUUUUUUUUUU" and ADDR /= "------------" then
-            -- Chip selected and address is valid, output data
-            DATA_OUT <= rom(to_integer(unsigned(ADDR)));
-            -- report "ROM read: addr=0x" & to_hstring(ADDR) & " data=0x" & to_hstring(rom(to_integer(unsigned(ADDR))));
-        else
-            -- Chip not selected or invalid address, tri-state (high-Z)
-            DATA_OUT <= (others => 'Z');
-        end if;
-    end process;
+    -- Combinational ROM read (asynchronous)
+    -- NOTE: For simulation, this works fine. For synthesis, Yosys will implement
+    -- as distributed LUT ROM since we don't use a clock for read.
+    -- This is intentional - the 8008 needs asynchronous ROM access since
+    -- the ROM data must be valid on the same T-state as the address.
+    --
+    -- CS_N handling is done in the top-level (b8008_top) which controls
+    -- when ROM data is placed on the data bus.
+    DATA_OUT <= rom(to_integer(unsigned(ADDR)));
 
 end rtl;
