@@ -1,8 +1,20 @@
 # TODO - b8008 Verification Roadmap
 
-This document tracks what needs to be done before the b8008 is ready for FPGA hardware deployment.
+## ✅ Hardware Validation Complete (January 2026)
 
-## Current Status
+The b8008 has been successfully validated on real FPGA hardware:
+
+| Project | What It Tests | Status |
+|---------|---------------|--------|
+| `blinky` | LED blink, I/O port 8, CALL/RET | ✅ Working |
+| `logic_blinky` | ALU logical ops (AND, OR, XOR) | ✅ Working |
+| `ram_blinky` | RAM read/write operations | ✅ Working |
+
+**Target**: Lattice ECP5-5G Versa Development Kit (LFE5UM5G-45F)
+
+---
+
+## Simulation Status
 
 - **24/24 verification tests pass**
 - **All 48 instruction types implemented** (28 unique operation categories)
@@ -11,7 +23,7 @@ This document tracks what needs to be done before the b8008 is ready for FPGA ha
 - **Interrupt handling tested** (RST 0 bootstrap + RST 7 runtime interrupt)
 - **Conditional RET bug fixed** (RZ/RNZ/etc. were ignoring condition flags)
 - **Serial I/O tested** (hello_8008.asm outputs "HI\r\n0123456789 B8008-OK\r\n")
-- **Estimated opcode coverage: ~90-95%** (see Confidence Report below)
+- **Estimated opcode coverage: ~95%** (see Confidence Report below)
 
 ---
 
@@ -111,19 +123,18 @@ Verify instruction timing matches Intel spec:
 - 2-cycle (8 states): MVI, MOV r,M, MOV M,r, ALU M, INP
 - 3-cycle (11 states): JMP, CALL, MVI M
 
-### [x] FPGA Synthesis Test
+### [x] FPGA Synthesis and Hardware Validation
 - [x] GHDL synthesis: 6665 lines Verilog netlist
-- [x] Added `make synth` target to Makefile
 - [x] Yosys+nextpnr: ECP5 85k place & route complete
-  - Device utilization: 106 LUTs, 46 FFs, 106 I/O (0% of 85k device)
-  - Max frequency: 217 MHz (clk_in), 227 MHz (phi2) - easily meets 12 MHz target
-- [x] Timing closure verified: PASS at 12 MHz
-- [x] Bitstream generation: 1.8 MB .bit file ready
-- [x] Create b8008 version of blinky project
-  - `make project P=blinky` builds complete system
-  - 112 LUTs, 63 FFs (includes ROM + RAM + CPU)
+  - Device utilization: 112 LUTs, 63 FFs (includes ROM + RAM + CPU)
   - Max frequency: 218 MHz (100 MHz target) - PASS
-  - Bitstream: 276 KB
+- [x] Timing closure verified
+- [x] Bitstream generation: 276 KB
+- [x] **Hardware validated** (January 2026):
+  - `blinky` - LED blink test ✅
+  - `logic_blinky` - ALU logical operations (AND, OR, XOR) ✅
+  - `ram_blinky` - RAM read/write ✅
+- [x] Project template created (`projects/example/`)
 
 ### [ ] Run Historical 8008 Software
 Find and run real 8008 programs:
@@ -228,15 +239,15 @@ make test-b8008-top PROG=alu_test_as SIM_TIME=30ms
 
 ---
 
-## Completion Criteria for Hardware
+## Completion Criteria ✅ ALL COMPLETE
 
-Before FPGA deployment, ALL of the following must be true:
+All criteria met as of January 2026:
 
 1. [x] All high priority items complete (INR/DCR test, MOV r,r test)
 2. [x] All medium priority items complete (I/O, ALU coverage, interrupt test)
 3. [x] Opcode coverage reaches 90%+ (currently ~95%)
 4. [x] GHDL synthesis completes without errors (6665 lines Verilog)
-5. [x] Yosys/nextpnr place & route (ECP5 85k: 106 LUTs, 46 FFs)
-6. [x] Timing analysis passes (217 MHz / 227 MHz, target 12 MHz)
-7. [ ] At least one test program runs on hardware
+5. [x] Yosys/nextpnr place & route (ECP5: 112 LUTs, 63 FFs)
+6. [x] Timing analysis passes (218 MHz, target 100 MHz)
+7. [x] **Three test programs run on hardware** (blinky, logic_blinky, ram_blinky)
 
