@@ -278,6 +278,15 @@ prog: $(BIT)
 	@echo "=== Programming via JTAG (SRAM) ==="
 	$(LOADER) -c ft2232 -m $(BIT)
 
+# Quick program - just program existing bitstream, no rebuild check
+prog-quick:
+	@if [ ! -f "$(BIT)" ]; then \
+		echo "No bitstream found. Run 'make bit' first."; \
+		exit 1; \
+	fi
+	@echo "=== Quick Programming via JTAG (SRAM) ==="
+	$(LOADER) -c ft2232 -m $(BIT)
+
 prog-flash: $(BIT)
 	@echo "=== Programming SPI Flash ==="
 	$(LOADER) -b versa_ecp5 $(BIT)

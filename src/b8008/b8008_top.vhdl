@@ -147,6 +147,7 @@ architecture structural of b8008_top is
     -- Internal signals
     signal address_bus : std_logic_vector(13 downto 0);
     signal data_bus    : std_logic_vector(7 downto 0);  -- Combined data bus (external bidirectional)
+    signal cpu_data_in  : std_logic_vector(7 downto 0); -- Data TO CPU (no loop from cpu_data_out)
     signal cpu_data_out : std_logic_vector(7 downto 0); -- Data from CPU
     signal cpu_data_oe  : std_logic;                    -- CPU output enable
     signal phi1        : std_logic;
@@ -288,7 +289,7 @@ begin
             reset       => reset,
             phi1_out    => phi1,
             phi2_out    => phi2,
-            data_bus_in  => data_bus,        -- CPU reads from combined data bus
+            data_bus_in  => cpu_data_in,     -- CPU reads from input-only path (no loop)
             data_bus_out => cpu_data_out,    -- CPU outputs to separate signal
             data_bus_oe  => cpu_data_oe,     -- CPU output enable
             sync_out    => sync_int,
@@ -484,13 +485,18 @@ begin
     --
     -- RST instruction opcode = 00 AAA 101 where AAA is the vector (0-7)
     -- RST 0 = 0x05, RST 1 = 0x0D, RST 2 = 0x15, RST 3 = 0x1D, etc.
-    data_bus <= ("00" & int_vector & "101") when (s2_int = '1' and s1_int = '1' and s0_int = '0') else  -- T1I: jam RST instruction
-                cpu_data_out when cpu_data_oe = '1' else  -- CPU driving (address during T1/T2, or data during write T3)
-                io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1') and
-                                    latched_address(13 downto 12) = "00") else  -- INP: external drives bus during T3/T4/T5
-                rom_data when (is_io = '0' and rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM during T3/T4/T5
-                ram_data_out when (is_io = '0' and ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM during T3/T4/T5
-                (others => '0');  -- Default: zeros (should be masked by proper read timing)
+    --
+    -- cpu_data_in: Data TO the CPU - does NOT include cpu_data_out to break combinational loop
+    -- This is what the CPU reads during T3-T5 (instruction fetch, memory read, I/O read)
+    cpu_data_in <= ("00" & int_vector & "101") when (s2_int = '1' and s1_int = '1' and s0_int = '0') else  -- T1I: jam RST instruction
+                   io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1') and
+                                       latched_address(13 downto 12) = "00") else  -- INP: I/O input during T3/T4/T5
+                   rom_data when (is_io = '0' and rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM during T3/T4/T5
+                   ram_data_out when (is_io = '0' and ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM during T3/T4/T5
+                   (others => '0');  -- Default: zeros when CPU is driving or no valid source
+
+    -- data_bus: Combined bus for external/debug use (includes CPU output)
+    data_bus <= cpu_data_out when cpu_data_oe = '1' else cpu_data_in;
 
     -- ========================================================================
     -- DEBUG OUTPUTS
