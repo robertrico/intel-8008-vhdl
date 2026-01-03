@@ -46,6 +46,52 @@ The b8008 has been successfully validated on real FPGA hardware:
 
 ## High Priority
 
+### [ ] UART Hardware Integration
+Wire FTDI USB-to-serial adapter to FPGA for real terminal I/O.
+
+**Hardware Setup:**
+- [ ] Identify available FPGA pins for TX/RX (3.3V compatible)
+- [ ] Add UART pin constraints to LPF file
+- [ ] Wire FTDI TX → FPGA RX, FTDI RX ← FPGA TX, common GND
+
+**Project Creation:**
+- [ ] Create `uart_test` project from blinky template
+- [ ] Integrate `b8008_uart_top.vhdl` (already has UART support)
+- [ ] Test TX first with simple "Hello" output at 2400 baud
+- [ ] Test RX echo (read char, write char back)
+
+**Existing Components (ready to use):**
+- `src/components/uart_tx.vhdl` - Hardware UART transmitter
+- `src/components/uart_rx.vhdl` - Hardware UART receiver (16x oversampling)
+- `src/components/bitbang_uart_adapter.vhdl` - Legacy software bridge
+- `src/b8008/b8008_uart_top.vhdl` - Complete system with UART I/O
+- `test_programs/samples/hello_8008.asm` - Serial output test (works in simulation)
+
+**I/O Port Mapping:**
+- Port 0 (IN): Bit-bang serial input (legacy software)
+- Port 1 (IN): Direct UART RX (bit 7=ready, bits 6:0=data)
+- Port 8 (OUT): Bit-bang serial output (legacy software)
+- Port 9 (OUT): Direct UART TX (sends byte immediately)
+
+### [ ] Basic 8008 Monitor
+Once UART TX/RX is proven, create a simple monitor program.
+
+**Features:**
+- [ ] Command prompt over serial (2400 or 9600 baud)
+- [ ] Memory dump: `D xxxx` - display 16 bytes at address
+- [ ] Memory write: `W xxxx yy` - write byte yy at address xxxx
+- [ ] Register display: `R` - show A, B, C, D, E, H, L
+- [ ] Go: `G xxxx` - jump to address and execute
+
+**This will enable:**
+- Interactive debugging of CPU behavior
+- Memory exploration without recompilation
+- Foundation for porting real 8008 software
+
+---
+
+## Completed - High Priority
+
 ### [x] Add MOV r,M / MOV M,r Explicit Tests
 - [x] Create dedicated test for all MOV r,M combinations
 - [x] Create dedicated test for all MOV M,r combinations
