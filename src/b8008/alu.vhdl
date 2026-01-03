@@ -60,8 +60,10 @@ entity alu is
         -- Output enable to internal bus
         output_result : in std_logic;
 
-        -- Internal data bus (8-bit result output)
-        internal_bus : inOut std_logic_vector(7 downto 0);
+        -- Internal data bus (separate in/out for synthesis compatibility)
+        -- Note: ALU only writes to bus, never reads
+        internal_bus_out : out std_logic_vector(7 downto 0);
+        internal_bus_oe  : out std_logic;
 
         -- Result output (9 bits: carry + 8-bit result)
         result : out std_logic_vector(8 downto 0);
@@ -211,7 +213,8 @@ begin
     result <= result_internal;
 
     -- Drive internal bus with 8-bit result when output_result is enabled
-    internal_bus <= result_internal(7 downto 0) when output_result = '1' else (others => 'Z');
+    internal_bus_out <= result_internal(7 downto 0);
+    internal_bus_oe  <= output_result;
 
     -- Generate flags from result
     -- Carry flag: bit 8 of result

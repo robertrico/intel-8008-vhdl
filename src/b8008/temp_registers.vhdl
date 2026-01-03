@@ -33,8 +33,10 @@ entity temp_registers is
         output_reg_a : in std_logic;  -- Enable Reg.a to drive internal bus
         output_reg_b : in std_logic;  -- Enable Reg.b to drive internal bus
 
-        -- Internal data bus (bidirectional)
-        internal_bus : inout std_logic_vector(7 downto 0);
+        -- Internal data bus (separate in/out for synthesis compatibility)
+        internal_bus_in  : in  std_logic_vector(7 downto 0);
+        internal_bus_out : out std_logic_vector(7 downto 0);
+        internal_bus_oe  : out std_logic;
 
         -- Outputs to ALU and other modules
         reg_a_out : out std_logic_vector(7 downto 0);
@@ -54,12 +56,10 @@ begin
     reg_a_out <= reg_a;
     reg_b_out <= reg_b;
 
-    -- Bidirectional internal bus control
-    -- Drive bus when output enabled, otherwise high-impedance
+    -- Internal bus output control
     -- NOTE: Only one should be enabled at a time (mutual exclusion by control logic)
-    internal_bus <= reg_a when output_reg_a = '1' else
-                    reg_b when output_reg_b = '1' else
-                    (others => 'Z');
+    internal_bus_out <= reg_a when output_reg_a = '1' else reg_b;
+    internal_bus_oe  <= output_reg_a or output_reg_b;
 
     -- Latch Reg.a on phi2 rising edge when enabled
     -- DUMB: just load whatever is on internal_bus
@@ -67,8 +67,8 @@ begin
     begin
         if rising_edge(phi2) then
             if load_reg_a = '1' then
-                reg_a <= internal_bus;
-                report "TEMP_REG: Loading Reg.a = 0x" & to_hstring(unsigned(internal_bus));
+                reg_a <= internal_bus_in;
+                report "TEMP_REG: Loading Reg.a = 0x" & to_hstring(unsigned(internal_bus_in));
             end if;
         end if;
     end process;
@@ -79,8 +79,8 @@ begin
     begin
         if rising_edge(phi2) then
             if load_reg_b = '1' then
-                reg_b <= internal_bus;
-                report "TEMP_REG: Loading Reg.b = 0x" & to_hstring(unsigned(internal_bus));
+                reg_b <= internal_bus_in;
+                report "TEMP_REG: Loading Reg.b = 0x" & to_hstring(unsigned(internal_bus_in));
             end if;
         end if;
     end process;

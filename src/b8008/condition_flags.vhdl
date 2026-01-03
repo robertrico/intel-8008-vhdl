@@ -55,8 +55,10 @@ entity condition_flags is
         -- Output enable to internal bus
         output_flags : in std_logic;
 
-        -- Internal data bus (flags output as 8-bit value)
-        internal_bus : inout std_logic_vector(7 downto 0);
+        -- Internal data bus (separate in/out for synthesis compatibility)
+        -- Note: Condition flags only writes to bus, never reads
+        internal_bus_out : out std_logic_vector(7 downto 0);
+        internal_bus_oe  : out std_logic;
 
         -- Output: Condition met (to Memory and I/O Control)
         condition_met : out std_logic;
@@ -115,7 +117,8 @@ begin
 
     -- Drive internal bus with flags when output_flags is enabled
     -- Format: bit 0=carry, bit 1=zero, bit 2=sign, bit 3=parity, bits 7:4=0
-    internal_bus <= ("0000" & parity_ff & sign_ff & zero_ff & carry_ff) when output_flags = '1' else (others => 'Z');
+    internal_bus_out <= "0000" & parity_ff & sign_ff & zero_ff & carry_ff;
+    internal_bus_oe  <= output_flags;
 
     -- Condition evaluation (pure combinational)
     process(condition_code, carry_ff, zero_ff, sign_ff, parity_ff, eval_condition, test_true)

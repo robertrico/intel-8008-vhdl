@@ -313,7 +313,9 @@ architecture structural of b8008 is
             rst_vector         : in std_logic_vector(2 downto 0);
             regfile_data_out   : in std_logic_vector(7 downto 0);
             regfile_data_in    : out std_logic_vector(7 downto 0);
-            internal_bus       : inout std_logic_vector(7 downto 0);
+            internal_bus_in    : in  std_logic_vector(7 downto 0);
+            internal_bus_out   : out std_logic_vector(7 downto 0);
+            internal_bus_oe    : out std_logic;
             select_pc          : in std_logic;
             select_stack       : in std_logic;
             pc_load_from_regs  : in std_logic;
@@ -426,7 +428,9 @@ architecture structural of b8008 is
             load_reg_b          : in std_logic;
             output_reg_a        : in std_logic;
             output_reg_b        : in std_logic;
-            internal_bus        : inout std_logic_vector(7 downto 0);
+            internal_bus_in     : in  std_logic_vector(7 downto 0);
+            internal_bus_out    : out std_logic_vector(7 downto 0);
+            internal_bus_oe     : out std_logic;
             reg_a_out           : out std_logic_vector(7 downto 0);
             reg_b_out           : out std_logic_vector(7 downto 0)
         );
@@ -461,62 +465,66 @@ architecture structural of b8008 is
 
     component alu is
         port (
-            phi2            : in std_logic;
-            accumulator_in  : in std_logic_vector(7 downto 0);
-            reg_b_in        : in std_logic_vector(7 downto 0);
-            opcode          : in std_logic_vector(2 downto 0);
-            is_inr_dcr      : in std_logic;
-            is_rotate       : in std_logic;
-            carry_in        : in std_logic;
-            enable          : in std_logic;
-            output_result   : in std_logic;
-            internal_bus    : inout std_logic_vector(7 downto 0);
-            result          : out std_logic_vector(8 downto 0);
-            flag_carry      : out std_logic;
-            flag_zero       : out std_logic;
-            flag_sign       : out std_logic;
-            flag_parity     : out std_logic
+            phi2             : in std_logic;
+            accumulator_in   : in std_logic_vector(7 downto 0);
+            reg_b_in         : in std_logic_vector(7 downto 0);
+            opcode           : in std_logic_vector(2 downto 0);
+            is_inr_dcr       : in std_logic;
+            is_rotate        : in std_logic;
+            carry_in         : in std_logic;
+            enable           : in std_logic;
+            output_result    : in std_logic;
+            internal_bus_out : out std_logic_vector(7 downto 0);
+            internal_bus_oe  : out std_logic;
+            result           : out std_logic_vector(8 downto 0);
+            flag_carry       : out std_logic;
+            flag_zero        : out std_logic;
+            flag_sign        : out std_logic;
+            flag_parity      : out std_logic
         );
     end component;
 
     component condition_flags is
         port (
-            phi2           : in std_logic;
-            reset          : in std_logic;
-            flag_carry_in  : in std_logic;
-            flag_zero_in   : in std_logic;
-            flag_sign_in   : in std_logic;
-            flag_parity_in : in std_logic;
-            update_flags   : in std_logic;
-            condition_code : in std_logic_vector(1 downto 0);
-            test_true      : in std_logic;
-            eval_condition : in std_logic;
-            output_flags   : in std_logic;
-            internal_bus   : inout std_logic_vector(7 downto 0);
-            condition_met  : out std_logic;
-            flag_carry     : out std_logic;
-            flag_zero      : out std_logic;
-            flag_sign      : out std_logic;
-            flag_parity    : out std_logic
+            phi2             : in std_logic;
+            reset            : in std_logic;
+            flag_carry_in    : in std_logic;
+            flag_zero_in     : in std_logic;
+            flag_sign_in     : in std_logic;
+            flag_parity_in   : in std_logic;
+            update_flags     : in std_logic;
+            condition_code   : in std_logic_vector(1 downto 0);
+            test_true        : in std_logic;
+            eval_condition   : in std_logic;
+            output_flags     : in std_logic;
+            internal_bus_out : out std_logic_vector(7 downto 0);
+            internal_bus_oe  : out std_logic;
+            condition_met    : out std_logic;
+            flag_carry       : out std_logic;
+            flag_zero        : out std_logic;
+            flag_sign        : out std_logic;
+            flag_parity      : out std_logic
         );
     end component;
 
     -- Phase 9: External Interface
     component instruction_register is
         port (
-            phi1         : in std_logic;
-            reset        : in std_logic;
-            internal_bus : inout std_logic_vector(7 downto 0);
-            load_ir      : in std_logic;
-            output_ir    : in std_logic;
-            ir_bit_7     : out std_logic;
-            ir_bit_6     : out std_logic;
-            ir_bit_5     : out std_logic;
-            ir_bit_4     : out std_logic;
-            ir_bit_3     : out std_logic;
-            ir_bit_2     : out std_logic;
-            ir_bit_1     : out std_logic;
-            ir_bit_0     : out std_logic
+            phi1             : in std_logic;
+            reset            : in std_logic;
+            internal_bus_in  : in  std_logic_vector(7 downto 0);
+            internal_bus_out : out std_logic_vector(7 downto 0);
+            internal_bus_oe  : out std_logic;
+            load_ir          : in std_logic;
+            output_ir        : in std_logic;
+            ir_bit_7         : out std_logic;
+            ir_bit_6         : out std_logic;
+            ir_bit_5         : out std_logic;
+            ir_bit_4         : out std_logic;
+            ir_bit_3         : out std_logic;
+            ir_bit_2         : out std_logic;
+            ir_bit_1         : out std_logic;
+            ir_bit_0         : out std_logic
         );
     end component;
 
@@ -525,7 +533,9 @@ architecture structural of b8008 is
             external_data_in  : in  std_logic_vector(7 downto 0);
             external_data_out : out std_logic_vector(7 downto 0);
             external_data_oe  : out std_logic;
-            internal_bus      : inout std_logic_vector(7 downto 0);
+            internal_bus_in   : in  std_logic_vector(7 downto 0);
+            internal_bus_out  : out std_logic_vector(7 downto 0);
+            internal_bus_oe   : out std_logic;
             enable            : in std_logic;
             direction         : in std_logic
         );
@@ -539,9 +549,23 @@ architecture structural of b8008 is
     signal phi1 : std_logic;
     signal phi2 : std_logic;
 
-    -- Internal data bus (8-bit, tri-state)
-    -- Connected to 6 modules across phi1 and phi2 domains
+    -- Internal data bus - now a MUX instead of tri-state for synthesis compatibility
+    -- Each module has separate output and output-enable signals
     signal internal_bus : std_logic_vector(7 downto 0);
+
+    -- Per-module internal bus outputs and enables
+    signal mem_mux_bus_out    : std_logic_vector(7 downto 0);
+    signal mem_mux_bus_oe     : std_logic;
+    signal temp_reg_bus_out   : std_logic_vector(7 downto 0);
+    signal temp_reg_bus_oe    : std_logic;
+    signal alu_bus_out        : std_logic_vector(7 downto 0);
+    signal alu_bus_oe         : std_logic;
+    signal cond_flags_bus_out : std_logic_vector(7 downto 0);
+    signal cond_flags_bus_oe  : std_logic;
+    signal ir_bus_out         : std_logic_vector(7 downto 0);
+    signal ir_bus_oe          : std_logic;
+    signal io_buffer_bus_out  : std_logic_vector(7 downto 0);
+    signal io_buffer_bus_oe   : std_logic;
 
     -- State timing signals (from state_timing_generator)
     signal state_t1      : std_logic;
@@ -809,6 +833,16 @@ begin
     -- Interrupt clear signal (active when entering T1I state)
     int_clear <= state_t1i;
 
+    -- Internal bus MUX: replaces tri-state bus for synthesis compatibility
+    -- Priority encoding ensures only one driver at a time (control logic guarantees mutual exclusion)
+    internal_bus <= io_buffer_bus_out  when io_buffer_bus_oe  = '1' else
+                    mem_mux_bus_out    when mem_mux_bus_oe    = '1' else
+                    temp_reg_bus_out   when temp_reg_bus_oe   = '1' else
+                    alu_bus_out        when alu_bus_oe        = '1' else
+                    cond_flags_bus_out when cond_flags_bus_oe = '1' else
+                    ir_bus_out         when ir_bus_oe         = '1' else
+                    (others => '0');  -- Default: zeros when no driver active
+
     -- Instruction byte assembly from IR bit outputs (will be connected in Phase 9)
     -- For now, instr_byte signal will be driven by instruction_register outputs
     -- Note: load_ir signal now comes from memory_io_control (proper control flow)
@@ -1028,7 +1062,9 @@ begin
             rst_vector         => rst_vector,
             regfile_data_out   => regfile_data_out,
             regfile_data_in    => regfile_data_in,
-            internal_bus       => internal_bus,
+            internal_bus_in    => internal_bus,
+            internal_bus_out   => mem_mux_bus_out,
+            internal_bus_oe    => mem_mux_bus_oe,
             select_pc          => select_pc,
             select_stack       => select_stack,
             pc_load_from_regs  => pc_load_from_regs,
@@ -1170,7 +1206,9 @@ begin
             load_reg_b          => load_reg_b,
             output_reg_a        => output_reg_a,
             output_reg_b        => output_reg_b,
-            internal_bus        => internal_bus,
+            internal_bus_in     => internal_bus,
+            internal_bus_out    => temp_reg_bus_out,
+            internal_bus_oe     => temp_reg_bus_oe,
             reg_a_out           => reg_a_out,
             reg_b_out           => reg_b_out
         );
@@ -1181,42 +1219,44 @@ begin
 
     u_alu : alu
         port map (
-            phi2            => phi2,
-            accumulator_in  => accumulator,         -- Direct from register file's A register
-            reg_b_in        => reg_b_out,           -- From temp register b
-            opcode          => alu_opcode,           -- PPP field (bits 5:3) from instruction
-            is_inr_dcr      => instr_is_inr_dcr,    -- INR/DCR mode from instruction decoder
-            is_rotate       => instr_is_rotate,     -- Rotate mode from instruction decoder
-            carry_in        => flag_carry,
-            enable          => alu_enable,
-            output_result   => output_result,
-            internal_bus    => internal_bus,
-            result          => alu_result,
-            flag_carry      => alu_flag_carry,
-            flag_zero       => alu_flag_zero,
-            flag_sign       => alu_flag_sign,
-            flag_parity     => alu_flag_parity
+            phi2             => phi2,
+            accumulator_in   => accumulator,         -- Direct from register file's A register
+            reg_b_in         => reg_b_out,           -- From temp register b
+            opcode           => alu_opcode,          -- PPP field (bits 5:3) from instruction
+            is_inr_dcr       => instr_is_inr_dcr,    -- INR/DCR mode from instruction decoder
+            is_rotate        => instr_is_rotate,     -- Rotate mode from instruction decoder
+            carry_in         => flag_carry,
+            enable           => alu_enable,
+            output_result    => output_result,
+            internal_bus_out => alu_bus_out,
+            internal_bus_oe  => alu_bus_oe,
+            result           => alu_result,
+            flag_carry       => alu_flag_carry,
+            flag_zero        => alu_flag_zero,
+            flag_sign        => alu_flag_sign,
+            flag_parity      => alu_flag_parity
         );
 
     u_condition_flags : condition_flags
         port map (
-            phi2           => phi2,
-            reset          => reset,
-            flag_carry_in  => alu_flag_carry,
-            flag_zero_in   => alu_flag_zero,
-            flag_sign_in   => alu_flag_sign,
-            flag_parity_in => alu_flag_parity,
-            update_flags   => update_flags,
-            condition_code => condition_code,
-            test_true      => test_true,
-            eval_condition => eval_condition,
-            output_flags   => output_flags,
-            internal_bus   => internal_bus,
-            condition_met  => condition_met,
-            flag_carry     => flag_carry,
-            flag_zero      => flag_zero,
-            flag_sign      => flag_sign,
-            flag_parity    => flag_parity
+            phi2             => phi2,
+            reset            => reset,
+            flag_carry_in    => alu_flag_carry,
+            flag_zero_in     => alu_flag_zero,
+            flag_sign_in     => alu_flag_sign,
+            flag_parity_in   => alu_flag_parity,
+            update_flags     => update_flags,
+            condition_code   => condition_code,
+            test_true        => test_true,
+            eval_condition   => eval_condition,
+            output_flags     => output_flags,
+            internal_bus_out => cond_flags_bus_out,
+            internal_bus_oe  => cond_flags_bus_oe,
+            condition_met    => condition_met,
+            flag_carry       => flag_carry,
+            flag_zero        => flag_zero,
+            flag_sign        => flag_sign,
+            flag_parity      => flag_parity
         );
 
     -- ------------------------------------------------------------------------
@@ -1225,19 +1265,21 @@ begin
 
     u_instruction_register : instruction_register
         port map (
-            phi1         => phi1,
-            reset        => reset,
-            internal_bus => internal_bus,
-            load_ir      => load_ir,
-            output_ir    => ir_output_enable,
-            ir_bit_7     => instr_byte(7),
-            ir_bit_6     => instr_byte(6),
-            ir_bit_5     => instr_byte(5),
-            ir_bit_4     => instr_byte(4),
-            ir_bit_3     => instr_byte(3),
-            ir_bit_2     => instr_byte(2),
-            ir_bit_1     => instr_byte(1),
-            ir_bit_0     => instr_byte(0)
+            phi1             => phi1,
+            reset            => reset,
+            internal_bus_in  => internal_bus,
+            internal_bus_out => ir_bus_out,
+            internal_bus_oe  => ir_bus_oe,
+            load_ir          => load_ir,
+            output_ir        => ir_output_enable,
+            ir_bit_7         => instr_byte(7),
+            ir_bit_6         => instr_byte(6),
+            ir_bit_5         => instr_byte(5),
+            ir_bit_4         => instr_byte(4),
+            ir_bit_3         => instr_byte(3),
+            ir_bit_2         => instr_byte(2),
+            ir_bit_1         => instr_byte(1),
+            ir_bit_0         => instr_byte(0)
         );
 
     u_io_buffer : io_buffer
@@ -1245,7 +1287,9 @@ begin
             external_data_in  => data_bus_in,
             external_data_out => io_buffer_data_out,
             external_data_oe  => io_buffer_oe,
-            internal_bus      => internal_bus,
+            internal_bus_in   => internal_bus,
+            internal_bus_out  => io_buffer_bus_out,
+            internal_bus_oe   => io_buffer_bus_oe,
             enable            => io_buffer_enable,
             direction         => io_buffer_direction
         );

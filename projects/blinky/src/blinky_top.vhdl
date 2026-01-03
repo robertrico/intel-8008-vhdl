@@ -335,7 +335,8 @@ begin
     --------------------------------------------------------------------------------
     -- CPU Debug Outputs (directly connected)
     --------------------------------------------------------------------------------
-    cpu_d       <= data_sig;
+    -- SWAPPED: cpu_d now shows PC, dbg_pc now shows data bus
+    cpu_d       <= debug_pc_sig(7 downto 0);  -- PC low byte (swapped with data)
     cpu_s0      <= s0_sig;
     cpu_s1      <= s1_sig;
     cpu_s2      <= s2_sig;
@@ -354,6 +355,6 @@ begin
     dbg_bootstrap_done <= bootstrap_done;  -- Has bootstrap completed?
     dbg_state_half     <= state_half_sig;  -- Which half of 2-cycle state
     dbg_int_pending    <= int_pending_sig; -- CPU interrupt pending signal
-    dbg_pc             <= debug_pc_sig(7 downto 0);  -- PC low byte for address verification
+    dbg_pc             <= data_sig;  -- DATA BUS (swapped with PC for debugging)
 
 end architecture rtl;

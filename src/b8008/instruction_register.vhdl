@@ -26,8 +26,10 @@ entity instruction_register is
         -- Reset
         reset : in std_logic;
 
-        -- Bidirectional internal bus
-        internal_bus : inout std_logic_vector(7 downto 0);
+        -- Internal data bus (separate in/out for synthesis compatibility)
+        internal_bus_in  : in  std_logic_vector(7 downto 0);
+        internal_bus_out : out std_logic_vector(7 downto 0);
+        internal_bus_oe  : out std_logic;
 
         -- Load IR from bus (from control logic)
         load_ir : in std_logic;
@@ -61,14 +63,15 @@ begin
             ir <= (others => '0');
         elsif falling_edge(phi1) then
             if load_ir = '1' then
-                ir <= internal_bus;
-                report "IR: Loading from bus = 0x" & to_hstring(unsigned(internal_bus));
+                ir <= internal_bus_in;
+                report "IR: Loading from bus = 0x" & to_hstring(unsigned(internal_bus_in));
             end if;
         end if;
     end process;
 
-    -- Bidirectional internal bus control
-    internal_bus <= ir when output_ir = '1' else (others => 'Z');
+    -- Internal bus output control
+    internal_bus_out <= ir;
+    internal_bus_oe  <= output_ir;
 
     -- Output individual bits to decoder
     ir_bit_7 <= ir(7);

@@ -23,8 +23,10 @@ entity io_buffer is
         external_data_out : out std_logic_vector(7 downto 0);  -- Data to external
         external_data_oe  : out std_logic;                     -- Output enable for external bus
 
-        -- Internal data bus (to CPU internals) - still uses tri-state internally
-        internal_bus : inout std_logic_vector(7 downto 0);
+        -- Internal data bus (separate in/out for synthesis compatibility)
+        internal_bus_in  : in  std_logic_vector(7 downto 0);   -- Data from internal bus
+        internal_bus_out : out std_logic_vector(7 downto 0);   -- Data to internal bus
+        internal_bus_oe  : out std_logic;                      -- Output enable for internal bus
 
         -- Control from Memory and I/O Control block
         enable : in std_logic;          -- Enable buffer (0 = tri-state both sides)
@@ -39,13 +41,14 @@ begin
     -- Data transfer with direction control
     -- When enable=1 and direction=0: external data -> internal bus (READ)
     -- When enable=1 and direction=1: internal bus -> external data (WRITE)
-    -- When enable=0: both sides tri-stated/disabled
+    -- When enable=0: both sides disabled
 
     -- Transfer external to internal (READ) - drive internal bus
-    internal_bus <= external_data_in when (enable = '1' and direction = '0') else (others => 'Z');
+    internal_bus_out <= external_data_in;
+    internal_bus_oe  <= enable and (not direction);  -- Enable when reading from external
 
     -- Transfer internal to external (WRITE) - output data and enable
-    external_data_out <= internal_bus;  -- Always output internal bus value
-    external_data_oe  <= '1' when (enable = '1' and direction = '1') else '0';
+    external_data_out <= internal_bus_in;  -- Output internal bus value
+    external_data_oe  <= enable and direction;  -- Enable when writing to external
 
 end architecture rtl;

@@ -35,8 +35,10 @@ entity mem_mux_refresh is
         regfile_data_out : in std_logic_vector(7 downto 0);   -- From register file
         regfile_data_in  : out std_logic_vector(7 downto 0);  -- To register file
 
-        -- Internal 8-bit data bus
-        internal_bus : inout std_logic_vector(7 downto 0);
+        -- Internal data bus (separate in/out for synthesis compatibility)
+        internal_bus_in  : in  std_logic_vector(7 downto 0);
+        internal_bus_out : out std_logic_vector(7 downto 0);
+        internal_bus_oe  : out std_logic;
 
         -- Control signals from Memory/I/O Control
         select_pc    : in std_logic;  -- Use PC address
@@ -68,12 +70,13 @@ begin
                   to_unsigned(0, 8) & unsigned(rst_vector) & to_unsigned(0, 3) when pc_load_from_rst = '1' else
                   unsigned(reg_a(5 downto 0) & reg_b);  -- Default: from temp registers (JMP/CALL)
 
-    -- Register file to internal bus routing (tri-state)
+    -- Register file to internal bus routing
     -- When regfile_to_bus='1', register file drives the bus
-    internal_bus <= regfile_data_out when regfile_to_bus = '1' else (others => 'Z');
+    internal_bus_out <= regfile_data_out;
+    internal_bus_oe  <= regfile_to_bus;
 
     -- Internal bus to register file routing
     -- When bus_to_regfile='1', bus data goes to register file
-    regfile_data_in <= internal_bus when bus_to_regfile = '1' else (others => '0');
+    regfile_data_in <= internal_bus_in when bus_to_regfile = '1' else (others => '0');
 
 end architecture rtl;
