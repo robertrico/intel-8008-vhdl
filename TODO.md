@@ -46,32 +46,41 @@ The b8008 has been successfully validated on real FPGA hardware:
 
 ## High Priority
 
-### [ ] UART Hardware Integration
-Wire FTDI USB-to-serial adapter to FPGA for real terminal I/O.
+### [x] UART Hardware Integration (Implementation Complete - January 2026)
+UART peripheral integrated with b8008 CPU for real terminal I/O.
+
+**Implementation Status:**
+- [x] Added I/O port interface to `b8008_top.vhdl`:
+  - `io_port_in` (8-bit) - External input data for INP instructions
+  - `io_port_in_select` (3-bit) - Which port uses external input
+  - `io_port_in_enable` - Enables external input for selected port
+  - `io_port_out` (8-bit) - Data being written by OUT instruction
+  - `io_port_num_out` (5-bit) - Full port number (0-31)
+  - `io_port_write` - Strobe pulses for one phi2 cycle on OUT T3
+- [x] Implemented `hello_uart_top.vhdl`:
+  - Instantiates b8008_top with UART hooks
+  - Instantiates usart component at 115200 baud
+  - OUT 9 triggers UART TX
+  - INP 1 returns UART RX data (bit 7=ready, bits 6:0=data)
+- [x] Synthesized and built bitstream (8584 FFs, 12504 LUTs)
+- [x] All 24 regression tests pass
 
 **Hardware Setup:**
-- [ ] Identify available FPGA pins for TX/RX (3.3V compatible)
-- [ ] Add UART pin constraints to LPF file
+- [x] Identify available FPGA pins for TX/RX (3.3V compatible) - B19 (TX), B12 (RX)
+- [x] Add UART pin constraints to LPF file - `projects/hello_uart/constraints/hello_uart.lpf`
 - [ ] Wire FTDI TX → FPGA RX, FTDI RX ← FPGA TX, common GND
-
-**Project Creation:**
-- [ ] Create `uart_test` project from blinky template
-- [ ] Integrate `b8008_uart_top.vhdl` (already has UART support)
-- [ ] Test TX first with simple "Hello" output at 2400 baud
+- [ ] Test TX output at 115200 baud on real hardware
 - [ ] Test RX echo (read char, write char back)
 
-**Existing Components (ready to use):**
-- `src/components/uart_tx.vhdl` - Hardware UART transmitter
-- `src/components/uart_rx.vhdl` - Hardware UART receiver (16x oversampling)
-- `src/components/bitbang_uart_adapter.vhdl` - Legacy software bridge
-- `src/b8008/b8008_uart_top.vhdl` - Complete system with UART I/O
-- `test_programs/samples/hello_8008.asm` - Serial output test (works in simulation)
+**Project Files:**
+- `projects/hello_uart/` - UART demo project (ready for hardware test)
+- `projects/hello_uart/hello_uart.asm` - Sends "Hello, 8008!" via OUT 9
+- `projects/hello_uart/constraints/hello_uart.lpf` - Pin assignments ready
 
 **I/O Port Mapping:**
-- Port 0 (IN): Bit-bang serial input (legacy software)
 - Port 1 (IN): Direct UART RX (bit 7=ready, bits 6:0=data)
-- Port 8 (OUT): Bit-bang serial output (legacy software)
-- Port 9 (OUT): Direct UART TX (sends byte immediately)
+- Port 9 (OUT): Direct UART TX (sends byte immediately at 115200 baud)
+- Port 8 (OUT): LED bank (directly active, accent active low)
 
 ### [ ] Basic 8008 Monitor
 Once UART TX/RX is proven, create a simple monitor program.

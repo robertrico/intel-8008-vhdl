@@ -73,7 +73,18 @@ entity b8008_top is
         debug_io_port_9     : out std_logic_vector(7 downto 0);
         debug_io_port_10    : out std_logic_vector(7 downto 0);
         -- State timing debug
-        debug_state_half    : out std_logic   -- Which half of 2-cycle state (0=first, 1=second)
+        debug_state_half    : out std_logic;  -- Which half of 2-cycle state (0=first, 1=second)
+
+        -- External I/O port interface (directly active directly active accent active low accent active low accent active low for UART, etc.)
+        -- Input port interface: external devices provide data for INP instructions
+        io_port_in          : in  std_logic_vector(7 downto 0) := x"00";  -- External input data
+        io_port_in_select   : in  std_logic_vector(2 downto 0) := "000";  -- Which port(s) use external input
+        io_port_in_enable   : in  std_logic := '0';                       -- '1' = use io_port_in for selected port
+
+        -- Output port interface: signals when OUT instruction executes
+        io_port_out         : out std_logic_vector(7 downto 0);  -- Data written by OUT instruction
+        io_port_num_out     : out std_logic_vector(4 downto 0);  -- Full port number (0-31)
+        io_port_write       : out std_logic                      -- Strobe: '1' for one phi2 cycle during OUT T3
     );
 end entity b8008_top;
 
@@ -201,6 +212,10 @@ architecture structural of b8008_top is
 
     -- External address latches (like real 8008 external hardware)
     signal latched_address : std_logic_vector(13 downto 0) := (others => '0');
+
+    -- External I/O port interface signals
+    signal io_write_strobe : std_logic := '0';
+    signal io_full_port_num : std_logic_vector(4 downto 0) := (others => '0');
 
     -- T-state decode from S[2:0]
     signal is_t1  : std_logic;
@@ -395,8 +410,10 @@ begin
     io_port_num <= latched_address(11 downto 9);  -- Opcode bits 3:1 (port number)
 
     -- Input port data multiplexer
-    -- Returns different test values based on port number for INP verification
-    io_input_data <= x"55" when io_port_num = "000" else  -- Port 0: 0x55
+    -- When io_port_in_enable='1' and port matches io_port_in_select, use external input
+    -- Otherwise return test values for INP verification
+    io_input_data <= io_port_in when (io_port_in_enable = '1' and io_port_num = io_port_in_select) else
+                     x"55" when io_port_num = "000" else  -- Port 0: 0x55
                      x"AA" when io_port_num = "001" else  -- Port 1: 0xAA
                      x"42" when io_port_num = "010" else  -- Port 2: 0x42 ('B')
                      x"03" when io_port_num = "011" else  -- Port 3: 0x03
@@ -405,11 +422,17 @@ begin
                      x"06" when io_port_num = "110" else  -- Port 6: 0x06
                      x"07";                               -- Port 7: 0x07
 
+    -- Calculate full port number (0-31) from address bits
+    -- RR field (addr 13:12) gives base: 00=ports 0-7, 01=8-15, 10=16-23, 11=24-31
+    -- MMM field (addr 11:9) gives offset within group
+    io_full_port_num <= latched_address(13 downto 12) & io_port_num;
+
     -- Output port latches - capture data written by OUT instruction
     -- OUT instruction: CPU drives data_bus with accumulator value during T3
     -- Latch on phi2 (data is set up on phi2 rising edge of T3)
     process(phi2, reset)
         variable port_base : integer;
+        variable is_out_cycle : std_logic;
     begin
         if reset = '1' then
             io_output_port_8  <= (others => '0');
@@ -417,12 +440,19 @@ begin
             io_output_port_10 <= (others => '0');
             checkpoint_id <= 0;
             last_checkpoint_pc <= (others => '1');
+            io_write_strobe <= '0';
         elsif rising_edge(phi2) then
+            -- Default: strobe off
+            io_write_strobe <= '0';
+
             -- Latch output data during T3 of I/O write (OUT instruction)
             -- OUT uses ports 8-31 (RR field non-zero in opcode 01RRMMM1)
             -- RR field is opcode bits 5:4 which map to address bits 13:12
             -- INP has RR=00, OUT has RR≠00
-            if is_io = '1' and is_t3 = '1' and (latched_address(13) = '1' or latched_address(12) = '1') then
+            is_out_cycle := is_io and is_t3 and (latched_address(13) or latched_address(12));
+            if is_out_cycle = '1' then
+                -- Generate write strobe for external peripherals
+                io_write_strobe <= '1';
                 -- Calculate actual port number: base = RR * 8, port = base + MMM
                 -- RR=01 -> ports 8-15, RR=10 -> ports 16-23, RR=11 -> ports 24-31
                 port_base := to_integer(unsigned(latched_address(13 downto 12))) * 8;
@@ -511,5 +541,10 @@ begin
     debug_io_port_8  <= io_output_port_8;
     debug_io_port_9  <= io_output_port_9;
     debug_io_port_10 <= io_output_port_10;
+
+    -- External I/O port interface outputs
+    io_port_out     <= data_bus;         -- Data being written (valid when io_port_write='1')
+    io_port_num_out <= io_full_port_num; -- Port number (0-31)
+    io_port_write   <= io_write_strobe;  -- Write strobe (one phi2 cycle during OUT T3)
 
 end architecture structural;

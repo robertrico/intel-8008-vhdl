@@ -118,7 +118,9 @@ architecture structural of b8008_uart_top is
             reset          : in std_logic;
             phi1_out       : out std_logic;
             phi2_out       : out std_logic;
-            data_bus       : inout std_logic_vector(7 downto 0);
+            data_bus_in    : in  std_logic_vector(7 downto 0);
+            data_bus_out   : out std_logic_vector(7 downto 0);
+            data_bus_oe    : out std_logic;
             sync_out       : out std_logic;
             s0_out         : out std_logic;
             s1_out         : out std_logic;
@@ -143,7 +145,9 @@ architecture structural of b8008_uart_top is
             debug_flag_carry    : out std_logic;
             debug_flag_zero     : out std_logic;
             debug_flag_sign     : out std_logic;
-            debug_flag_parity   : out std_logic
+            debug_flag_parity   : out std_logic;
+            -- State timing debug
+            debug_state_half    : out std_logic
         );
     end component;
 
@@ -204,9 +208,18 @@ architecture structural of b8008_uart_top is
 
     -- Internal signals
     signal address_bus : std_logic_vector(13 downto 0);
-    signal data_bus    : std_logic_vector(7 downto 0);
+    signal data_bus    : std_logic_vector(7 downto 0);  -- Combined data bus (external bidirectional)
+    signal cpu_data_in  : std_logic_vector(7 downto 0); -- Data TO CPU
+    signal cpu_data_out : std_logic_vector(7 downto 0); -- Data from CPU
+    signal cpu_data_oe  : std_logic;                    -- CPU output enable
     signal phi1        : std_logic;
     signal phi2        : std_logic;
+
+    -- Internal copies of state signals (VHDL-2008: cannot read from output ports)
+    signal s0_int       : std_logic;
+    signal s1_int       : std_logic;
+    signal s2_int       : std_logic;
+    signal sync_int     : std_logic;
 
     -- Memory signals
     signal rom_cs_n    : std_logic;
@@ -280,23 +293,32 @@ architecture structural of b8008_uart_top is
 begin
 
     -- ========================================================================
+    -- OUTPUT PORT ASSIGNMENTS (VHDL-2008 fix)
+    -- ========================================================================
+    -- Drive output ports from internal signals
+    s0_out   <= s0_int;
+    s1_out   <= s1_int;
+    s2_out   <= s2_int;
+    sync_out <= sync_int;
+
+    -- ========================================================================
     -- EXTERNAL ADDRESS LATCHING (Real 8008 Hardware Behavior)
     -- ========================================================================
     -- In real 8008, address is output on 8 bidirectional pins during T1/T2
     -- External latches capture the address so data can use same pins during T3
     -- Here we simulate this with internal latches
 
-    -- Decode T-states from status signals
+    -- Decode T-states from status signals (use internal signals)
     -- T1: S2=0, S1=1, S0=0 (binary 010)
     -- T2: S2=1, S1=0, S0=0 (binary 100)
     -- T3: S2=0, S1=0, S0=1 (binary 001)
     -- T4: S2=1, S1=1, S0=1 (binary 111)
     -- T5: S2=1, S1=0, S0=1 (binary 101)
-    is_t1 <= '1' when (s2_out = '0' and s1_out = '1' and s0_out = '0') else '0';
-    is_t2 <= '1' when (s2_out = '1' and s1_out = '0' and s0_out = '0') else '0';
-    is_t3 <= '1' when (s2_out = '0' and s1_out = '0' and s0_out = '1') else '0';
-    is_t4 <= '1' when (s2_out = '1' and s1_out = '1' and s0_out = '1') else '0';
-    is_t5 <= '1' when (s2_out = '1' and s1_out = '0' and s0_out = '1') else '0';
+    is_t1 <= '1' when (s2_int = '0' and s1_int = '1' and s0_int = '0') else '0';
+    is_t2 <= '1' when (s2_int = '1' and s1_int = '0' and s0_int = '0') else '0';
+    is_t3 <= '1' when (s2_int = '0' and s1_int = '0' and s0_int = '1') else '0';
+    is_t4 <= '1' when (s2_int = '1' and s1_int = '1' and s0_int = '1') else '0';
+    is_t5 <= '1' when (s2_int = '1' and s1_int = '0' and s0_int = '1') else '0';
 
     -- Latch address during T1 and T2 (when CPU outputs address on data bus)
     -- Real 8008 behavior: address is time-multiplexed on 8-bit data bus
@@ -309,11 +331,11 @@ begin
         if reset = '1' then
             latched_address <= (others => '0');
         elsif rising_edge(phi1) then
-            if is_t1 = '1' and sync_out = '1' then
+            if is_t1 = '1' and sync_int = '1' then
                 -- T1 first half (SYNC high): Latch lower 8 bits from data bus
                 latched_address(7 downto 0) <= data_bus;
                 report "ADDR_LATCH: T1 lower byte = 0x" & to_hstring(unsigned(data_bus));
-            elsif is_t2 = '1' and sync_out = '1' then
+            elsif is_t2 = '1' and sync_int = '1' then
                 -- T2 first half (SYNC high): Latch upper 6 bits from data bus D[5:0]
                 latched_address(13 downto 8) <= data_bus(5 downto 0);
                 report "ADDR_LATCH: T2 upper byte = 0x" & to_hstring(unsigned(data_bus(5 downto 0))) &
@@ -327,15 +349,19 @@ begin
     -- BOOTSTRAP CONTROL
     -- ========================================================================
 
-    -- Set bootstrap_done flag after first T1I completes
-    -- We detect when we LEAVE T1I state (transition to T2)
+    -- Set bootstrap_done flag after first T1I state is seen
+    -- T1I: S2=1, S1=1, S0=0 (interrupt acknowledge cycle)
+    -- We set bootstrap_done AFTER seeing T1I, not just any T2
+    -- This ensures RST 0 is jammed on the data bus during T1I
     process(phi1, reset)
     begin
         if reset = '1' then
             bootstrap_done <= '0';
         elsif rising_edge(phi1) then
-            -- When we're in T2 and bootstrap isn't done yet, T1I just completed
-            if bootstrap_done = '0' and s2_out = '1' and s1_out = '0' and s0_out = '0' then
+            -- Set bootstrap_done when we SEE T1I state (S2=1, S1=1, S0=0)
+            -- The RST 0 instruction will be jammed during this T1I
+            -- Setting done here prevents jamming on subsequent interrupts
+            if bootstrap_done = '0' and s2_int = '1' and s1_int = '1' and s0_int = '0' then
                 bootstrap_done <= '1';
             end if;
         end if;
@@ -351,11 +377,13 @@ begin
             reset       => reset,
             phi1_out    => phi1,
             phi2_out    => phi2,
-            data_bus    => data_bus,
-            sync_out    => sync_out,
-            s0_out      => s0_out,
-            s1_out      => s1_out,
-            s2_out      => s2_out,
+            data_bus_in  => cpu_data_in,     -- CPU reads from input-only path
+            data_bus_out => cpu_data_out,    -- CPU outputs to separate signal
+            data_bus_oe  => cpu_data_oe,     -- CPU output enable
+            sync_out    => sync_int,
+            s0_out      => s0_int,
+            s1_out      => s1_int,
+            s2_out      => s2_int,
             ready_in            => '1',      -- Always ready (no wait states)
             interrupt           => interrupt,
             debug_reg_a         => debug_reg_a,
@@ -374,7 +402,8 @@ begin
             debug_flag_carry    => debug_flag_carry,
             debug_flag_zero     => debug_flag_zero,
             debug_flag_sign     => debug_flag_sign,
-            debug_flag_parity   => debug_flag_parity
+            debug_flag_parity   => debug_flag_parity,
+            debug_state_half    => open      -- Not used in this top-level
         );
 
     -- ========================================================================
@@ -642,20 +671,29 @@ begin
         end if;
     end process;
 
-    -- Connect memory/IO data to CPU data bus
-    -- Real 8008 behavior:
-    --   T1: CPU outputs address lower byte on data bus (external hardware latches it)
-    --   T2: CPU outputs address upper byte on data bus (external hardware latches it)
-    --   T3-T5: External hardware (ROM/RAM/IO) drives data bus for CPU to read
+    -- ========================================================================
+    -- DATA BUS BRIDGE
+    -- ========================================================================
+    -- The b8008 core now uses separate data_bus_in and data_bus_out signals
+    -- (required for GHDL synthesis). We must avoid combinational loops:
+    --   - cpu_data_in reads from external sources (ROM/RAM/IO) directly
+    --   - cpu_data_out drives data_bus during T1/T2 (for address output)
+    --   - data_bus is used for external peripherals (UART adapter, etc.)
+
+    -- CPU input path - reads from external sources (no loop through data_bus)
     -- During T1I (interrupt acknowledge), jam RST 0 instruction (0x05) for bootstrap
     -- Only jam during FIRST T1I after reset (bootstrap), then let ROM take over
     -- IMPORTANT: Check is_io FIRST since I/O cycles have their own address format
-    -- (latched_address may fall in ROM/RAM range but it's actually I/O port data)
-    data_bus <= x"05" when (s2_out = '1' and s1_out = '1' and s0_out = '0' and bootstrap_done = '0') else  -- T1I bootstrap: jam RST 0
-                io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- I/O input drives bus during T3/T4/T5 (check first!)
-                rom_data when (rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM drives bus during T3/T4/T5
-                ram_data_out when (ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM drives bus during T3/T4/T5
-                (others => 'Z');  -- Tri-state during T1/T2 (CPU drives address)
+    -- T1I detection: S2=1, S1=1, S0=0 (state 110)
+    cpu_data_in <= x"05" when (s2_int = '1' and s1_int = '1' and s0_int = '0' and bootstrap_done = '0') else  -- T1I bootstrap: jam RST 0
+                   io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- I/O input during T3/T4/T5 (check first!)
+                   rom_data when (rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM during T3/T4/T5
+                   ram_data_out when (ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM during T3/T4/T5
+                   x"00";  -- Default value
+
+    -- Data bus output path - CPU drives this for address output and external peripherals
+    -- During T1/T2, CPU outputs address bytes; during T3+ for writes, CPU outputs data
+    data_bus <= cpu_data_out;
 
     -- ========================================================================
     -- DEBUG OUTPUTS
