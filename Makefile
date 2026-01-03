@@ -625,4 +625,4 @@ list-projects:
 
 clean:
 	@rm -rf $(BUILD_DIR) $(SYNTH_DIR)
-	@rm -f *.cf *.o work-obj*.cf
+	@rm -f *.cf *.o work-obj*.cf *_tb
