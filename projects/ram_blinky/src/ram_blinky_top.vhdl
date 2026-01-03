@@ -1,0 +1,263 @@
+--------------------------------------------------------------------------------
+-- RAM Blinky Top Level - b8008 RAM Read/Write Test
+--------------------------------------------------------------------------------
+-- Tests RAM write and read operations with visible LED results
+-- HEARTBEAT DEPENDS ON RAM: If RAM fails, blinking stops!
+--
+-- Based on blinky_top with minimal changes:
+--   - Uses b8008_top (shared CPU+ROM+RAM system)
+--   - Generates bootstrap interrupt on reset
+--   - Maps I/O port 8 to LEDs
+--   - Runs ram_blinky.asm program
+--
+-- Copyright (c) 2025 Robert Rico
+--------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity ram_blinky_top is
+    port (
+        -- System clock (100 MHz LVDS)
+        clk         : in  std_logic;
+
+        -- DIP switches (directly active - active low means ON='0')
+        sw          : in  std_logic_vector(7 downto 0);
+
+        -- Button input
+        speed_btn   : in  std_logic;
+
+        -- LED outputs (directly active - directly active, accent active low)
+        led         : out std_logic_vector(7 downto 0);
+        led_M20     : out std_logic;
+        led_L18     : out std_logic;
+
+        -- CPU debug outputs (directly from b8008 for logic analyzer)
+        cpu_d       : out std_logic_vector(7 downto 0);  -- Data bus
+        cpu_s0      : out std_logic;
+        cpu_s1      : out std_logic;
+        cpu_s2      : out std_logic;
+        cpu_sync    : out std_logic;
+        cpu_phi1    : out std_logic;
+        cpu_phi2    : out std_logic;
+        cpu_ready   : out std_logic;
+        cpu_int     : out std_logic;
+
+        -- Additional debug outputs for oscilloscope/logic analyzer
+        dbg_reset_int      : out std_logic;
+        dbg_bootstrap_int  : out std_logic;
+        dbg_bootstrap_done : out std_logic;
+        dbg_state_half     : out std_logic;
+        dbg_int_pending    : out std_logic;
+        dbg_pc             : out std_logic_vector(7 downto 0)
+    );
+end entity ram_blinky_top;
+
+architecture rtl of ram_blinky_top is
+
+    --------------------------------------------------------------------------------
+    -- Component: b8008_top (CPU with ROM and RAM)
+    --------------------------------------------------------------------------------
+    component b8008_top is
+        generic (
+            ROM_FILE : string := "test_programs/alu_test_as.mem"
+        );
+        port (
+            clk_in      : in std_logic;
+            reset       : in std_logic;
+            interrupt   : in std_logic;
+            int_vector  : in std_logic_vector(2 downto 0);
+            phi1_out    : out std_logic;
+            phi2_out    : out std_logic;
+            sync_out    : out std_logic;
+            s0_out      : out std_logic;
+            s1_out      : out std_logic;
+            s2_out      : out std_logic;
+            address_out : out std_logic_vector(13 downto 0);
+            data_out    : out std_logic_vector(7 downto 0);
+            ram_byte_0  : out std_logic_vector(7 downto 0);
+            debug_reg_a         : out std_logic_vector(7 downto 0);
+            debug_reg_b         : out std_logic_vector(7 downto 0);
+            debug_reg_c         : out std_logic_vector(7 downto 0);
+            debug_reg_d         : out std_logic_vector(7 downto 0);
+            debug_reg_e         : out std_logic_vector(7 downto 0);
+            debug_reg_h         : out std_logic_vector(7 downto 0);
+            debug_reg_l         : out std_logic_vector(7 downto 0);
+            debug_cycle         : out std_logic_vector(1 downto 0);
+            debug_pc            : out std_logic_vector(13 downto 0);
+            debug_ir            : out std_logic_vector(7 downto 0);
+            debug_needs_address : out std_logic;
+            debug_int_pending   : out std_logic;
+            debug_flag_carry    : out std_logic;
+            debug_flag_zero     : out std_logic;
+            debug_flag_sign     : out std_logic;
+            debug_flag_parity   : out std_logic;
+            debug_io_port_8     : out std_logic_vector(7 downto 0);
+            debug_io_port_9     : out std_logic_vector(7 downto 0);
+            debug_io_port_10    : out std_logic_vector(7 downto 0);
+            debug_state_half    : out std_logic
+        );
+    end component;
+
+    --------------------------------------------------------------------------------
+    -- Internal Signals
+    --------------------------------------------------------------------------------
+    signal por_active   : std_logic := '1';
+    signal reset_sync   : std_logic_vector(2 downto 0) := (others => '1');
+    signal reset_sw     : std_logic;
+    signal reset_int    : std_logic;
+
+    signal phi1         : std_logic;
+    signal phi2         : std_logic;
+    signal sync_sig     : std_logic;
+    signal s0_sig       : std_logic;
+    signal s1_sig       : std_logic;
+    signal s2_sig       : std_logic;
+
+    signal bootstrap_int     : std_logic := '0';
+    signal bootstrap_done    : std_logic := '0';
+    signal bootstrap_counter : unsigned(7 downto 0) := (others => '0');
+
+    signal address_sig      : std_logic_vector(13 downto 0);
+    signal data_sig         : std_logic_vector(7 downto 0);
+    signal int_pending_sig  : std_logic;
+
+    signal io_port_8    : std_logic_vector(7 downto 0);
+    signal io_port_9    : std_logic_vector(7 downto 0);
+    signal io_port_10   : std_logic_vector(7 downto 0);
+
+    signal debug_reg_a, debug_reg_b, debug_reg_c : std_logic_vector(7 downto 0);
+    signal debug_reg_d, debug_reg_e, debug_reg_h, debug_reg_l : std_logic_vector(7 downto 0);
+    signal debug_cycle  : std_logic_vector(1 downto 0);
+    signal debug_pc_sig : std_logic_vector(13 downto 0);
+    signal debug_ir     : std_logic_vector(7 downto 0);
+    signal debug_needs_address : std_logic;
+    signal debug_flag_carry, debug_flag_zero, debug_flag_sign, debug_flag_parity : std_logic;
+    signal ram_byte_0   : std_logic_vector(7 downto 0);
+    signal state_half_sig : std_logic;
+
+    signal clk_counter : unsigned(25 downto 0) := (others => '0');
+
+begin
+
+    --------------------------------------------------------------------------------
+    -- Power-On Reset (POR)
+    --------------------------------------------------------------------------------
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            clk_counter <= clk_counter + 1;
+            if clk_counter(19) = '1' then
+                por_active <= '0';
+            end if;
+        end if;
+    end process;
+
+    --------------------------------------------------------------------------------
+    -- Reset Synchronization
+    --------------------------------------------------------------------------------
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            reset_sync <= reset_sync(1 downto 0) & sw(0);
+        end if;
+    end process;
+
+    reset_sw <= reset_sync(2);
+    reset_int <= por_active or reset_sw;
+
+    --------------------------------------------------------------------------------
+    -- Bootstrap Interrupt Control
+    --------------------------------------------------------------------------------
+    process(phi2, reset_int)
+    begin
+        if reset_int = '1' then
+            bootstrap_int     <= '0';
+            bootstrap_done    <= '0';
+            bootstrap_counter <= (others => '0');
+        elsif rising_edge(phi2) then
+            if bootstrap_done = '0' then
+                bootstrap_int <= '1';
+                bootstrap_counter <= bootstrap_counter + 1;
+                if bootstrap_counter >= 16 then
+                    if s2_sig = '1' and s1_sig = '1' and s0_sig = '0' then
+                        bootstrap_int  <= '0';
+                        bootstrap_done <= '1';
+                    end if;
+                end if;
+            end if;
+        end if;
+    end process;
+
+    --------------------------------------------------------------------------------
+    -- b8008 CPU System Instance
+    --------------------------------------------------------------------------------
+    u_system : b8008_top
+        generic map (
+            ROM_FILE => "./ram_blinky.mem"
+        )
+        port map (
+            clk_in      => clk,
+            reset       => reset_int,
+            interrupt   => bootstrap_int,
+            int_vector  => "000",
+            phi1_out    => phi1,
+            phi2_out    => phi2,
+            sync_out    => sync_sig,
+            s0_out      => s0_sig,
+            s1_out      => s1_sig,
+            s2_out      => s2_sig,
+            address_out => address_sig,
+            data_out    => data_sig,
+            ram_byte_0  => ram_byte_0,
+            debug_reg_a         => debug_reg_a,
+            debug_reg_b         => debug_reg_b,
+            debug_reg_c         => debug_reg_c,
+            debug_reg_d         => debug_reg_d,
+            debug_reg_e         => debug_reg_e,
+            debug_reg_h         => debug_reg_h,
+            debug_reg_l         => debug_reg_l,
+            debug_cycle         => debug_cycle,
+            debug_pc            => debug_pc_sig,
+            debug_ir            => debug_ir,
+            debug_needs_address => debug_needs_address,
+            debug_int_pending   => int_pending_sig,
+            debug_flag_carry    => debug_flag_carry,
+            debug_flag_zero     => debug_flag_zero,
+            debug_flag_sign     => debug_flag_sign,
+            debug_flag_parity   => debug_flag_parity,
+            debug_io_port_8     => io_port_8,
+            debug_io_port_9     => io_port_9,
+            debug_io_port_10    => io_port_10,
+            debug_state_half    => state_half_sig
+        );
+
+    --------------------------------------------------------------------------------
+    -- LED Outputs
+    --------------------------------------------------------------------------------
+    led <= io_port_8;
+    led_M20 <= not int_pending_sig;
+    led_L18 <= reset_int;
+
+    --------------------------------------------------------------------------------
+    -- CPU Debug Outputs
+    --------------------------------------------------------------------------------
+    cpu_d       <= debug_pc_sig(7 downto 0);
+    cpu_s0      <= s0_sig;
+    cpu_s1      <= s1_sig;
+    cpu_s2      <= s2_sig;
+    cpu_sync    <= sync_sig;
+    cpu_phi1    <= phi1;
+    cpu_phi2    <= phi2;
+    cpu_ready   <= '1';
+    cpu_int     <= bootstrap_int;
+
+    dbg_reset_int      <= reset_int;
+    dbg_bootstrap_int  <= bootstrap_int;
+    dbg_bootstrap_done <= bootstrap_done;
+    dbg_state_half     <= state_half_sig;
+    dbg_int_pending    <= int_pending_sig;
+    dbg_pc             <= data_sig;
+
+end architecture rtl;
