@@ -11,8 +11,9 @@ TOP := blinky_top
 LPF := constraints/blinky.lpf
 ASM := blinky.asm
 
+# Only use blinky_top.vhdl from local src, plus USART component
+# Must be defined BEFORE including project.mk so ALL_SRCS picks it up
+PROJECT_SRCS := ../../src/components/usart.vhdl ./src/blinky_top.vhdl
+
 # Include common project rules
 include ../project.mk
-
-# Only use blinky_top.vhdl from local src
-PROJECT_SRCS := ./src/blinky_top.vhdl

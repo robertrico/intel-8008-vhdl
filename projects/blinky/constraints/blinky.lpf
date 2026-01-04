@@ -47,12 +47,36 @@ IOBUF PORT "led[6]" IO_TYPE=LVCMOS25;
 LOCATE COMP "led[7]" SITE "F16";
 IOBUF PORT "led[7]" IO_TYPE=LVCMOS25;
 
-LOCATE COMP "cpu_d[6]" SITE "A14";
+# ====================================================================================
+# CPU Data Bus (directly wired to logic analyzer)
+# ====================================================================================
+# Same pins as hello_uart/io_uart
+
+LOCATE COMP "cpu_d[0]" SITE "D6";
+IOBUF PORT "cpu_d[0]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[1]" SITE "E7";
+IOBUF PORT "cpu_d[1]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[2]" SITE "D7";
+IOBUF PORT "cpu_d[2]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[3]" SITE "B6";
+IOBUF PORT "cpu_d[3]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[4]" SITE "E9";
+IOBUF PORT "cpu_d[4]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[5]" SITE "D9";
+IOBUF PORT "cpu_d[5]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[6]" SITE "B8";
 IOBUF PORT "cpu_d[6]" IO_TYPE=LVCMOS33 DRIVE=12;
 
-LOCATE COMP "cpu_d[7]" SITE "C14";
+LOCATE COMP "cpu_d[7]" SITE "C8";
 IOBUF PORT "cpu_d[7]" IO_TYPE=LVCMOS33 DRIVE=12;
 
+# ====================================================================================
 # 8008 State Outputs (S0, S1, S2) - 3 pins
 LOCATE COMP "cpu_s0" SITE "D14";
 IOBUF PORT "cpu_s0" IO_TYPE=LVCMOS33;
@@ -106,31 +130,6 @@ IOBUF PORT "dbg_state_half" IO_TYPE=LVCMOS33 DRIVE=12;
 # Interrupt pending from CPU
 LOCATE COMP "dbg_int_pending" SITE "E6";
 IOBUF PORT "dbg_int_pending" IO_TYPE=LVCMOS33 DRIVE=12;
-
-# Program Counter low byte (PC[7:0]) for address verification
-LOCATE COMP "dbg_pc[0]" SITE "D6";
-IOBUF PORT "dbg_pc[0]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "dbg_pc[1]" SITE "E7";
-IOBUF PORT "dbg_pc[1]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "dbg_pc[2]" SITE "D7";
-IOBUF PORT "dbg_pc[2]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "dbg_pc[3]" SITE "B6";
-IOBUF PORT "dbg_pc[3]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "dbg_pc[4]" SITE "E9";
-IOBUF PORT "dbg_pc[4]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "dbg_pc[5]" SITE "D9";
-IOBUF PORT "dbg_pc[5]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "dbg_pc[6]" SITE "B8";
-IOBUF PORT "dbg_pc[6]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "dbg_pc[7]" SITE "C8";
-IOBUF PORT "dbg_pc[7]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 # ====================================================================================
 # DIP Switches (SW3)
@@ -187,43 +186,19 @@ LOCATE COMP "led_L18" SITE "L18";
 IOBUF PORT "led_L18" IO_TYPE=LVCMOS25;
 
 # ====================================================================================
-# CPU Data Bus (remaining bits)
+# UART Interface (FTDI USB-to-serial connection)
 # ====================================================================================
-# Using PMOD header pins (from J30 pin table)
-LOCATE COMP "cpu_d[0]" SITE "B19";
-IOBUF PORT "cpu_d[0]" IO_TYPE=LVCMOS33 DRIVE=12;
+# FPGA TX -> FTDI RX (B19)
+# FPGA RX <- FTDI TX (B12)
 
-LOCATE COMP "cpu_d[1]" SITE "B12";
-IOBUF PORT "cpu_d[1]" IO_TYPE=LVCMOS33 DRIVE=12;
+LOCATE COMP "uart_tx" SITE "B19";
+IOBUF PORT "uart_tx" IO_TYPE=LVCMOS33 DRIVE=8;
 
-LOCATE COMP "cpu_d[2]" SITE "B9";
-IOBUF PORT "cpu_d[2]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "cpu_d[3]" SITE "B11";
-IOBUF PORT "cpu_d[3]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "cpu_d[4]" SITE "A6";
-IOBUF PORT "cpu_d[4]" IO_TYPE=LVCMOS33 DRIVE=12;
-
-LOCATE COMP "cpu_d[5]" SITE "A8";
-IOBUF PORT "cpu_d[5]" IO_TYPE=LVCMOS33 DRIVE=12;
+LOCATE COMP "uart_rx" SITE "B12";
+IOBUF PORT "uart_rx" IO_TYPE=LVCMOS33 PULLMODE=UP;
 
 # ====================================================================================
 # Configuration
 # ====================================================================================
 
 SYSCONFIG CONFIG_IOVOLTAGE=3.3 COMPRESS_CONFIG=ON MCCLK_FREQ=62;
-
-# ====================================================================================
-# Notes
-# ====================================================================================
-#
-# This constraints file provides basic mappings for the Intel 8008 implementation.
-# As you develop modules, uncomment and assign the appropriate pins for:
-#   - Data bus (8-bit bidirectional)
-#   - Address bus (14-bit output)
-#   - Control signals (S0, S1, S2, SYNC, READY, INTERRUPT)
-#
-# The debug LEDs and switches are fully mapped and ready to use for testing.
-#
-#

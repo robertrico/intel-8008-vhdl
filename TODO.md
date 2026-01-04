@@ -64,12 +64,20 @@ UART peripheral integrated with b8008 CPU for real terminal I/O.
   - INP 1 returns UART RX data (bit 7=ready, bits 6:0=data)
 - [x] Synthesized and built bitstream (8584 FFs, 12504 LUTs)
 - [x] All 24 regression tests pass
+- [x] **TX verified on hardware** - "Hello, 8008!" outputs correctly
+
+**Known Issue - External I/O Input Interface:**
+- [ ] `io_port_in_enable` causes CPU to halt early when set to '1'
+- Currently disabled (`io_port_in_enable => '0'`) as workaround
+- TX output works (uses `io_port_write` strobe which is independent)
+- RX input disabled until this is debugged
+- Suspect: combinational logic in `io_input_data` mux may be causing timing issues during synthesis
 
 **Hardware Setup:**
 - [x] Identify available FPGA pins for TX/RX (3.3V compatible) - B19 (TX), B12 (RX)
 - [x] Add UART pin constraints to LPF file - `projects/hello_uart/constraints/hello_uart.lpf`
-- [ ] Wire FTDI TX → FPGA RX, FTDI RX ← FPGA TX, common GND
-- [ ] Test TX output at 115200 baud on real hardware
+- [x] Wire FTDI TX → FPGA RX, FTDI RX ← FPGA TX, common GND
+- [x] Test TX output at 115200 baud on real hardware
 - [ ] Test RX echo (read char, write char back)
 
 **Project Files:**

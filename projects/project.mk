@@ -76,7 +76,8 @@ B8008_SRCS := \
 	$(SRC_DIR)/b8008_top.vhdl
 
 # Project sources (top-level wrapper)
-PROJECT_SRCS := $(wildcard ./src/*.vhdl)
+# Use ?= so individual projects can override before include
+PROJECT_SRCS ?= $(wildcard ./src/*.vhdl)
 
 # All sources
 ALL_SRCS := $(B8008_SRCS) $(PROJECT_SRCS)

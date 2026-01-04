@@ -410,17 +410,19 @@ begin
     io_port_num <= latched_address(11 downto 9);  -- Opcode bits 3:1 (port number)
 
     -- Input port data multiplexer
-    -- When io_port_in_enable='1' and port matches io_port_in_select, use external input
-    -- Otherwise return test values for INP verification
-    io_input_data <= io_port_in when (io_port_in_enable = '1' and io_port_num = io_port_in_select) else
-                     x"55" when io_port_num = "000" else  -- Port 0: 0x55
-                     x"AA" when io_port_num = "001" else  -- Port 1: 0xAA
-                     x"42" when io_port_num = "010" else  -- Port 2: 0x42 ('B')
-                     x"03" when io_port_num = "011" else  -- Port 3: 0x03
-                     x"04" when io_port_num = "100" else  -- Port 4: 0x04
-                     x"05" when io_port_num = "101" else  -- Port 5: 0x05
-                     x"06" when io_port_num = "110" else  -- Port 6: 0x06
-                     x"07";                               -- Port 7: 0x07
+    -- IMPORTANT: Default test values FIRST, then check for external override.
+    -- This ensures synthesis doesn't optimize away paths when io_port_in is undriven.
+    -- When io_port_in_enable='1' and port matches io_port_in_select, use external input.
+    io_input_data <= x"55" when (io_port_in_enable = '0' and io_port_num = "000") else  -- Port 0: 0x55
+                     x"AA" when (io_port_in_enable = '0' and io_port_num = "001") else  -- Port 1: 0xAA
+                     x"42" when (io_port_in_enable = '0' and io_port_num = "010") else  -- Port 2: 0x42 ('B')
+                     x"03" when (io_port_in_enable = '0' and io_port_num = "011") else  -- Port 3: 0x03
+                     x"04" when (io_port_in_enable = '0' and io_port_num = "100") else  -- Port 4: 0x04
+                     x"05" when (io_port_in_enable = '0' and io_port_num = "101") else  -- Port 5: 0x05
+                     x"06" when (io_port_in_enable = '0' and io_port_num = "110") else  -- Port 6: 0x06
+                     x"07" when (io_port_in_enable = '0' and io_port_num = "111") else  -- Port 7: 0x07
+                     io_port_in when (io_port_in_enable = '1' and io_port_num = io_port_in_select) else
+                     x"00";  -- Default fallback
 
     -- Calculate full port number (0-31) from address bits
     -- RR field (addr 13:12) gives base: 00=ports 0-7, 01=8-15, 10=16-23, 11=24-31
