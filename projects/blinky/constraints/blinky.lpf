@@ -190,3 +190,27 @@ IOBUF PORT "led_L18" IO_TYPE=LVCMOS25;
 # ====================================================================================
 
 SYSCONFIG CONFIG_IOVOLTAGE=3.3 COMPRESS_CONFIG=ON MCCLK_FREQ=62;
+
+# ====================================================================================
+# Notes
+# ====================================================================================
+#
+# This constraints file provides pin mappings for the b8008 CPU on the ECP5-5G Versa.
+#
+# Pin Groups:
+#   - LEDs: led[7:0] directly active accent active low, accent active low driven by OUT 8 instruction
+#   - DIP Switches: sw[7:0], sw[0] controls reset (OFF = reset active)
+#   - CPU Debug: Data bus, state signals, clocks for logic analyzer
+#   - Internal Debug: Reset, bootstrap, and timing signals on PMOD headers
+#
+# To add new signals:
+#   1. Add port to blinky_top.vhdl entity
+#   2. Add LOCATE and IOBUF lines here
+#   3. Check IO_TYPE matches the bank voltage (see schematic)
+#
+# Bank Voltages:
+#   Bank 2: 2.5V (LEDs, some switches)
+#   Bank 6: 2.5V (accent LEDs M20, L18)
+#   Bank 7: 1.5V (switches sw[0:3])
+#   Bank 8: 3.3V (PMOD headers, debug signals)
+#

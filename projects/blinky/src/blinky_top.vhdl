@@ -1,10 +1,20 @@
 --------------------------------------------------------------------------------
--- Blinky Top Level - b8008 LED Blink Demo
+-- Blinky Top Level - b8008 LED Blink Demo (Project Template)
 --------------------------------------------------------------------------------
--- Simple LED blink demo for the b8008 CPU.
+-- Copy this project folder to create new b8008 programs.
+--
+-- To customize:
+--   1. Copy projects/blinky/ to projects/your_project/
+--   2. Rename files (blinky.asm -> your_project.asm, etc.)
+--   3. Change entity name below (blinky_top -> your_project_top)
+--   4. Update ROM_FILE generic to match your .mem filename
+--   5. Update Makefile with new names
 --
 -- I/O Port Mapping:
---   OUT 8:  LED bank (directly active, accent active low)
+--   OUT 8:  LED bank (active low: 0 = ON)
+--
+-- IMPORTANT: Only use 100MHz clk for phase_clocks generation and POR.
+--            All other logic must use phi1 or phi2.
 --
 -- Copyright (c) 2025 Robert Rico
 --------------------------------------------------------------------------------
@@ -124,10 +134,10 @@ architecture rtl of blinky_top is
     signal bootstrap_done    : std_logic := '0';
     signal bootstrap_counter : unsigned(7 downto 0) := (others => '0');
 
-    -- I/O port signals (directly active directly active accent active low accent active low accent active low accent active low accent active low accent active low accent active low accent active low accent active low accent active low accent active low accent active low)
+    -- I/O port output (directly drives LEDs via OUT 8 instruction)
     signal io_port_8    : std_logic_vector(7 downto 0);
 
-    -- Unused debug signals (directly active directly active accent active low accent active low accent active low accent active low accent active low accent active low but kept to prevent optimization warnings)
+    -- Unused debug signals (required by port map but not used in this design)
     signal address_sig      : std_logic_vector(13 downto 0);
     signal data_sig         : std_logic_vector(7 downto 0);
     signal debug_reg_a, debug_reg_b, debug_reg_c : std_logic_vector(7 downto 0);
@@ -151,12 +161,16 @@ architecture rtl of blinky_top is
 begin
 
     --------------------------------------------------------------------------------
-    -- Power-On Reset (POR)
+    -- Power-On Reset (POR) - ONLY place where clk is used directly
     --------------------------------------------------------------------------------
+    -- FPGA flip-flops may power up in random states. This counter ensures
+    -- we hold reset for ~5ms after power-up to allow everything to stabilize.
+    -- NOTE: Must use clk here because phi1/phi2 are held static during reset!
     process(clk)
     begin
         if rising_edge(clk) then
             clk_counter <= clk_counter + 1;
+            -- Clear por_active when bit 19 goes high (after ~5ms at 100MHz)
             if clk_counter(19) = '1' then
                 por_active <= '0';
             end if;
@@ -164,8 +178,12 @@ begin
     end process;
 
     --------------------------------------------------------------------------------
-    -- Reset Synchronization
+    -- Reset Synchronization (using clk)
     --------------------------------------------------------------------------------
+    -- SW3-1 (sw[0]) controls reset via DIP switch.
+    -- DIP switch: ON position = '0', OFF position = '1'
+    -- We want: sw ON = normal operation, sw OFF = reset
+    -- NOTE: Must use clk here because phi1 is static during reset!
     process(clk)
     begin
         if rising_edge(clk) then
@@ -173,12 +191,15 @@ begin
         end if;
     end process;
 
-    reset_sw <= reset_sync(2);
-    reset_int <= por_active or reset_sw;
+    reset_sw <= reset_sync(2);  -- '1' = reset active (switch OFF/down)
+    reset_int <= por_active or reset_sw;  -- Combined reset: POR or switch
 
     --------------------------------------------------------------------------------
-    -- Bootstrap Interrupt Control
+    -- Bootstrap Interrupt Control (using phi2)
     --------------------------------------------------------------------------------
+    -- The 8008 requires a bootstrap interrupt (RST 0) to start execution at 0x0000.
+    -- Generate interrupt after reset releases, hold for several phi2 cycles to ensure
+    -- the CPU's interrupt_ready_ff latches it, then clear after T1I detected.
     process(phi2, reset_int)
     begin
         if reset_int = '1' then
@@ -187,9 +208,13 @@ begin
             bootstrap_counter <= (others => '0');
         elsif rising_edge(phi2) then
             if bootstrap_done = '0' then
+                -- Assert interrupt and count cycles
                 bootstrap_int <= '1';
                 bootstrap_counter <= bootstrap_counter + 1;
+
+                -- Hold interrupt for at least 16 cycles, then wait for T1I
                 if bootstrap_counter >= 16 then
+                    -- Clear interrupt after T1I state detected (S2='1', S1='1', S0='0')
                     if s2_sig = '1' and s1_sig = '1' and s0_sig = '0' then
                         bootstrap_int  <= '0';
                         bootstrap_done <= '1';
@@ -250,11 +275,13 @@ begin
         );
 
     --------------------------------------------------------------------------------
-    -- LED Outputs
+    -- LED Outputs (directly active accent active low: active low means 0 = ON)
     --------------------------------------------------------------------------------
+    -- Drive LEDs from CPU I/O port 8 output
+    -- io_port_8 directly drives LEDs: 0xFE = LED0 on, 0xFF = all off
     led <= io_port_8;
-    led_M20 <= '1';  -- Off (directly active directly active accent active low)
-    led_L18 <= reset_int;
+    led_M20 <= '1';       -- Off (accent LED)
+    led_L18 <= reset_int; -- On during reset, off when running
 
     --------------------------------------------------------------------------------
     -- CPU Debug Outputs
