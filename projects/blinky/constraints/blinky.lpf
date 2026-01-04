@@ -186,18 +186,6 @@ LOCATE COMP "led_L18" SITE "L18";
 IOBUF PORT "led_L18" IO_TYPE=LVCMOS25;
 
 # ====================================================================================
-# UART Interface (FTDI USB-to-serial connection)
-# ====================================================================================
-# FPGA TX -> FTDI RX (B19)
-# FPGA RX <- FTDI TX (B12)
-
-LOCATE COMP "uart_tx" SITE "B19";
-IOBUF PORT "uart_tx" IO_TYPE=LVCMOS33 DRIVE=8;
-
-LOCATE COMP "uart_rx" SITE "B12";
-IOBUF PORT "uart_rx" IO_TYPE=LVCMOS33 PULLMODE=UP;
-
-# ====================================================================================
 # Configuration
 # ====================================================================================
 
