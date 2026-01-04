@@ -217,6 +217,11 @@ architecture structural of b8008_top is
     signal io_write_strobe : std_logic := '0';
     signal io_full_port_num : std_logic_vector(4 downto 0) := (others => '0');
 
+    -- Synthesis attributes to prevent optimization of I/O interface
+    attribute keep : boolean;
+    attribute keep of io_write_strobe : signal is true;
+    attribute keep of io_full_port_num : signal is true;
+
     -- T-state decode from S[2:0]
     signal is_t1  : std_logic;
     signal is_t2  : std_logic;
