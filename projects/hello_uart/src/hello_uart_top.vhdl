@@ -3,7 +3,7 @@
 --------------------------------------------------------------------------------
 -- UART demo for the b8008 CPU with external UART peripheral.
 --
--- Uses b8008_top (proven, working CPU+ROM+RAM) with UART as external peripheral.
+-- Uses b8008_top (proven, working CPU+ROM+RAM) with b8008_usart wrapper.
 --
 -- I/O Port Mapping:
 --   IN 1:   UART RX - bit 7 = ready flag, bits 6:0 = received data
@@ -48,7 +48,7 @@ entity hello_uart_top is
         uart_rx     : in  std_logic;
 
         -- CPU debug outputs (directly from b8008 for logic analyzer)
-        cpu_d       : out std_logic_vector(7 downto 0);  -- Data bus (directly active directly wired)
+        cpu_d       : out std_logic_vector(7 downto 0);  -- Data bus
         cpu_s0      : out std_logic;
         cpu_s1      : out std_logic;
         cpu_s2      : out std_logic;
@@ -116,28 +116,32 @@ architecture rtl of hello_uart_top is
             io_port_in_enable   : in  std_logic;
             io_port_out         : out std_logic_vector(7 downto 0);
             io_port_num_out     : out std_logic_vector(4 downto 0);
-            io_port_write       : out std_logic
+            io_port_write       : out std_logic;
+            io_port_read        : out std_logic
         );
     end component;
 
     --------------------------------------------------------------------------------
-    -- Component: USART (combined TX/RX)
+    -- Component: B8008_USART (UART with 8008 handshaking)
     --------------------------------------------------------------------------------
-    component usart is
+    component b8008_usart is
         generic (
-            CLK_FREQ_HZ : integer := 100_000_000;
-            BAUD_RATE   : integer := 2400
+            CLK_FREQ_HZ  : integer := 100_000_000;
+            BAUD_RATE    : integer := 115200;
+            RX_PORT_NUM  : std_logic_vector(2 downto 0) := "001";
+            TX_PORT_NUM  : std_logic_vector(4 downto 0) := "01001"
         );
         port (
-            clk         : in  std_logic;
-            rst         : in  std_logic;
-            tx_data     : in  std_logic_vector(7 downto 0);
-            tx_start    : in  std_logic;
-            tx_busy     : out std_logic;
-            rx_data     : out std_logic_vector(7 downto 0);
-            rx_valid    : out std_logic;
-            uart_tx     : out std_logic;
-            uart_rx     : in  std_logic
+            clk             : in  std_logic;
+            rst             : in  std_logic;
+            io_port_read    : in  std_logic;
+            io_port_write   : in  std_logic;
+            io_port_num     : in  std_logic_vector(4 downto 0);
+            io_port_out     : in  std_logic_vector(7 downto 0);
+            rx_port_data    : out std_logic_vector(7 downto 0);
+            tx_busy         : out std_logic;
+            uart_tx         : out std_logic;
+            uart_rx         : in  std_logic
         );
     end component;
 
@@ -170,17 +174,10 @@ architecture rtl of hello_uart_top is
     signal io_port_out  : std_logic_vector(7 downto 0);
     signal io_port_num  : std_logic_vector(4 downto 0);
     signal io_port_write : std_logic;
+    signal io_port_read  : std_logic;
 
-    -- UART signals
-    signal uart_tx_data   : std_logic_vector(7 downto 0);
-    signal uart_tx_start  : std_logic := '0';
+    -- UART signal (TX/RX handled by b8008_usart)
     signal uart_tx_busy   : std_logic;
-    signal uart_rx_data   : std_logic_vector(7 downto 0);
-    signal uart_rx_valid  : std_logic;
-    signal uart_rx_ready  : std_logic := '0';  -- Latched: '1' when byte available
-
-    -- UART RX data latch (holds received byte until CPU reads it)
-    signal uart_rx_latch  : std_logic_vector(7 downto 0) := (others => '0');
 
     -- External I/O port input (for INP 1 - UART RX)
     signal io_port_in_data : std_logic_vector(7 downto 0);
@@ -294,87 +291,43 @@ begin
             debug_io_port_9     => io_port_9,
             debug_io_port_10    => io_port_10,
             debug_state_half    => state_half_sig,
-            -- External I/O port interface (DISABLED for debugging)
+            -- External I/O port interface
             io_port_in          => io_port_in_data,
             io_port_in_select   => "001",  -- Port 1 uses external input
-            io_port_in_enable   => '0',    -- DISABLED - use internal test values
+            io_port_in_enable   => '0',    -- DISABLED - hello_uart is TX only
             io_port_out         => io_port_out,
             io_port_num_out     => io_port_num,
-            io_port_write       => io_port_write
+            io_port_write       => io_port_write,
+            io_port_read        => io_port_read
         );
 
     --------------------------------------------------------------------------------
-    -- USART Instance (115200 baud)
+    -- B8008_USART Instance (115200 baud, with 8008 handshaking)
     --------------------------------------------------------------------------------
-    u_uart : usart
+    u_uart : b8008_usart
         generic map (
             CLK_FREQ_HZ => 100_000_000,
-            BAUD_RATE   => 115200
+            BAUD_RATE   => 115200,
+            RX_PORT_NUM => "001",    -- INP 1 for UART RX
+            TX_PORT_NUM => "01001"   -- OUT 9 for UART TX
         )
         port map (
-            clk         => clk,
-            rst         => reset_int,
-            tx_data     => uart_tx_data,
-            tx_start    => uart_tx_start,
-            tx_busy     => uart_tx_busy,
-            rx_data     => uart_rx_data,
-            rx_valid    => uart_rx_valid,
-            uart_tx     => uart_tx,
-            uart_rx     => uart_rx
+            clk          => clk,
+            rst          => reset_int,
+            io_port_read => io_port_read,
+            io_port_write => io_port_write,
+            io_port_num  => io_port_num,
+            io_port_out  => io_port_out,
+            rx_port_data => io_port_in_data,
+            tx_busy      => uart_tx_busy,
+            uart_tx      => uart_tx,
+            uart_rx      => uart_rx
         );
-
-    --------------------------------------------------------------------------------
-    -- UART TX Control: Trigger on OUT 9
-    --------------------------------------------------------------------------------
-    -- When OUT 9 executes (io_port_num = 9 and io_port_write = '1'),
-    -- send the byte to UART TX
-    process(clk, reset_int)
-    begin
-        if reset_int = '1' then
-            uart_tx_data  <= (others => '0');
-            uart_tx_start <= '0';
-        elsif rising_edge(clk) then
-            -- Default: clear start strobe
-            uart_tx_start <= '0';
-
-            -- Check for OUT 9 (port 9 = "01001")
-            if io_port_write = '1' and io_port_num = "01001" then
-                -- Capture data and trigger TX
-                uart_tx_data  <= io_port_out;
-                uart_tx_start <= '1';
-            end if;
-        end if;
-    end process;
-
-    --------------------------------------------------------------------------------
-    -- UART RX Control: Latch received data for INP 1
-    --------------------------------------------------------------------------------
-    -- When UART receives a byte, latch it and set ready flag.
-    -- INP 1 returns: bit 7 = ready flag, bits 6:0 = received data
-    -- The ready flag clears when a new byte is latched (simple auto-clear)
-    process(clk, reset_int)
-    begin
-        if reset_int = '1' then
-            uart_rx_latch <= (others => '0');
-            uart_rx_ready <= '0';
-        elsif rising_edge(clk) then
-            -- When UART receives a byte, latch it
-            if uart_rx_valid = '1' then
-                uart_rx_latch <= uart_rx_data;
-                uart_rx_ready <= '1';
-            end if;
-            -- Note: For proper handshaking, the CPU should clear the ready flag
-            -- after reading. For this simple demo, we just overwrite on new data.
-        end if;
-    end process;
-
-    -- INP 1 data: bit 7 = ready, bits 6:0 = received data
-    io_port_in_data <= uart_rx_ready & uart_rx_latch(6 downto 0);
 
     --------------------------------------------------------------------------------
     -- LED Outputs
     --------------------------------------------------------------------------------
-    -- Drive LEDs from CPU I/O port 8 output (directly active, accent active low)
+    -- Drive LEDs from CPU I/O port 8 output
     led <= io_port_8;
 
     -- M20: UART TX busy indicator
@@ -386,7 +339,7 @@ begin
     --------------------------------------------------------------------------------
     -- CPU Debug Outputs (directly connected for logic analyzer)
     --------------------------------------------------------------------------------
-    cpu_d       <= data_sig;  -- Actual data bus
+    cpu_d       <= data_sig;
     cpu_s0      <= s0_sig;
     cpu_s1      <= s1_sig;
     cpu_s2      <= s2_sig;
