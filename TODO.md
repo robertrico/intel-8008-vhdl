@@ -66,24 +66,24 @@ UART peripheral integrated with b8008 CPU for real terminal I/O.
 - [x] All 24 regression tests pass
 - [x] **TX verified on hardware** - "Hello, 8008!" outputs correctly
 
-**Known Issue - External I/O Input Interface:**
-- [ ] `io_port_in_enable` causes CPU to halt early when set to '1'
-- Currently disabled (`io_port_in_enable => '0'`) as workaround
-- TX output works (uses `io_port_write` strobe which is independent)
-- RX input disabled until this is debugged
-- Suspect: combinational logic in `io_input_data` mux may be causing timing issues during synthesis
+**Reusable UART Wrapper Created:**
+- [x] `b8008_usart.vhdl` encapsulates all UART handshaking logic (TX and RX)
+- [x] TX: Automatically triggers on OUT to configurable TX_PORT_NUM
+- [x] RX: Ready flag latching with auto-clear on falling edge of io_port_read
+- [x] New projects just instantiate b8008_usart and wire b8008_top I/O signals
 
 **Hardware Setup:**
 - [x] Identify available FPGA pins for TX/RX (3.3V compatible) - B19 (TX), B12 (RX)
 - [x] Add UART pin constraints to LPF file - `projects/hello_uart/constraints/hello_uart.lpf`
 - [x] Wire FTDI TX → FPGA RX, FTDI RX ← FPGA TX, common GND
 - [x] Test TX output at 115200 baud on real hardware
-- [ ] Test RX echo (read char, write char back)
+- [x] Test RX echo (read char, write char back) - `io_uart` project
 
 **Project Files:**
-- `projects/hello_uart/` - UART demo project (ready for hardware test)
-- `projects/hello_uart/hello_uart.asm` - Sends "Hello, 8008!" via OUT 9
-- `projects/hello_uart/constraints/hello_uart.lpf` - Pin assignments ready
+- `projects/hello_uart/` - TX-only demo, sends "Hello, 8008!" repeatedly
+- `projects/io_uart/` - Full TX+RX echo demo with prompt
+- `src/components/b8008_usart.vhdl` - Reusable UART wrapper for 8008
+- `src/components/usart.vhdl` - Low-level UART TX/RX
 
 **I/O Port Mapping:**
 - Port 1 (IN): Direct UART RX (bit 7=ready, bits 6:0=data)
