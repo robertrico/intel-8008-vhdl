@@ -12,8 +12,8 @@ NEXTPNR  = $(OSS_CAD_SUITE)/nextpnr-ecp5
 ECPPACK  = $(OSS_CAD_SUITE)/ecppack
 LOADER   = $(OSS_CAD_SUITE)/openFPGALoader
 GHDL_FLAGS = --std=08 --work=work
-ASL = ~/Development/as_assembler/asl
-P2HEX = ~/Development/as_assembler/p2hex
+ASL = ~/Development/asl-current/asl
+P2HEX = ~/Development/asl-current/p2hex
 HEX2MEM = ./hex_to_mem.py
 
 # FPGA settings (ECP5-5G Versa LFE5UM5G-45F)
@@ -63,7 +63,7 @@ B8008_SRCS = \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl
 
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help show-programs synth pnr bit prog prog-flash
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help show-programs synth pnr bit prog prog-flash
 
 all: help
 
