@@ -100,10 +100,33 @@ MAIN:
         jnz     FAIL            ; If not equal, fail
         inr     b               ; Increment test counter
 
+; Test 4: CPI with 0x0A (LF character) - testing specific immediate value
+        ; This tests if CPI works correctly with value 0x0A
+        mvi     a, 0Ah          ; A = 0x0A
+        ; CHECKPOINT 7: Before CPI 0x0A
+        mov     l, a            ; Save A to L
+        mvi     a, 07h
+        out     CHKPT           ; CP7: L=0x0A, about to execute CPI 0x0A
+        mov     a, l            ; Restore A (A = 0x0A)
+
+        cpi     0Ah             ; Compare A with 0x0A (should set zero flag)
+        jnz     FAIL            ; If not equal, fail (zero flag should be set)
+        inr     b               ; Increment test counter
+
+        ; CHECKPOINT 8: After CPI 0x0A succeeded
+        mvi     a, 08h
+        out     CHKPT           ; CP8: CPI 0x0A worked correctly
+
+; Test 5: CPI with 0x0D (CR character) - for comparison
+        mvi     a, 0Dh          ; A = 0x0D
+        cpi     0Dh             ; Compare A with 0x0D (should set zero flag)
+        jnz     FAIL            ; If not equal, fail
+        inr     b               ; Increment test counter
+
 ; All tests passed
-        ; CHECKPOINT 6: Final success
-        mvi     a, 06h
-        out     CHKPT           ; CP6: success
+        ; CHECKPOINT 9: Final success
+        mvi     a, 09h
+        out     CHKPT           ; CP9: success
         mvi     a, 0            ; A = 0 (success)
         hlt
 

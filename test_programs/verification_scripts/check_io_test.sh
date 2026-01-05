@@ -60,15 +60,25 @@ assert_checkpoint 5 \
     "L=0x42"
 
 echo ""
+echo "=== CPI 0x0A Test ==="
+
+# CP7: Before CPI 0x0A (L should be 0x0A)
+assert_checkpoint 7 \
+    "L=0x0A"
+
+# CP8: After CPI 0x0A succeeded
+assert_checkpoint 8
+
+echo ""
 echo "=== Final State ==="
 
-# CP6: Final success checkpoint
-assert_checkpoint 6
+# CP9: Final success checkpoint
+assert_checkpoint 9
 
 # Verify final state via traditional method
 assert_final_state \
     "A=0x00" \
-    "B=0x03"
+    "B=0x05"
 
 # Print summary and exit
 print_summary
