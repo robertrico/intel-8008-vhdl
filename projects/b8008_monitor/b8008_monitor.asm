@@ -51,20 +51,29 @@ main:
         ; Fall through to echo loop
 
 ; ================================================================================
-; ECHO_LOOP - Main echo loop
+; COMMAND_LOOP - Main command loop
 ; ================================================================================
-; Waits for a character from UART, then echoes it back.
-; If Enter (CR) is received, sends CR+LF and reprints prompt.
+; Waits for a character from UART, processes commands or echoes.
 ;
-echo_loop:
+command_loop:
         ; Poll UART RX for incoming character
         call uart_rx_wait       ; Returns received char in A
+
+        ; Save character in C (B is used by char_delay)
+        mov c,a
 
         ; Check for Enter key (CR)
         cpi CR
         jz handle_enter
 
-        ; Echo the character back
+        ; Check for 'H' or 'h' - Help command
+        cpi 'H'
+        jz handle_help
+        cpi 'h'
+        jz handle_help
+
+        ; Not a command, echo the character back
+        mov a,c
         out 9
         call char_delay
 
@@ -75,7 +84,7 @@ echo_loop:
         mvi a,0FEh              ; LED0 on, LED1 off
         out 8
 
-        jmp echo_loop
+        jmp command_loop
 
 ; ================================================================================
 ; HANDLE_ENTER - Handle Enter key (new line + new prompt)
@@ -93,7 +102,32 @@ handle_enter:
         ; Reprint the prompt
         call send_prompt
 
-        jmp echo_loop
+        jmp command_loop
+
+; ================================================================================
+; HANDLE_HELP - Display help menu
+; ================================================================================
+handle_help:
+        ; Echo the 'H' back
+        mov a,c
+        out 9
+        call char_delay
+
+        ; New line
+        mvi a,CR
+        out 9
+        call char_delay
+        mvi a,LF
+        out 9
+        call char_delay
+
+        ; Print "Help Menu"
+        call send_help
+
+        ; Print prompt
+        call send_prompt
+
+        jmp command_loop
 
 ; ================================================================================
 ; UART_RX_WAIT - Wait for and receive a character from UART
@@ -187,6 +221,97 @@ send_prompt:
         call char_delay
 
         mvi a,' '
+        out 9
+        call char_delay
+
+        ret
+
+; ================================================================================
+; SEND_HELP - Send help menu
+; ================================================================================
+send_help:
+        ; "Help Menu" + CR/LF
+        mvi a,'H'
+        out 9
+        call char_delay
+        mvi a,'e'
+        out 9
+        call char_delay
+        mvi a,'l'
+        out 9
+        call char_delay
+        mvi a,'p'
+        out 9
+        call char_delay
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,'M'
+        out 9
+        call char_delay
+        mvi a,'e'
+        out 9
+        call char_delay
+        mvi a,'n'
+        out 9
+        call char_delay
+        mvi a,'u'
+        out 9
+        call char_delay
+        mvi a,CR
+        out 9
+        call char_delay
+        mvi a,LF
+        out 9
+        call char_delay
+
+        ; "  H: Show Help" + CR/LF
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,'H'
+        out 9
+        call char_delay
+        mvi a,':'
+        out 9
+        call char_delay
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,'S'
+        out 9
+        call char_delay
+        mvi a,'h'
+        out 9
+        call char_delay
+        mvi a,'o'
+        out 9
+        call char_delay
+        mvi a,'w'
+        out 9
+        call char_delay
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,'H'
+        out 9
+        call char_delay
+        mvi a,'e'
+        out 9
+        call char_delay
+        mvi a,'l'
+        out 9
+        call char_delay
+        mvi a,'p'
+        out 9
+        call char_delay
+        mvi a,CR
+        out 9
+        call char_delay
+        mvi a,LF
         out 9
         call char_delay
 
