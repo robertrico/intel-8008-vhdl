@@ -84,7 +84,8 @@ entity b8008_top is
         -- Output port interface: signals when OUT instruction executes
         io_port_out         : out std_logic_vector(7 downto 0);  -- Data written by OUT instruction
         io_port_num_out     : out std_logic_vector(4 downto 0);  -- Full port number (0-31)
-        io_port_write       : out std_logic                      -- Strobe: '1' for one phi2 cycle during OUT T3
+        io_port_write       : out std_logic;                     -- Strobe: '1' for one phi2 cycle during OUT T3
+        io_port_read        : out std_logic                      -- Strobe: '1' for one phi2 cycle during INP T3
     );
 end entity b8008_top;
 
@@ -215,11 +216,13 @@ architecture structural of b8008_top is
 
     -- External I/O port interface signals
     signal io_write_strobe : std_logic := '0';
+    signal io_read_strobe  : std_logic := '0';
     signal io_full_port_num : std_logic_vector(4 downto 0) := (others => '0');
 
     -- Synthesis attributes to prevent optimization of I/O interface
     attribute keep : boolean;
     attribute keep of io_write_strobe : signal is true;
+    attribute keep of io_read_strobe  : signal is true;
     attribute keep of io_full_port_num : signal is true;
 
     -- T-state decode from S[2:0]
@@ -440,6 +443,7 @@ begin
     process(phi2, reset)
         variable port_base : integer;
         variable is_out_cycle : std_logic;
+        variable is_inp_cycle : std_logic;
     begin
         if reset = '1' then
             io_output_port_8  <= (others => '0');
@@ -448,9 +452,19 @@ begin
             checkpoint_id <= 0;
             last_checkpoint_pc <= (others => '1');
             io_write_strobe <= '0';
+            io_read_strobe  <= '0';
         elsif rising_edge(phi2) then
-            -- Default: strobe off
+            -- Default: strobes off
             io_write_strobe <= '0';
+            io_read_strobe  <= '0';
+
+            -- Generate read strobe during T3 of I/O read (INP instruction)
+            -- INP uses ports 0-7 (RR field = 00 in opcode 0100MMM1)
+            -- RR field is opcode bits 5:4 which map to address bits 13:12
+            is_inp_cycle := is_io and is_t3 and not latched_address(13) and not latched_address(12);
+            if is_inp_cycle = '1' then
+                io_read_strobe <= '1';
+            end if;
 
             -- Latch output data during T3 of I/O write (OUT instruction)
             -- OUT uses ports 8-31 (RR field non-zero in opcode 01RRMMM1)
@@ -553,5 +567,6 @@ begin
     io_port_out     <= data_bus;         -- Data being written (valid when io_port_write='1')
     io_port_num_out <= io_full_port_num; -- Port number (0-31)
     io_port_write   <= io_write_strobe;  -- Write strobe (one phi2 cycle during OUT T3)
+    io_port_read    <= io_read_strobe;   -- Read strobe (one phi2 cycle during INP T3)
 
 end architecture structural;

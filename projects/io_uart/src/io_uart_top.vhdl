@@ -116,7 +116,8 @@ architecture rtl of io_uart_top is
             io_port_in_enable   : in  std_logic;
             io_port_out         : out std_logic_vector(7 downto 0);
             io_port_num_out     : out std_logic_vector(4 downto 0);
-            io_port_write       : out std_logic
+            io_port_write       : out std_logic;
+            io_port_read        : out std_logic
         );
     end component;
 
@@ -170,6 +171,7 @@ architecture rtl of io_uart_top is
     signal io_port_out  : std_logic_vector(7 downto 0);
     signal io_port_num  : std_logic_vector(4 downto 0);
     signal io_port_write : std_logic;
+    signal io_port_read  : std_logic;
 
     -- UART signals
     signal uart_tx_data   : std_logic_vector(7 downto 0);
@@ -181,6 +183,15 @@ architecture rtl of io_uart_top is
 
     -- UART RX data latch (holds received byte until CPU reads it)
     signal uart_rx_latch  : std_logic_vector(7 downto 0) := (others => '0');
+
+    -- Debug: latch to capture if io_port_read ever fires
+    signal io_port_read_ever : std_logic := '0';
+
+    -- Delayed io_port_read for proper handshaking
+    signal io_port_read_d1   : std_logic := '0';
+    signal io_port_read_d2   : std_logic := '0';
+    signal io_port_num_latch : std_logic_vector(4 downto 0) := (others => '0');
+
 
     -- External I/O port input (for INP 1 - UART RX)
     signal io_port_in_data : std_logic_vector(7 downto 0);
@@ -294,13 +305,14 @@ begin
             debug_io_port_9     => io_port_9,
             debug_io_port_10    => io_port_10,
             debug_state_half    => state_half_sig,
-            -- External I/O port interface (DISABLED for debugging)
+            -- External I/O port interface
             io_port_in          => io_port_in_data,
             io_port_in_select   => "001",  -- Port 1 uses external input
-            io_port_in_enable   => '0',    -- DISABLED - use internal test values
+            io_port_in_enable   => '1',    -- ENABLED - use UART RX data
             io_port_out         => io_port_out,
             io_port_num_out     => io_port_num,
-            io_port_write       => io_port_write
+            io_port_write       => io_port_write,
+            io_port_read        => io_port_read
         );
 
     --------------------------------------------------------------------------------
@@ -351,24 +363,46 @@ begin
     --------------------------------------------------------------------------------
     -- When UART receives a byte, latch it and set ready flag.
     -- INP 1 returns: bit 7 = ready flag, bits 6:0 = received data
-    -- The ready flag clears when a new byte is latched (simple auto-clear)
+    -- Ready flag clears when CPU reads port 1 (like real 8008 UART peripheral)
+    -- Note: io_port_read is from phi2 domain but is wide enough (~2us) to be
+    -- safely sampled by 100MHz clk (10ns period)
     process(clk, reset_int)
     begin
         if reset_int = '1' then
             uart_rx_latch <= (others => '0');
             uart_rx_ready <= '0';
         elsif rising_edge(clk) then
-            -- When UART receives a byte, latch it
+            -- Delay io_port_read to allow CPU to read data before clearing
+            io_port_read_d1 <= io_port_read;
+            io_port_read_d2 <= io_port_read_d1;
+
+            -- Latch port number when io_port_read goes high
+            if io_port_read = '1' and io_port_read_d1 = '0' then
+                io_port_num_latch <= io_port_num;
+            end if;
+
+            -- When UART receives a byte, latch it and set ready flag
             if uart_rx_valid = '1' then
                 uart_rx_latch <= uart_rx_data;
                 uart_rx_ready <= '1';
+            -- When CPU reads port 1 (INP 1), clear the ready flag
+            -- Use delayed signal - clear on falling edge of io_port_read
+            -- This gives CPU time to read the data before we clear the flag
+            elsif io_port_read_d1 = '0' and io_port_read_d2 = '1' and io_port_num_latch(2 downto 0) = "001" then
+                uart_rx_ready <= '0';
             end if;
-            -- Note: For proper handshaking, the CPU should clear the ready flag
-            -- after reading. For this simple demo, we just overwrite on new data.
+
+            -- Debug: capture if io_port_read ever fires
+            if io_port_read = '1' then
+                io_port_read_ever <= '1';
+            end if;
         end if;
     end process;
 
     -- INP 1 data: bit 7 = ready, bits 6:0 = received data
+    -- Note: All 8 bits of received data are available, but bit 7 is overwritten
+    -- by the ready flag. For 7-bit ASCII this is fine; for 8-bit binary data
+    -- a separate status port would be needed.
     io_port_in_data <= uart_rx_ready & uart_rx_latch(6 downto 0);
 
     --------------------------------------------------------------------------------
@@ -377,11 +411,11 @@ begin
     -- Drive LEDs from CPU I/O port 8 output (directly active, accent active low)
     led <= io_port_8;
 
-    -- M20: UART TX busy indicator
-    led_M20 <= not uart_tx_busy;
+    -- M20: io_port_read_ever debug (ON = io_port_read has fired at least once)
+    led_M20 <= not io_port_read_ever;
 
-    -- L18: Reset indicator (off when running)
-    led_L18 <= reset_int;
+    -- L18: UART RX ready indicator (debug - shows when byte received)
+    led_L18 <= not uart_rx_ready;
 
     --------------------------------------------------------------------------------
     -- CPU Debug Outputs (directly connected for logic analyzer)
