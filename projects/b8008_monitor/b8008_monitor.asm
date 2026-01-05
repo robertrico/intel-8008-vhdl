@@ -359,13 +359,4 @@ delay_short_inner:
         jnz delay_short_outer
         ret
 
-; ================================================================================
-; PADDING - Test if ROM size matters
-; ================================================================================
-padding:
-        db 0AAh, 055h, 0AAh, 055h, 0AAh, 055h, 0AAh, 055h
-        db 0AAh, 055h, 0AAh, 055h, 0AAh, 055h, 0AAh, 055h
-        db 0AAh, 055h, 0AAh, 055h, 0AAh, 055h, 0AAh, 055h
-        db 0AAh, 055h, 0AAh, 055h, 0AAh, 055h, 0AAh, 055h
-
         end

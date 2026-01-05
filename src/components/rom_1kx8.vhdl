@@ -1,5 +1,5 @@
 -------------------------------------------------------------------------------
--- 4K x 8 ROM Memory Component
+-- 1K x 8 ROM Memory Component
 -------------------------------------------------------------------------------
 -- Copyright (c) 2025 Robert Rico
 -- License: MIT (see LICENSE.txt)
@@ -11,14 +11,14 @@ use IEEE.NUMERIC_STD.ALL;
 use STD.TEXTIO.ALL;
 use IEEE.STD_LOGIC_TEXTIO.ALL;
 
-entity rom_4kx8 is
+entity rom_1kx8 is
     generic(
         -- ROM initialization file
         ROM_FILE : string := "test_programs/simple_add.mem"
     );
     port(
-        -- 12-bit address (2^12 = 4096)
-        ADDR : in std_logic_vector(11 downto 0);
+        -- 10-bit address (2^10 = 1024)
+        ADDR : in std_logic_vector(9 downto 0);
 
         -- 8-bit data output
         DATA_OUT : out std_logic_vector(7 downto 0);
@@ -26,11 +26,11 @@ entity rom_4kx8 is
         -- Chip select (active low)
         CS_N : in std_logic
     );
-end rom_4kx8;
+end rom_1kx8;
 
-architecture rtl of rom_4kx8 is
-    -- ROM storage: 4096 locations x 8 bits
-    type rom_array is array(0 to 4095) of std_logic_vector(7 downto 0);
+architecture rtl of rom_1kx8 is
+    -- ROM storage: 1024 locations x 8 bits
+    type rom_array is array(0 to 1023) of std_logic_vector(7 downto 0);
 
     -- Function to load ROM from file
     impure function load_rom(filename : string) return rom_array is
@@ -46,7 +46,7 @@ architecture rtl of rom_4kx8 is
 
         if status = open_ok then
             -- File opened successfully, read data
-            while not endfile(file_handle) and load_addr < 4096 loop
+            while not endfile(file_handle) and load_addr < 1024 loop
                 readline(file_handle, file_line);
                 if file_line'length > 0 then
                     hread(file_line, hex_value);
@@ -82,13 +82,6 @@ architecture rtl of rom_4kx8 is
 
 begin
     -- Combinational ROM read (asynchronous)
-    -- NOTE: For simulation, this works fine. For synthesis, Yosys will implement
-    -- as distributed LUT ROM since we don't use a clock for read.
-    -- This is intentional - the 8008 needs asynchronous ROM access since
-    -- the ROM data must be valid on the same T-state as the address.
-    --
-    -- CS_N handling is done in the top-level (b8008_top) which controls
-    -- when ROM data is placed on the data bus.
     DATA_OUT <= rom(to_integer(unsigned(ADDR)));
 
 end rtl;

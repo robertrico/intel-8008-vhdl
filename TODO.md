@@ -105,30 +105,47 @@ Once UART TX/RX is proven, create a simple monitor program.
 - Memory exploration without recompilation
 - Foundation for porting real 8008 software
 
-### [ ] Investigate ROM Size Synthesis Bug (January 2026)
+### [x] ROM Synthesis Bug - RESOLVED (January 2026)
 
-**Problem:** ROM contents become corrupted on FPGA when ROM size is below ~400 bytes.
+**Problem:** ROM contents become corrupted on FPGA hardware.
 
-**Symptoms:**
+**Initial Symptoms:**
 - `cpi 0Ah` (LF) in b8008_monitor caused CPU to crash/freeze at startup
 - Same code passes in GHDL simulation
-- Adding 32 bytes of padding to end of ROM makes it work
+- Adding 32 bytes of padding to end of ROM made it work
 - Without padding: 399 bytes → crashes
 - With padding: 431 bytes → works
 
-**Key Finding:**
-- This is a **Yosys/GHDL synthesis bug**, not a CPU bug
-- ROM byte 0x0A is NOT special - the working ROM already had 6 instances of 0x0A
-- Adding the 7th 0x0A byte (as CPI immediate) only crashes when ROM is "small"
-- Padding the ROM to >400 bytes makes the same code work
+**Investigation Path:**
+1. Initially suspected ROM size threshold - padding helped with 4KB ROM
+2. Tried 1KB ROM without padding → different failure (CPU runs but no UART I/O)
+3. Tried 1KB ROM with padding → still broken
+4. Changed ROM default fill from `0xFF` to `0x00` → **WORKS**
 
-**Workaround:**
-- Pad ROM to minimum 512 bytes (or modify hex_to_mem.py to auto-pad)
+**Root Cause:**
+- **Yosys incorrectly optimizes ROMs when default fill is `0xFF`**
+- The `0xFF` fill (all 1s) triggers aggressive optimization that corrupts ROM init bits
+- Using `0x00` fill (all 0s) avoids this optimization bug
+- ROM size and padding were red herrings - the real issue is the fill pattern
 
-**Next Steps:**
-- [ ] Binary search to find exact size threshold
-- [ ] Check if it's a power-of-2 boundary (256? 512?)
-- [ ] Compare synthesized netlists with/without padding
+**Solution Applied:**
+- Changed `rom_1kx8.vhdl` and `rom_4kx8.vhdl` default fill: `(others => x"00")`
+
+**Files Modified:**
+- `src/components/rom_1kx8.vhdl` - Default fill `x"00"`
+- `src/components/rom_4kx8.vhdl` - Default fill `x"00"` (for consistency)
+- `src/b8008/b8008_top.vhdl` - Uses `rom_1kx8`, updated memory map
+- `projects/project.mk` - References `rom_1kx8.vhdl`
+
+**Memory Map (Updated):**
+| Address Range | Size | Device |
+|---------------|------|--------|
+| 0x0000-0x03FF | 1KB | ROM |
+| 0x0400-0x0FFF | 3KB | Unmapped (returns 0x00) |
+| 0x1000-0x13FF | 1KB | RAM |
+| 0x1400-0x3FFF | 11KB | Unmapped (returns 0x00) |
+
+**Note:** This is a quirk in Yosys/GHDL synthesis, not a CPU bug. Either `0x00` or `0xFF` fill is valid - `0x00` just happens to work correctly with the current toolchain.
 
 ---
 
