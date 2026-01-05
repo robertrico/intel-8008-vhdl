@@ -63,6 +63,10 @@ command_loop:
         mov c,a
 
         ; Check for Enter key (CR)
+        cpi LF
+        jz handle_enter
+
+        ; Check for Enter key (LF - some terminals send this)
         cpi CR
         jz handle_enter
 
@@ -354,5 +358,14 @@ delay_short_inner:
         dcr b
         jnz delay_short_outer
         ret
+
+; ================================================================================
+; PADDING - Test if ROM size matters
+; ================================================================================
+padding:
+        db 0AAh, 055h, 0AAh, 055h, 0AAh, 055h, 0AAh, 055h
+        db 0AAh, 055h, 0AAh, 055h, 0AAh, 055h, 0AAh, 055h
+        db 0AAh, 055h, 0AAh, 055h, 0AAh, 055h, 0AAh, 055h
+        db 0AAh, 055h, 0AAh, 055h, 0AAh, 055h, 0AAh, 055h
 
         end

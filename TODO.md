@@ -105,6 +105,33 @@ Once UART TX/RX is proven, create a simple monitor program.
 - Memory exploration without recompilation
 - Foundation for porting real 8008 software
 
+### [ ] Investigate ROM Size Synthesis Bug (January 2026)
+
+**Problem:** ROM contents become corrupted on FPGA when ROM size is below ~400 bytes.
+
+**Symptoms:**
+- `cpi 0Ah` (LF) in b8008_monitor caused CPU to crash/freeze at startup
+- Same code passes in GHDL simulation
+- Adding 32 bytes of padding to end of ROM makes it work
+- Without padding: 399 bytes → crashes
+- With padding: 431 bytes → works
+
+**Key Finding:**
+- This is a **Yosys/GHDL synthesis bug**, not a CPU bug
+- ROM byte 0x0A is NOT special - the working ROM already had 6 instances of 0x0A
+- Adding the 7th 0x0A byte (as CPI immediate) only crashes when ROM is "small"
+- Padding the ROM to >400 bytes makes the same code work
+
+**Workaround:**
+- Pad ROM to minimum 512 bytes (or modify hex_to_mem.py to auto-pad)
+
+**Next Steps:**
+- [ ] Binary search to find exact size threshold
+- [ ] Check if it's a power-of-2 boundary (256? 512?)
+- [ ] Compare synthesized netlists with/without padding
+
+---
+
 ### [ ] Debug Bitbang UART RX Timing (January 2026)
 
 **Problem:** Bitbang RX receives corrupted characters in simulation.
