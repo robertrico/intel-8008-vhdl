@@ -234,6 +234,10 @@ begin
     --------------------------------------------------------------------------------
     -- Bootstrap Interrupt Control
     --------------------------------------------------------------------------------
+    -- Use async reset from clk domain directly. The reset signal is stable
+    -- (held for many phi2 cycles) so metastability risk is minimal, and
+    -- async reset ensures clean startup regardless of clock phase.
+    --------------------------------------------------------------------------------
     process(phi2, reset_int)
     begin
         if reset_int = '1' then

@@ -116,7 +116,12 @@ begin
     ----------------------------------------------------------------------------
     -- RX Control: Latch data and manage ready flag
     ----------------------------------------------------------------------------
+    -- Note: If a new byte arrives while rx_ready is still set (overrun),
+    -- the new byte overwrites the old one. This is acceptable for interactive
+    -- use - the CPU should be polling fast enough to keep up.
+    ----------------------------------------------------------------------------
     process(clk, rst)
+        variable clear_flag : std_logic;
     begin
         if rst = '1' then
             rx_latch         <= (others => '0');
@@ -135,13 +140,19 @@ begin
                 io_port_num_latch <= io_port_num;
             end if;
 
-            -- When UART receives a byte, latch it and set ready flag
+            -- Determine if we should clear the flag this cycle
+            clear_flag := '0';
+            if io_port_read_d1 = '0' and io_port_read_d2 = '1' and
+               io_port_num_latch(2 downto 0) = RX_PORT_NUM then
+                clear_flag := '1';
+            end if;
+
+            -- Handle rx_ready flag updates
+            -- Priority: new byte arriving always sets the flag (even during clear)
             if usart_rx_valid = '1' then
                 rx_latch <= usart_rx_data;
                 rx_ready <= '1';
-            -- Clear on falling edge of io_port_read when our port was read
-            elsif io_port_read_d1 = '0' and io_port_read_d2 = '1' and
-                  io_port_num_latch(2 downto 0) = RX_PORT_NUM then
+            elsif clear_flag = '1' then
                 rx_ready <= '0';
             end if;
         end if;
