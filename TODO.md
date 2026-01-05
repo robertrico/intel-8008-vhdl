@@ -105,6 +105,25 @@ Once UART TX/RX is proven, create a simple monitor program.
 - Memory exploration without recompilation
 - Foundation for porting real 8008 software
 
+### [ ] Debug Bitbang UART RX Timing (January 2026)
+
+**Problem:** Bitbang RX receives corrupted characters in simulation.
+
+**Testbench Created:** `projects/bitbang_uart/sim/bitbang_uart_top_tb.vhdl`
+- Exact FPGA replica with RX injection capability
+- TX works: "Hello, 8008 1972!" outputs correctly
+- RX issue: First char + CR work, subsequent chars corrupted
+
+**Key Finding:**
+- CPU runs ~38% slower than expected (576µs vs 416µs per bit)
+- Software delay loops calibrated for different clock speed
+- NOT a CPU instruction bug - likely adapter/timing calibration issue
+
+**Next Steps:**
+- [ ] Test with `calc.asm` to see behavior
+- [ ] Consider adapter hardware adjustments (auto bit-time detection?)
+- [ ] Or recalibrate software delay constants for b8008's speed
+
 ---
 
 ## Completed - High Priority
