@@ -26,10 +26,16 @@ LOADER   ?= $(OSS_CAD_SUITE)/openFPGALoader
 GTKWAVE  ?= $(OSS_CAD_SUITE)/gtkwave
 GHDL_FLAGS ?= --std=08 --work=work
 
-# Assembler
+# Yosys synthesis flags (can be overridden for debugging)
+# Common options to try: -abc9, -nosrl, -nodram, -nowidelut
+# Usage: make synth YOSYS_ECP5_FLAGS="-abc9 -nosrl"
+YOSYS_ECP5_FLAGS ?=
+
+# Assembler and ROM generation
 ASL ?= ~/Development/asl-current/asl
 P2HEX ?= ~/Development/asl-current/p2hex
 HEX2MEM ?= ../../hex_to_mem.py
+HEX2VHDL ?= ../../hex_to_vhdl_rom.py
 
 # FPGA settings (ECP5-5G Versa LFE5UM5G-45F)
 DEVICE   ?= um5g-45k
@@ -44,7 +50,8 @@ SRC_DIR := $(ROOT_DIR)/src/b8008
 COMP_DIR := $(ROOT_DIR)/src/components
 
 # b8008 core sources (order matters)
-B8008_SRCS := \
+# Note: rom_4kx8.vhdl is added conditionally below based on USE_GENERATED_ROM
+B8008_CORE_SRCS := \
 	$(SRC_DIR)/b8008_types.vhdl \
 	$(SRC_DIR)/program_counter.vhdl \
 	$(SRC_DIR)/stack_pointer.vhdl \
@@ -71,9 +78,18 @@ B8008_SRCS := \
 	$(SRC_DIR)/register_alu_control.vhdl \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl \
-	$(COMP_DIR)/rom_4kx8.vhdl \
 	$(COMP_DIR)/legacy/ram_1kx8.vhdl \
 	$(SRC_DIR)/b8008_top.vhdl
+
+# ROM selection: USE_GENERATED_ROM=1 uses project-local generated ROM
+# to avoid Yosys synthesis bugs with file-based ROM initialization
+ifdef USE_GENERATED_ROM
+    # Project generates its own rom_4kx8.vhdl in ./src/
+    B8008_SRCS := $(B8008_CORE_SRCS)
+else
+    # Use shared file-based ROM
+    B8008_SRCS := $(B8008_CORE_SRCS) $(COMP_DIR)/rom_4kx8.vhdl
+endif
 
 # Project sources (top-level wrapper)
 # Use ?= so individual projects can override before include
@@ -96,6 +112,10 @@ endif
 
 # Memory file (ROM contents - baked into synthesis)
 MEM_FILE := $(basename $(ASM)).mem
+
+# Generated ROM VHDL (explicit initialization, avoids Yosys synthesis bugs)
+# Uses entity name rom_4kx8 with --compat to be a drop-in replacement
+ROM_VHDL := ./src/rom_4kx8.vhdl
 
 # Output files
 VERILOG := $(BUILD_DIR)/$(PROJECT).v
@@ -161,7 +181,7 @@ create-reports-dir:
 	@mkdir -p $(REPORTS_DIR)
 
 # ============================================================================
-# ASSEMBLE - Convert .asm to .mem
+# ASSEMBLE - Convert .asm to .mem and generate ROM VHDL
 # ============================================================================
 ifdef ASM
 $(MEM_FILE): $(ASM)
@@ -170,6 +190,9 @@ $(MEM_FILE): $(ASM)
 	$(P2HEX) $(basename $(ASM)).p $(basename $(ASM)).hex -r 0-4095
 	python3 $(HEX2MEM) $(basename $(ASM)).hex $(basename $(ASM)).mem
 	@echo "Output: $(MEM_FILE)"
+	@echo "=== Generating ROM VHDL ==="
+	python3 $(HEX2VHDL) $(basename $(ASM)).hex $(ROM_VHDL) --entity rom_4kx8 --compat
+	@echo "Output: $(ROM_VHDL)"
 
 assemble: $(MEM_FILE)
 else
@@ -193,7 +216,8 @@ endif
 
 $(JSON): $(VERILOG) | create-build-dir create-reports-dir
 	@echo "=== Yosys: Synthesizing for ECP5 ==="
-	$(YOSYS) -p "read_verilog $(ROOT_DIR)/src/synth/ghdl_gates.v $<; hierarchy -check -top $(TOP); tribuf -logic; proc; opt -nodffe; synth_ecp5 -top $(TOP) -json $@" 2>&1 | tee $(SYNTH_REPORT)
+	@if [ -n "$(YOSYS_ECP5_FLAGS)" ]; then echo "  Extra flags: $(YOSYS_ECP5_FLAGS)"; fi
+	$(YOSYS) -p "read_verilog $(ROOT_DIR)/src/synth/ghdl_gates.v $<; hierarchy -check -top $(TOP); tribuf -logic; proc; opt -nodffe; synth_ecp5 -top $(TOP) $(YOSYS_ECP5_FLAGS) -json $@" 2>&1 | tee $(SYNTH_REPORT)
 	@echo ""
 	@grep -E "Number of cells|LUT|DFF|CARRY" $(SYNTH_REPORT) || true
 

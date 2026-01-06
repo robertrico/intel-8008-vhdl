@@ -33,6 +33,11 @@ CR      equ     0Dh             ; Carriage return
 LF      equ     0Ah             ; Line feed
 RX_READY equ    80h             ; Bit 7 mask for RX ready flag
 
+; Command buffer (in RAM, which starts at 0x1000)
+CMD_LEN equ     1000h           ; Buffer length storage (1 byte)
+CMD_BUF equ     1001h           ; Command buffer start address (16 bytes: 0x1001-0x1010)
+CMD_MAX equ     16              ; Maximum command length
+
 ; ================================================================================
 ; MAIN PROGRAM
 ; ================================================================================
@@ -40,6 +45,9 @@ main:
         ; Turn on LED0 to show we're starting
         mvi a,0FEh              ; LED0 on (active low)
         out 8
+
+        ; Initialize command buffer length to 0
+        call clear_buffer
 
         ; Small startup delay
         call delay_short
@@ -320,6 +328,63 @@ send_help:
         call char_delay
 
         ret
+
+; ================================================================================
+; CLEAR_BUFFER - Reset command buffer length to 0
+; ================================================================================
+; Destroys: A, H, L
+;
+clear_buffer:
+        mvi h,10h               ; CMD_LEN high byte
+        mvi l,00h               ; CMD_LEN low byte
+        mvi m,0                 ; Store 0 to buffer length
+        ret
+
+; ================================================================================
+; ADD_TO_BUFFER - Add character to command buffer
+; ================================================================================
+; Input:  C = character to add
+; Output: B = 1 if added successfully, 0 if buffer full
+; Destroys: A, D, H, L
+;
+add_to_buffer:
+        ; Read current buffer length
+        mvi h,10h               ; CMD_LEN high byte
+        mvi l,00h               ; CMD_LEN low byte
+        mov a,m                 ; A = buffer length
+
+        ; Check if buffer is full
+        cpi CMD_MAX             ; Compare with 16
+        jnc add_buffer_full     ; If length >= 16, buffer is full
+
+        ; Save length in D for later
+        mov d,a
+
+        ; Calculate buffer address: CMD_BUF + length = 0x1001 + length
+        adi 01h                 ; A = length + 1 (low byte of target address)
+        mov l,a                 ; L = target low byte, H still 0x10
+
+        ; Store character at buffer position
+        mov m,c                 ; Store character from C register
+
+        ; Increment buffer length at CMD_LEN
+        mvi l,00h               ; H,L = CMD_LEN (H still 0x10)
+        mov a,d                 ; Restore original length
+        adi 1                   ; Increment (INR A doesn't exist on 8008)
+        mov m,a                 ; Store new length
+
+        ; Return B=1 for success
+        mvi b,1
+        ret
+
+add_buffer_full:
+        mvi b,0                 ; Return B=0 for buffer full
+        ret
+
+; ================================================================================
+; PARSE_COMMAND - Parse and execute command in buffer
+; ================================================================================
+; (stub removed for testing)
 
 ; ================================================================================
 ; CHAR_DELAY - Small delay between characters
