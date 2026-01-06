@@ -384,7 +384,8 @@ add_buffer_full:
 ; ================================================================================
 ; PARSE_COMMAND - Parse and execute command in buffer
 ; ================================================================================
-; (stub removed for testing)
+parse_command:
+        ret
 
 ; ================================================================================
 ; CHAR_DELAY - Small delay between characters

@@ -249,7 +249,9 @@ begin
                 bootstrap_int <= '1';
                 bootstrap_counter <= bootstrap_counter + 1;
                 if bootstrap_counter >= 16 then
-                    if s2_sig = '1' and s1_sig = '1' and s0_sig = '0' then
+                    -- Wait for T1I state AND sync high (first half)
+                    -- This ensures sync is aligned with state machine when execution begins
+                    if s2_sig = '1' and s1_sig = '1' and s0_sig = '0' and sync_sig = '1' then
                         bootstrap_int  <= '0';
                         bootstrap_done <= '1';
                     end if;
