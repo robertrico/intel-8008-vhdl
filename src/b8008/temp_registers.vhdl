@@ -26,6 +26,9 @@ entity temp_registers is
         -- Clock input (phi2 for latching)
         phi2 : in std_logic;
 
+        -- Reset (active high)
+        reset : in std_logic;
+
         -- Control inputs from Register and ALU Control
         load_reg_a : in std_logic;  -- Enable latch for Reg.a from internal bus
         load_reg_b : in std_logic;  -- Enable latch for Reg.b from internal bus
@@ -63,9 +66,11 @@ begin
 
     -- Latch Reg.a on phi2 rising edge when enabled
     -- DUMB: just load whatever is on internal_bus
-    process(phi2)
+    process(phi2, reset)
     begin
-        if rising_edge(phi2) then
+        if reset = '1' then
+            reg_a <= (others => '0');
+        elsif rising_edge(phi2) then
             if load_reg_a = '1' then
                 reg_a <= internal_bus_in;
                 report "TEMP_REG: Loading Reg.a = 0x" & to_hstring(unsigned(internal_bus_in));
@@ -75,9 +80,11 @@ begin
 
     -- Latch Reg.b on phi2 rising edge when enabled
     -- DUMB: just load whatever is on internal_bus
-    process(phi2)
+    process(phi2, reset)
     begin
-        if rising_edge(phi2) then
+        if reset = '1' then
+            reg_b <= (others => '0');
+        elsif rising_edge(phi2) then
             if load_reg_b = '1' then
                 reg_b <= internal_bus_in;
                 report "TEMP_REG: Loading Reg.b = 0x" & to_hstring(unsigned(internal_bus_in));

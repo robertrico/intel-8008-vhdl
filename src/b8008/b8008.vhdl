@@ -424,6 +424,7 @@ architecture structural of b8008 is
     component temp_registers is
         port (
             phi2                : in std_logic;
+            reset               : in std_logic;
             load_reg_a          : in std_logic;
             load_reg_b          : in std_logic;
             output_reg_a        : in std_logic;
@@ -1202,6 +1203,7 @@ begin
     u_temp_registers : temp_registers
         port map (
             phi2                => phi2,
+            reset               => reset,
             load_reg_a          => load_reg_a,
             load_reg_b          => load_reg_b,
             output_reg_a        => output_reg_a,
