@@ -56,45 +56,48 @@ main:
         call send_banner
         call send_prompt
 
+	xra a
+
+	mvi a,0
+	mvi b,0
+	mvi c,0
+	mvi d,0
+	mvi e,0
+
         ; Fall through to echo loop
 
 ; ================================================================================
 ; COMMAND_LOOP - Main command loop
 ; ================================================================================
-; Waits for a character from UART, processes commands or echoes.
+; Waits for a character from UART, buffers it, and echoes back.
+; Commands are parsed only when Enter is pressed.
 ;
 command_loop:
+
         ; Poll UART RX for incoming character
         call uart_rx_wait       ; Returns received char in A
 
-        ; Save character in C (B is used by char_delay)
+        ; Save character in C (used by add_to_buffer)
         mov c,a
 
         ; Check for Enter key (CR)
-        cpi LF
-        jz handle_enter
-
-        ; Check for Enter key (LF - some terminals send this)
         cpi CR
         jz handle_enter
 
-        ; Check for 'H' or 'h' - Help command
-        cpi 'H'
-        jz handle_help
-        cpi 'h'
-        jz handle_help
+        ; Check for Enter key (LF - some terminals send this)
+        cpi LF
+        jz handle_enter
 
-        ; Not a command, echo the character back
+        ; Regular character - add to buffer
+        call add_to_buffer      ; C = char
+
+	mvi a,0FEh
+	out 8
+
+        ; Echo the character back
         mov a,c
         out 9
         call char_delay
-
-        ; Toggle LED1 briefly to show activity
-        mvi a,0FDh              ; LED1 on
-        out 8
-        call delay_tiny
-        mvi a,0FEh              ; LED0 on, LED1 off
-        out 8
 
         jmp command_loop
 
@@ -102,6 +105,13 @@ command_loop:
 ; HANDLE_ENTER - Handle Enter key (new line + new prompt)
 ; ================================================================================
 handle_enter:
+	call delay_tiny
+        ; Parse and execute command in buffer (currently a stub)
+        call parse_command
+
+        ; Clear buffer for next command
+        call clear_buffer
+
         ; Send CR+LF
         mvi a,CR
         out 9
@@ -112,31 +122,6 @@ handle_enter:
         call char_delay
 
         ; Reprint the prompt
-        call send_prompt
-
-        jmp command_loop
-
-; ================================================================================
-; HANDLE_HELP - Display help menu
-; ================================================================================
-handle_help:
-        ; Echo the 'H' back
-        mov a,c
-        out 9
-        call char_delay
-
-        ; New line
-        mvi a,CR
-        out 9
-        call char_delay
-        mvi a,LF
-        out 9
-        call char_delay
-
-        ; Print "Help Menu"
-        call send_help
-
-        ; Print prompt
         call send_prompt
 
         jmp command_loop
@@ -347,44 +332,45 @@ clear_buffer:
 ; Output: B = 1 if added successfully, 0 if buffer full
 ; Destroys: A, D, H, L
 ;
+; Test 10: MOV M,L (1-bit change from H: 101->110)
 add_to_buffer:
-        ; Read current buffer length
-        mvi h,10h               ; CMD_LEN high byte
-        mvi l,00h               ; CMD_LEN low byte
-        mov a,m                 ; A = buffer length
-
-        ; Check if buffer is full
-        cpi CMD_MAX             ; Compare with 16
-        jnc add_buffer_full     ; If length >= 16, buffer is full
-
-        ; Save length in D for later
-        mov d,a
-
-        ; Calculate buffer address: CMD_BUF + length = 0x1001 + length
-        adi 01h                 ; A = length + 1 (low byte of target address)
-        mov l,a                 ; L = target low byte, H still 0x10
-
-        ; Store character at buffer position
-        mov m,c                 ; Store character from C register
-
-        ; Increment buffer length at CMD_LEN
-        mvi l,00h               ; H,L = CMD_LEN (H still 0x10)
-        mov a,d                 ; Restore original length
-        adi 1                   ; Increment (INR A doesn't exist on 8008)
-        mov m,a                 ; Store new length
-
-        ; Return B=1 for success
-        mvi b,1
-        ret
-
-add_buffer_full:
-        mvi b,0                 ; Return B=0 for buffer full
+        mvi h,10h
+        mvi l,42h               ; L = 'B' (and also the address low byte!)
+        mov m,c                 ; Write L to 0x1042
         ret
 
 ; ================================================================================
 ; PARSE_COMMAND - Parse and execute command in buffer
 ; ================================================================================
 parse_command:
+
+	mvi a,001h
+	out 8
+
+ 	call delay_short
+ 	call delay_short
+
+	mvi a,010h
+	out 8
+
+ 	call delay_short
+ 	call delay_short
+
+	mvi a,030h
+	out 8
+
+ 	call delay_short
+ 	call delay_short
+
+	mvi a,003h
+	out 8
+
+ 	call delay_short
+ 	call delay_short
+
+	mvi a,0F1h
+	out 8
+
         ret
 
 ; ================================================================================
