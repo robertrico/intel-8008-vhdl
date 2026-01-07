@@ -42,6 +42,14 @@ CMD_MAX equ     16              ; Maximum command length
 ; MAIN PROGRAM
 ; ================================================================================
 main:
+	; Reset system
+	mvi a,0
+	mvi b,0
+	mvi c,0
+	mvi d,0
+	mvi e,0
+	xra a
+
         ; Turn on LED0 to show we're starting
         mvi a,0FEh              ; LED0 on (active low)
         out 8
@@ -56,13 +64,6 @@ main:
         call send_banner
         call send_prompt
 
-	xra a
-
-	mvi a,0
-	mvi b,0
-	mvi c,0
-	mvi d,0
-	mvi e,0
 
         ; Fall through to echo loop
 
@@ -330,47 +331,69 @@ clear_buffer:
 ; ================================================================================
 ; Input:  C = character to add
 ; Output: B = 1 if added successfully, 0 if buffer full
-; Destroys: A, D, H, L
+; Destroys: A, B, D, H, L
 ;
-; Test 10: MOV M,L (1-bit change from H: 101->110)
 add_to_buffer:
+        ; Load current buffer length
         mvi h,10h
-        mvi l,42h               ; L = 'B' (and also the address low byte!)
-        mov m,c                 ; Write L to 0x1042
+        mvi l,00h               ; Point to CMD_LEN (0x1000)
+        mov a,m                 ; A = current length
+
+        ; Check if buffer is full
+        cpi CMD_MAX             ; Compare with max (16)
+        jnc buffer_full         ; Jump if length >= 16
+
+        ; Calculate target address: CMD_BUF + length = 0x1001 + length
+        mov d,a                 ; Save length in D
+        adi 01h                 ; A = length + 1 (low byte of target address)
+        mov l,a                 ; HL = 0x1000 + length + 1 = 0x1001 + length
+
+        ; Store the character
+        mov m,c                 ; Store character at buffer[length]
+
+        ; Increment and save new length
+        mvi l,00h               ; Point back to CMD_LEN (0x1000)
+        mov a,d                 ; Get saved length
+        adi 1                   ; Increment
+        mov m,a                 ; Store new length
+
+        mvi b,1                 ; Return success
+        ret
+
+buffer_full:
+        mvi b,0                 ; Return failure
         ret
 
 ; ================================================================================
 ; PARSE_COMMAND - Parse and execute command in buffer
 ; ================================================================================
+; Checks the first character in the buffer and dispatches to the appropriate
+; command handler.
+;
+; Commands:
+;   H or h - Show help menu
+;
+; Destroys: A, H, L
+;
 parse_command:
+        ; Point HL to first character in buffer (CMD_BUF = 0x1001)
+        mvi h,10h
+        mvi l,01h
+        mov a,m                 ; Load first character
 
-	mvi a,001h
-	out 8
+        ; Check for 'H'
+        cpi 'H'
+        jz cmd_help
 
- 	call delay_short
- 	call delay_short
+        ; Check for 'h'
+        cpi 'h'
+        jz cmd_help
 
-	mvi a,010h
-	out 8
+        ; Unknown command - just return
+        ret
 
- 	call delay_short
- 	call delay_short
-
-	mvi a,030h
-	out 8
-
- 	call delay_short
- 	call delay_short
-
-	mvi a,003h
-	out 8
-
- 	call delay_short
- 	call delay_short
-
-	mvi a,0F1h
-	out 8
-
+cmd_help:
+        call send_help
         ret
 
 ; ================================================================================
