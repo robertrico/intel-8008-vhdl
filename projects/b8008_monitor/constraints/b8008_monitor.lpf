@@ -161,7 +161,7 @@ IOBUF PORT "cpu_s2" IO_TYPE=LVCMOS33;
 # CPU SYNC Output
 # ====================================================================================
 
-LOCATE COMP "cpu_sync" SITE "C10";
+LOCATE COMP "cpu_sync" SITE "B10";
 IOBUF PORT "cpu_sync" IO_TYPE=LVCMOS33;
 
 # ====================================================================================
@@ -171,7 +171,7 @@ IOBUF PORT "cpu_sync" IO_TYPE=LVCMOS33;
 LOCATE COMP "cpu_phi1" SITE "A9";
 IOBUF PORT "cpu_phi1" IO_TYPE=LVCMOS33;
 
-LOCATE COMP "cpu_phi2" SITE "B10";
+LOCATE COMP "cpu_phi2" SITE "C10";
 IOBUF PORT "cpu_phi2" IO_TYPE=LVCMOS33;
 
 # ====================================================================================
