@@ -42,14 +42,6 @@ CMD_MAX equ     16              ; Maximum command length
 ; MAIN PROGRAM
 ; ================================================================================
 main:
-	; Reset system
-	mvi a,0
-	mvi b,0
-	mvi c,0
-	mvi d,0
-	mvi e,0
-	xra a
-
         ; Turn on LED0 to show we're starting
         mvi a,0FEh              ; LED0 on (active low)
         out 8
@@ -107,7 +99,16 @@ command_loop:
 ; ================================================================================
 handle_enter:
 	call delay_tiny
-        ; Parse and execute command in buffer (currently a stub)
+
+        ; Send CR+LF before running command
+        mvi a,CR
+        out 9
+        call char_delay
+        mvi a,LF
+        out 9
+        call char_delay
+
+        ; Parse and execute command in buffer
         call parse_command
 
         ; Clear buffer for next command
