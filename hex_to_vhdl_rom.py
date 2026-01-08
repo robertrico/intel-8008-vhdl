@@ -6,6 +6,11 @@ Converts an Intel HEX file to a VHDL ROM component with explicit
 array initialization. This avoids synthesis issues with file-based
 ROM initialization in GHDL/Yosys.
 
+Features:
+- Explicit array initialization (avoids Yosys file-based ROM bugs)
+- Includes ram_style="logic" attribute for synthesis control
+- Works with GHDL + Yosys + nextpnr-ecp5 toolchain
+
 Usage:
     python3 hex_to_vhdl_rom.py input.hex output.vhdl [--size SIZE] [--entity NAME]
 
@@ -111,6 +116,10 @@ end entity {entity_name};
 architecture rtl of {entity_name} is
     type rom_array is array(0 to {rom_size - 1}) of std_logic_vector(7 downto 0);
 
+    -- Synthesis attribute to control ROM implementation
+    -- "logic" forces LUT-based implementation (no block RAM)
+    attribute ram_style : string;
+
     constant ROM : rom_array := (
 """
 
@@ -135,6 +144,9 @@ architecture rtl of {entity_name} is
 
     vhdl += f"""
     );
+
+    -- Apply ram_style attribute to ROM constant
+    attribute ram_style of ROM : constant is "logic";
 
 begin
     -- Asynchronous ROM read

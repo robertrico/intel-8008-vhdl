@@ -191,7 +191,7 @@ $(MEM_FILE): $(ASM)
 	python3 $(HEX2MEM) $(basename $(ASM)).hex $(basename $(ASM)).mem
 	@echo "Output: $(MEM_FILE)"
 	@echo "=== Generating ROM VHDL ==="
-	python3 $(HEX2VHDL) $(basename $(ASM)).hex $(ROM_VHDL) --entity rom_4kx8 --compat
+	python3 $(HEX2VHDL) $(basename $(ASM)).hex $(ROM_VHDL) --entity rom_4kx8 --compat --size 4096
 	@echo "Output: $(ROM_VHDL)"
 
 assemble: $(MEM_FILE)
