@@ -168,10 +168,10 @@ IOBUF PORT "cpu_sync" IO_TYPE=LVCMOS33;
 # Phase Clocks
 # ====================================================================================
 
-LOCATE COMP "cpu_phi1" SITE "A9";
+LOCATE COMP "cpu_phi1" SITE "C10";
 IOBUF PORT "cpu_phi1" IO_TYPE=LVCMOS33;
 
-LOCATE COMP "cpu_phi2" SITE "C10";
+LOCATE COMP "cpu_phi2" SITE "A9";
 IOBUF PORT "cpu_phi2" IO_TYPE=LVCMOS33;
 
 # ====================================================================================
