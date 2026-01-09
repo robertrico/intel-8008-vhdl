@@ -63,7 +63,12 @@ entity b8008_monitor_top is
         dbg_bootstrap_int  : out std_logic;  -- Bootstrap interrupt active
         dbg_bootstrap_done : out std_logic;  -- Bootstrap completed
         dbg_state_half     : out std_logic;  -- Which half of 2-cycle state
-        dbg_int_pending    : out std_logic   -- CPU interrupt pending
+        dbg_int_pending    : out std_logic;  -- CPU interrupt pending
+
+        -- Debug buttons (directly to GPIO, active low with pull-up)
+        dbg_btn_run_stop  : in std_logic;   -- Run/Stop toggle
+        dbg_btn_step_cycle : in std_logic;  -- Single full cycle step (220 clocks)
+        dbg_btn_step_sync : in std_logic    -- Step to SYNC (instruction boundary)
     );
 end entity b8008_monitor_top;
 
@@ -149,6 +154,45 @@ architecture rtl of b8008_monitor_top is
     end component;
 
     --------------------------------------------------------------------------------
+    -- Component: debouncer (Button debouncing with edge detection)
+    --------------------------------------------------------------------------------
+    component debouncer is
+        generic (
+            CLK_FREQ_HZ   : integer := 100_000_000;
+            DEBOUNCE_MS   : integer := 20;
+            PULSE_STRETCH : integer := 100;
+            DEBOUNCE_TIME : integer := 0
+        );
+        port (
+            clk         : in  std_logic;
+            rst         : in  std_logic;
+            btn         : in  std_logic;
+            btn_pressed : out std_logic
+        );
+    end component;
+
+    --------------------------------------------------------------------------------
+    -- Component: debug_clock_control (Three-button debug controller)
+    --------------------------------------------------------------------------------
+    component debug_clock_control is
+        port (
+            clk_in          : in  std_logic;
+            reset           : in  std_logic;
+            btn_run_stop    : in  std_logic;
+            btn_step_cycle  : in  std_logic;
+            btn_step_sync   : in  std_logic;
+            phi1_in         : in  std_logic;
+            phi2_in         : in  std_logic;
+            sync_in         : in  std_logic;
+            clk_out         : out std_logic;
+            is_running      : out std_logic;
+            next_is_phi1    : out std_logic;
+            next_is_phi2    : out std_logic;
+            triggered       : out std_logic
+        );
+    end component;
+
+    --------------------------------------------------------------------------------
     -- Internal Signals
     --------------------------------------------------------------------------------
     -- POR (Power-On Reset) and reset control
@@ -203,6 +247,18 @@ architecture rtl of b8008_monitor_top is
     -- Clock counter for POR timing
     signal clk_counter : unsigned(25 downto 0) := (others => '0');
 
+    -- Debug clock control signals
+    signal gated_clk : std_logic;
+    signal dbg_is_running : std_logic;
+    signal dbg_next_is_phi1 : std_logic;
+    signal dbg_next_is_phi2 : std_logic;
+    signal dbg_triggered : std_logic;
+
+    -- Debounced button signals (active high pulses)
+    signal run_stop_pressed : std_logic;
+    signal step_cycle_pressed : std_logic;
+    signal step_sync_pressed : std_logic;
+
 begin
 
     --------------------------------------------------------------------------------
@@ -230,6 +286,74 @@ begin
 
     reset_sw <= reset_sync(2);
     reset_int <= por_active or reset_sw;
+
+    --------------------------------------------------------------------------------
+    -- Debug Button Debouncers
+    --------------------------------------------------------------------------------
+    -- Buttons are active low with internal pull-ups. Debouncer outputs
+    -- active high single-cycle pulses on button press.
+    --------------------------------------------------------------------------------
+    u_debounce_run_stop : debouncer
+        generic map (
+            CLK_FREQ_HZ   => 100_000_000,
+            DEBOUNCE_MS   => 20,
+            PULSE_STRETCH => 1
+        )
+        port map (
+            clk         => clk,
+            rst         => reset_int,
+            btn         => dbg_btn_run_stop,
+            btn_pressed => run_stop_pressed
+        );
+
+    u_debounce_step_cycle : debouncer
+        generic map (
+            CLK_FREQ_HZ   => 100_000_000,
+            DEBOUNCE_MS   => 20,
+            PULSE_STRETCH => 1
+        )
+        port map (
+            clk         => clk,
+            rst         => reset_int,
+            btn         => dbg_btn_step_cycle,
+            btn_pressed => step_cycle_pressed
+        );
+
+    u_debounce_step_sync : debouncer
+        generic map (
+            CLK_FREQ_HZ   => 100_000_000,
+            DEBOUNCE_MS   => 20,
+            PULSE_STRETCH => 1
+        )
+        port map (
+            clk         => clk,
+            rst         => reset_int,
+            btn         => dbg_btn_step_sync,
+            btn_pressed => step_sync_pressed
+        );
+
+    --------------------------------------------------------------------------------
+    -- Debug Clock Control
+    --------------------------------------------------------------------------------
+    -- Gates the master clock to the CPU. UART stays on ungated clock for accurate
+    -- baud timing even when CPU is stopped.
+    --------------------------------------------------------------------------------
+    u_debug_clk : debug_clock_control
+        port map (
+            clk_in          => clk,
+            reset           => reset_int,
+            btn_run_stop    => run_stop_pressed,
+            btn_step_cycle  => step_cycle_pressed,
+            btn_step_sync   => step_sync_pressed,
+            phi1_in         => phi1,
+            phi2_in         => phi2,
+            sync_in         => sync_sig,
+            clk_out         => gated_clk,
+            is_running      => dbg_is_running,
+            next_is_phi1    => dbg_next_is_phi1,
+            next_is_phi2    => dbg_next_is_phi2,
+            triggered       => dbg_triggered
+        );
 
     --------------------------------------------------------------------------------
     -- Bootstrap Interrupt Control
@@ -268,7 +392,7 @@ begin
             ROM_FILE => "./b8008_monitor.mem"
         )
         port map (
-            clk_in      => clk,
+            clk_in      => gated_clk,  -- Use gated clock for debug control
             reset       => reset_int,
             interrupt   => bootstrap_int,
             int_vector  => "000",  -- RST 0 for bootstrap
@@ -344,14 +468,19 @@ begin
     --------------------------------------------------------------------------------
     -- LED Outputs
     --------------------------------------------------------------------------------
-    -- Drive LEDs from CPU I/O port 8 output (directly active, accent active low)
-    led <= io_port_8;
+    -- LEDs 0-3: Debug status (directly active low: '0' = ON)
+    -- LEDs 4-7: CPU I/O port 8 output (directly active, accent active low)
+    led(0) <= not dbg_is_running;     -- ON when stopped
+    led(1) <= not dbg_next_is_phi2;   -- ON when phi2 is next phase
+    led(2) <= not sync_sig;           -- ON during SYNC
+    led(3) <= not dbg_triggered;      -- ON when breakpoint triggered (reserved)
+    led(7 downto 4) <= io_port_8(7 downto 4);  -- Upper 4 bits from CPU I/O
 
     -- M20: TX busy indicator (ON = UART transmitting)
     led_M20 <= not uart_tx_busy;
 
-    -- L18: io_port_read activity (directly shows strobe - will blink on INP)
-    led_L18 <= not io_port_read;
+    -- L18: Running indicator (ON = CPU running)
+    led_L18 <= not dbg_is_running;
 
     --------------------------------------------------------------------------------
     -- CPU Debug Outputs (directly connected for logic analyzer)

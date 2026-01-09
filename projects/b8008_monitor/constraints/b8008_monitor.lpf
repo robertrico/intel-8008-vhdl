@@ -209,6 +209,24 @@ LOCATE COMP "dbg_int_pending" SITE "E6";
 IOBUF PORT "dbg_int_pending" IO_TYPE=LVCMOS33 DRIVE=12;
 
 # ====================================================================================
+# Debug Buttons (X4 expansion connector, active low with internal pull-up)
+# ====================================================================================
+# Wire buttons between GPIO pin and GND. Internal pull-up enabled.
+# X4 connector pins 3-5 (IO0-IO2): A12, A13, B13
+
+# Run/Stop toggle button (X4 pin 3)
+LOCATE COMP "dbg_btn_run_stop" SITE "A12";
+IOBUF PORT "dbg_btn_run_stop" IO_TYPE=LVCMOS25 PULLMODE=UP;
+
+# Step Cycle button (X4 pin 4) - advances one full phi1+phi2 cycle
+LOCATE COMP "dbg_btn_step_cycle" SITE "A13";
+IOBUF PORT "dbg_btn_step_cycle" IO_TYPE=LVCMOS25 PULLMODE=UP;
+
+# Step to SYNC button (X4 pin 5) - runs until instruction boundary
+LOCATE COMP "dbg_btn_step_sync" SITE "B13";
+IOBUF PORT "dbg_btn_step_sync" IO_TYPE=LVCMOS25 PULLMODE=UP;
+
+# ====================================================================================
 # Configuration
 # ====================================================================================
 

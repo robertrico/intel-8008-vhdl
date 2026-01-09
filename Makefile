@@ -63,7 +63,7 @@ B8008_SRCS = \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl
 
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory help show-programs synth pnr bit prog prog-flash
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
 
 all: help
 
@@ -115,6 +115,7 @@ help:
 	@echo "  make test-stack-pointer   - Test stack pointer"
 	@echo "  make test-stack-addr-decoder - Test stack address decoder"
 	@echo "  make test-stack-memory    - Test stack memory"
+	@echo "  make test-debug-clock-control - Test debug clock control"
 	@echo "  make clean                - Remove build files"
 	@echo ""
 
@@ -450,6 +451,13 @@ test-sss-ddd-selector: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/sss_ddd_selector_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) sss_ddd_selector_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) sss_ddd_selector_tb --stop-time=10us
+
+test-debug-clock-control: $(BUILD_DIR)
+	@echo "Testing debug clock control..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/debug_clock_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/debug_clock_control_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) debug_clock_control_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) debug_clock_control_tb --stop-time=100us
 
 # ============================================================================
 # ASSEMBLER
