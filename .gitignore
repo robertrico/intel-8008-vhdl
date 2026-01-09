@@ -33,7 +33,7 @@ sim/output.txt
 
 # JSON synthesis files (but keep isa.json)
 *.json
-!isa.json
+!docs/*.json
 
 # Editor and OS files
 .DS_Store
