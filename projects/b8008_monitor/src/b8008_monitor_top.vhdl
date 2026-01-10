@@ -188,7 +188,8 @@ architecture rtl of b8008_monitor_top is
             is_running      : out std_logic;
             next_is_phi1    : out std_logic;
             next_is_phi2    : out std_logic;
-            triggered       : out std_logic
+            triggered       : out std_logic;
+            reset_request   : out std_logic
         );
     end component;
 
@@ -253,6 +254,7 @@ architecture rtl of b8008_monitor_top is
     signal dbg_next_is_phi1 : std_logic;
     signal dbg_next_is_phi2 : std_logic;
     signal dbg_triggered : std_logic;
+    signal dbg_reset_request : std_logic;
 
     -- Debounced button signals (active high pulses)
     signal run_stop_pressed : std_logic;
@@ -285,7 +287,9 @@ begin
     end process;
 
     reset_sw <= reset_sync(2);
-    reset_int <= por_active or reset_sw;
+    -- Debug controller only sees POR and switch, not its own reset request
+    -- This prevents reset feedback loop
+    reset_int <= por_active or reset_sw or dbg_reset_request;
 
     --------------------------------------------------------------------------------
     -- Debug Button Debouncers
@@ -301,7 +305,7 @@ begin
         )
         port map (
             clk         => clk,
-            rst         => reset_int,
+            rst         => not por_active,  -- Only reset on POR, not debug reset
             btn         => dbg_btn_run_stop,
             btn_pressed => run_stop_pressed
         );
@@ -314,7 +318,7 @@ begin
         )
         port map (
             clk         => clk,
-            rst         => reset_int,
+            rst         => not por_active,  -- Only reset on POR, not debug reset
             btn         => dbg_btn_step_cycle,
             btn_pressed => step_cycle_pressed
         );
@@ -327,7 +331,7 @@ begin
         )
         port map (
             clk         => clk,
-            rst         => reset_int,
+            rst         => not por_active,  -- Only reset on POR, not debug reset
             btn         => dbg_btn_step_sync,
             btn_pressed => step_sync_pressed
         );
@@ -341,7 +345,7 @@ begin
     u_debug_clk : debug_clock_control
         port map (
             clk_in          => clk,
-            reset           => reset_int,
+            reset           => por_active or reset_sw,  -- Don't include dbg_reset_request (feedback loop)
             btn_run_stop    => run_stop_pressed,
             btn_step_cycle  => step_cycle_pressed,
             btn_step_sync   => step_sync_pressed,
@@ -352,7 +356,8 @@ begin
             is_running      => dbg_is_running,
             next_is_phi1    => dbg_next_is_phi1,
             next_is_phi2    => dbg_next_is_phi2,
-            triggered       => dbg_triggered
+            triggered       => dbg_triggered,
+            reset_request   => dbg_reset_request
         );
 
     --------------------------------------------------------------------------------
@@ -470,7 +475,7 @@ begin
     --------------------------------------------------------------------------------
     -- LEDs 0-3: Debug status (directly active low: '0' = ON)
     -- LEDs 4-7: CPU I/O port 8 output (directly active, accent active low)
-    led(0) <= not dbg_is_running;     -- ON when stopped
+    led(0) <= not dbg_is_running;     -- ON when running (active-low LED, '0'=ON)
     led(1) <= not dbg_next_is_phi2;   -- ON when phi2 is next phase
     led(2) <= not sync_sig;           -- ON during SYNC
     led(3) <= not dbg_triggered;      -- ON when breakpoint triggered (reserved)
@@ -479,7 +484,7 @@ begin
     -- M20: TX busy indicator (ON = UART transmitting)
     led_M20 <= not uart_tx_busy;
 
-    -- L18: Running indicator (ON = CPU running)
+    -- L18: Running indicator (ON when running, active-low LED)
     led_L18 <= not dbg_is_running;
 
     --------------------------------------------------------------------------------

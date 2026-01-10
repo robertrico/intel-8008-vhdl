@@ -27,4 +27,4 @@ include ../project.mk
 # project.mk's PROJECT_SRCS only picks up ./src/*.vhdl, so we need to add usart components
 # Note: b8008_usart wraps usart with 8008-specific handshaking
 # Note: ./src/rom_4kx8.vhdl is the generated ROM (USE_GENERATED_ROM excludes shared version)
-ALL_SRCS := $(B8008_SRCS) $(COMP_DIR)/usart.vhdl $(COMP_DIR)/b8008_usart.vhdl ./src/rom_4kx8.vhdl ./src/b8008_monitor_top.vhdl
+ALL_SRCS := $(B8008_SRCS) $(COMP_DIR)/usart.vhdl $(COMP_DIR)/b8008_usart.vhdl $(COMP_DIR)/debouncer.vhdl $(SRC_DIR)/debug_clock_control.vhdl ./src/rom_4kx8.vhdl ./src/b8008_monitor_top.vhdl
