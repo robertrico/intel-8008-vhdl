@@ -33,6 +33,7 @@ entity debug_clock_control is
         phi1_in         : in  std_logic;
         phi2_in         : in  std_logic;
         sync_in         : in  std_logic;
+        bootstrap_done  : in  std_logic;   -- Stop after bootstrap completes
 
         -- Gated clock output to CPU
         clk_out         : out std_logic;
@@ -51,7 +52,8 @@ end entity debug_clock_control;
 architecture rtl of debug_clock_control is
 
     -- Core state: are clocks enabled?
-    signal clk_enable : std_logic := '1';
+    -- Start stopped so user can step from known state
+    signal clk_enable : std_logic := '0';
 
     -- Stepping mode (temporarily enable clocks)
     signal stepping_phi : std_logic := '0';   -- Stepping to next phi edge
@@ -72,6 +74,9 @@ architecture rtl of debug_clock_control is
     -- Button edge detection - only act once per press
     signal btn_run_stop_prev : std_logic := '0';
     signal btn_run_stop_edge : std_logic;
+
+    -- Bootstrap break - stop after bootstrap completes
+    signal bootstrap_done_prev : std_logic := '0';
 
 begin
 
@@ -108,17 +113,24 @@ begin
     process(clk_in, reset)
     begin
         if reset = '1' then
-            clk_enable <= '1';
+            clk_enable <= '0';  -- Start stopped
             stepping_phi <= '0';
             stepping_sync <= '0';
             reset_pending <= '0';
             reset_active <= '0';
             reset_counter <= 0;
             btn_run_stop_prev <= '0';
+            bootstrap_done_prev <= '0';
         elsif rising_edge(clk_in) then
 
             -- Track button state for edge detection
             btn_run_stop_prev <= btn_run_stop;
+            bootstrap_done_prev <= bootstrap_done;
+
+            -- Hardware break: stop when bootstrap completes (rising edge)
+            if bootstrap_done = '1' and bootstrap_done_prev = '0' then
+                clk_enable <= '0';
+            end if;
 
             -- Reset sequence: hold for 500 clocks then release
             if reset_active = '1' then

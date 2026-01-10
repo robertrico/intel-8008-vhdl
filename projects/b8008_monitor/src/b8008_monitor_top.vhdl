@@ -184,6 +184,7 @@ architecture rtl of b8008_monitor_top is
             phi1_in         : in  std_logic;
             phi2_in         : in  std_logic;
             sync_in         : in  std_logic;
+            bootstrap_done  : in  std_logic;
             clk_out         : out std_logic;
             is_running      : out std_logic;
             next_is_phi1    : out std_logic;
@@ -352,6 +353,7 @@ begin
             phi1_in         => phi1,
             phi2_in         => phi2,
             sync_in         => sync_sig,
+            bootstrap_done  => bootstrap_done and not sw(1),  -- Hardware break after bootstrap (SW1 ON = low = enables)
             clk_out         => gated_clk,
             is_running      => dbg_is_running,
             next_is_phi1    => dbg_next_is_phi1,
