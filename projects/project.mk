@@ -34,8 +34,13 @@ YOSYS_ECP5_FLAGS ?=
 # Assembler and ROM generation
 ASL ?= ~/Development/asl-current/asl
 P2HEX ?= ~/Development/asl-current/p2hex
+P2BIN ?= ~/Development/asl-current/p2bin
 HEX2MEM ?= ../../hex_to_mem.py
 HEX2VHDL ?= ../../hex_to_vhdl_rom.py
+
+# EEPROM programmer settings (minipro)
+CHIP ?= AT28C64B
+ROM_SIZE ?= 8192
 
 # FPGA settings (ECP5-5G Versa LFE5UM5G-45F)
 DEVICE   ?= um5g-45k
@@ -135,7 +140,7 @@ TIMING_REPORT := $(REPORTS_DIR)/timing.txt
 UTIL_REPORT := $(REPORTS_DIR)/utilization.txt
 SIM_REPORT := $(REPORTS_DIR)/simulation.txt
 
-.PHONY: help all build assemble sim synth pnr bit prog prog-flash clean clean-all reports list-tests
+.PHONY: help all build assemble rom-bin sim synth pnr bit prog prog-flash clean clean-all reports list-tests
 
 help:
 	@echo "============================================"
@@ -152,6 +157,7 @@ help:
 	@echo "Programming:"
 	@echo "  make prog       - Program FPGA (just programs, no build)"
 	@echo "  make prog-flash - Program SPI flash (persistent)"
+	@echo "  make rom-bin    - Generate .bin and flash EEPROM ($(CHIP))"
 	@echo ""
 	@echo "Simulation:"
 	@echo "  make sim        - Run simulation and open GTKWave"
@@ -198,6 +204,25 @@ assemble: $(MEM_FILE)
 else
 assemble:
 	@echo "No ASM file specified, skipping assembly"
+endif
+
+# ============================================================================
+# ROM-BIN - Generate binary and flash EEPROM with minipro
+# ============================================================================
+ifdef ASM
+BIN_FILE := $(basename $(ASM)).bin
+
+rom-bin: $(MEM_FILE)
+	@echo "=== Generating binary ROM for $(CHIP) ==="
+	$(P2BIN) $(basename $(ASM)).p $(BIN_FILE) -r 0-$$(($(ROM_SIZE)-1)) -l $(ROM_SIZE)
+	@echo "Output: $(BIN_FILE) ($(ROM_SIZE) bytes, padded with 0xFF)"
+	@echo ""
+	@echo "=== Programming $(CHIP) ==="
+	minipro -p $(CHIP) -w $(BIN_FILE)
+else
+rom-bin:
+	@echo "No ASM file specified for this project"
+	@exit 1
 endif
 
 # ============================================================================
