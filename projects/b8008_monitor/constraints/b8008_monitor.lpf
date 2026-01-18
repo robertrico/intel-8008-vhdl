@@ -120,93 +120,143 @@ IOBUF PORT "led_L18" IO_TYPE=LVCMOS25;
 # CPU Data Bus (directly wired to logic analyzer)
 # ====================================================================================
 
-LOCATE COMP "cpu_d[0]" SITE "D6";
+LOCATE COMP "cpu_d[0]" SITE "E9";
 IOBUF PORT "cpu_d[0]" IO_TYPE=LVCMOS33 DRIVE=12;
 
-LOCATE COMP "cpu_d[1]" SITE "E7";
+LOCATE COMP "cpu_d[1]" SITE "D9";
 IOBUF PORT "cpu_d[1]" IO_TYPE=LVCMOS33 DRIVE=12;
 
-LOCATE COMP "cpu_d[2]" SITE "D7";
+LOCATE COMP "cpu_d[2]" SITE "B8";
 IOBUF PORT "cpu_d[2]" IO_TYPE=LVCMOS33 DRIVE=12;
 
-LOCATE COMP "cpu_d[3]" SITE "B11";
+LOCATE COMP "cpu_d[3]" SITE "C8";
 IOBUF PORT "cpu_d[3]" IO_TYPE=LVCMOS33 DRIVE=12;
 
-LOCATE COMP "cpu_d[4]" SITE "B6";
+LOCATE COMP "cpu_d[4]" SITE "D8";
 IOBUF PORT "cpu_d[4]" IO_TYPE=LVCMOS33 DRIVE=12;
 
-LOCATE COMP "cpu_d[5]" SITE "E9";
+LOCATE COMP "cpu_d[5]" SITE "E8";
 IOBUF PORT "cpu_d[5]" IO_TYPE=LVCMOS33 DRIVE=12;
 
-LOCATE COMP "cpu_d[6]" SITE "D9";
+LOCATE COMP "cpu_d[6]" SITE "C7";
 IOBUF PORT "cpu_d[6]" IO_TYPE=LVCMOS33 DRIVE=12;
 
-LOCATE COMP "cpu_d[7]" SITE "B8";
+LOCATE COMP "cpu_d[7]" SITE "C6";
 IOBUF PORT "cpu_d[7]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 # ====================================================================================
 # CPU State Outputs (S0, S1, S2)
 # ====================================================================================
 
-LOCATE COMP "cpu_s0" SITE "D14";
+LOCATE COMP "cpu_s0" SITE "D7";
 IOBUF PORT "cpu_s0" IO_TYPE=LVCMOS33;
 
-LOCATE COMP "cpu_s1" SITE "E14";
+LOCATE COMP "cpu_s1" SITE "B11";
 IOBUF PORT "cpu_s1" IO_TYPE=LVCMOS33;
 
-LOCATE COMP "cpu_s2" SITE "D11";
+LOCATE COMP "cpu_s2" SITE "B6";
 IOBUF PORT "cpu_s2" IO_TYPE=LVCMOS33;
 
 # ====================================================================================
 # CPU SYNC Output
 # ====================================================================================
 
-LOCATE COMP "cpu_sync" SITE "B10";
+LOCATE COMP "cpu_sync" SITE "E7";
 IOBUF PORT "cpu_sync" IO_TYPE=LVCMOS33;
 
 # ====================================================================================
 # Phase Clocks
 # ====================================================================================
 
-LOCATE COMP "cpu_phi1" SITE "C10";
+LOCATE COMP "cpu_phi1" SITE "E6";
 IOBUF PORT "cpu_phi1" IO_TYPE=LVCMOS33;
 
-LOCATE COMP "cpu_phi2" SITE "A9";
+LOCATE COMP "cpu_phi2" SITE "D6";
 IOBUF PORT "cpu_phi2" IO_TYPE=LVCMOS33;
 
 # ====================================================================================
 # CPU Control Signals
 # ====================================================================================
 
-LOCATE COMP "cpu_ready" SITE "D12";
-IOBUF PORT "cpu_ready" IO_TYPE=LVCMOS33;
-
-LOCATE COMP "cpu_int" SITE "E12";
+LOCATE COMP "cpu_int" SITE "B9";
 IOBUF PORT "cpu_int" IO_TYPE=LVCMOS33;
 
 # ====================================================================================
-# Internal Debug Signals
+# External ROM Interface
 # ====================================================================================
+# Active-low signals use _n suffix (standard convention)
 
-# Internal reset signal
-LOCATE COMP "dbg_reset_int" SITE "E8";
-IOBUF PORT "dbg_reset_int" IO_TYPE=LVCMOS33 DRIVE=12;
+# ROM Data Bus (directly active from ROM)
+LOCATE COMP "rom_d[0]" SITE "D15";
+IOBUF PORT "rom_d[0]" IO_TYPE=LVCMOS33;
 
-# Bootstrap interrupt active
-LOCATE COMP "dbg_bootstrap_int" SITE "D8";
-IOBUF PORT "dbg_bootstrap_int" IO_TYPE=LVCMOS33 DRIVE=12;
+LOCATE COMP "rom_d[1]" SITE "E15";
+IOBUF PORT "rom_d[1]" IO_TYPE=LVCMOS33;
 
-# Bootstrap completed
-LOCATE COMP "dbg_bootstrap_done" SITE "C7";
-IOBUF PORT "dbg_bootstrap_done" IO_TYPE=LVCMOS33 DRIVE=12;
+LOCATE COMP "rom_d[2]" SITE "B16";
+IOBUF PORT "rom_d[2]" IO_TYPE=LVCMOS33;
 
-# State timing (which half of 2-cycle state)
-LOCATE COMP "dbg_state_half" SITE "C6";
-IOBUF PORT "dbg_state_half" IO_TYPE=LVCMOS33 DRIVE=12;
+LOCATE COMP "rom_d[3]" SITE "C16";
+IOBUF PORT "rom_d[3]" IO_TYPE=LVCMOS33;
 
-# CPU interrupt pending
-LOCATE COMP "dbg_int_pending" SITE "E6";
-IOBUF PORT "dbg_int_pending" IO_TYPE=LVCMOS33 DRIVE=12;
+LOCATE COMP "rom_d[4]" SITE "B17";
+IOBUF PORT "rom_d[4]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[5]" SITE "C17";
+IOBUF PORT "rom_d[5]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[6]" SITE "B18";
+IOBUF PORT "rom_d[6]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[7]" SITE "A18";
+IOBUF PORT "rom_d[7]" IO_TYPE=LVCMOS33;
+
+# ROM Address Bus
+LOCATE COMP "rom_a[0]" SITE "C13";
+IOBUF PORT "rom_a[0]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[1]" SITE "D13";
+IOBUF PORT "rom_a[1]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[2]" SITE "E13";
+IOBUF PORT "rom_a[2]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[3]" SITE "A14";
+IOBUF PORT "rom_a[3]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[4]" SITE "C14";
+IOBUF PORT "rom_a[4]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[5]" SITE "D14";
+IOBUF PORT "rom_a[5]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[6]" SITE "E14";
+IOBUF PORT "rom_a[6]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[7]" SITE "D11";
+IOBUF PORT "rom_a[7]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[8]" SITE "C10";
+IOBUF PORT "rom_a[8]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[9]" SITE "A9";
+IOBUF PORT "rom_a[9]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[10]" SITE "B10";
+IOBUF PORT "rom_a[10]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[11]" SITE "D12";
+IOBUF PORT "rom_a[11]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[12]" SITE "E12";
+IOBUF PORT "rom_a[12]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# ROM Control Signals (active-low, directly active directly wired directly active directly wired directly directly)
+LOCATE COMP "rom_ce_n" SITE "C15";
+IOBUF PORT "rom_ce_n" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_oe_n" SITE "B15";
+IOBUF PORT "rom_oe_n" IO_TYPE=LVCMOS33 DRIVE=12;
 
 # ====================================================================================
 # Debug Buttons (X4 expansion connector, active low with internal pull-up)

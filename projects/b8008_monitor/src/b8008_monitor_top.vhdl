@@ -55,15 +55,7 @@ entity b8008_monitor_top is
         cpu_sync    : out std_logic;
         cpu_phi1    : out std_logic;
         cpu_phi2    : out std_logic;
-        cpu_ready   : out std_logic;
         cpu_int     : out std_logic;
-
-        -- Additional debug outputs for oscilloscope/logic analyzer
-        dbg_reset_int      : out std_logic;  -- Internal reset signal
-        dbg_bootstrap_int  : out std_logic;  -- Bootstrap interrupt active
-        dbg_bootstrap_done : out std_logic;  -- Bootstrap completed
-        dbg_state_half     : out std_logic;  -- Which half of 2-cycle state
-        dbg_int_pending    : out std_logic;  -- CPU interrupt pending
 
         -- Debug buttons (directly to GPIO, active low with pull-up)
         dbg_btn_run_stop  : in std_logic;   -- Run/Stop toggle
@@ -499,16 +491,6 @@ begin
     cpu_sync    <= sync_sig;
     cpu_phi1    <= phi1;
     cpu_phi2    <= phi2;
-    cpu_ready   <= '1';  -- Always ready
     cpu_int     <= bootstrap_int;
-
-    --------------------------------------------------------------------------------
-    -- Additional Debug Outputs
-    --------------------------------------------------------------------------------
-    dbg_reset_int      <= reset_int;
-    dbg_bootstrap_int  <= bootstrap_int;
-    dbg_bootstrap_done <= bootstrap_done;
-    dbg_state_half     <= state_half_sig;
-    dbg_int_pending    <= int_pending_sig;
 
 end architecture rtl;
