@@ -23,7 +23,7 @@ YOSYS    ?= $(OSS_CAD_SUITE)/yosys
 NEXTPNR  ?= $(OSS_CAD_SUITE)/nextpnr-ecp5
 ECPPACK  ?= $(OSS_CAD_SUITE)/ecppack
 LOADER   ?= $(OSS_CAD_SUITE)/openFPGALoader
-GTKWAVE  ?= $(OSS_CAD_SUITE)/gtkwave
+# GTKWAVE  ?= $(OSS_CAD_SUITE)/gtkwave  # Removed from build - run manually if needed
 GHDL_FLAGS ?= --std=08 --work=work
 
 # Yosys synthesis flags (can be overridden for debugging)
@@ -55,8 +55,8 @@ SRC_DIR := $(ROOT_DIR)/src/b8008
 COMP_DIR := $(ROOT_DIR)/src/components
 
 # b8008 core sources (order matters)
-# Note: rom_4kx8.vhdl is added conditionally below based on USE_GENERATED_ROM
-B8008_CORE_SRCS := \
+# ROM is external (physical EEPROM) - no synthesized ROM
+B8008_SRCS := \
 	$(SRC_DIR)/b8008_types.vhdl \
 	$(SRC_DIR)/program_counter.vhdl \
 	$(SRC_DIR)/stack_pointer.vhdl \
@@ -86,16 +86,6 @@ B8008_CORE_SRCS := \
 	$(COMP_DIR)/legacy/ram_1kx8.vhdl \
 	$(SRC_DIR)/b8008_top.vhdl
 
-# ROM selection: USE_GENERATED_ROM=1 uses project-local generated ROM
-# to avoid Yosys synthesis bugs with file-based ROM initialization
-ifdef USE_GENERATED_ROM
-    # Project generates its own rom_4kx8.vhdl in ./src/
-    B8008_SRCS := $(B8008_CORE_SRCS)
-else
-    # Use shared file-based ROM
-    B8008_SRCS := $(B8008_CORE_SRCS) $(COMP_DIR)/rom_4kx8.vhdl
-endif
-
 # Project sources (top-level wrapper)
 # Use ?= so individual projects can override before include
 PROJECT_SRCS ?= $(wildcard ./src/*.vhdl)
@@ -115,12 +105,8 @@ else
     ACTIVE_TB_SRC := $(TB_SRCS)
 endif
 
-# Memory file (ROM contents - baked into synthesis)
+# Memory file (for .bin generation / EEPROM flashing)
 MEM_FILE := $(basename $(ASM)).mem
-
-# Generated ROM VHDL (explicit initialization, avoids Yosys synthesis bugs)
-# Uses entity name rom_4kx8 with --compat to be a drop-in replacement
-ROM_VHDL := ./src/rom_4kx8.vhdl
 
 # Output files
 VERILOG := $(BUILD_DIR)/$(PROJECT).v
@@ -187,18 +173,16 @@ create-reports-dir:
 	@mkdir -p $(REPORTS_DIR)
 
 # ============================================================================
-# ASSEMBLE - Convert .asm to .mem and generate ROM VHDL
+# ASSEMBLE - Convert .asm to .mem and .hex (for EEPROM flashing)
 # ============================================================================
+# ROM is external (physical EEPROM) - no VHDL generation needed
 ifdef ASM
 $(MEM_FILE): $(ASM)
 	@echo "=== Assembling $(ASM) ==="
 	$(ASL) -cpu 8008new -L $(ASM)
-	$(P2HEX) $(basename $(ASM)).p $(basename $(ASM)).hex -r 0-4095
+	$(P2HEX) $(basename $(ASM)).p $(basename $(ASM)).hex -r 0-$(shell echo $$(($(ROM_SIZE)-1)))
 	python3 $(HEX2MEM) $(basename $(ASM)).hex $(basename $(ASM)).mem
 	@echo "Output: $(MEM_FILE)"
-	@echo "=== Generating ROM VHDL ==="
-	python3 $(HEX2VHDL) $(basename $(ASM)).hex $(ROM_VHDL) --entity rom_4kx8 --compat --size 4096
-	@echo "Output: $(ROM_VHDL)"
 
 assemble: $(MEM_FILE)
 else
@@ -324,20 +308,11 @@ sim: assemble | create-build-dir create-reports-dir
 	SIM_EXIT=$$?; \
 	if [ $$SIM_EXIT -eq 0 ]; then \
 		echo "SIMULATION PASSED" | tee -a $(SIM_REPORT); \
-		if [ -f "$(GTKW_FILE)" ]; then \
-			nohup $(GTKWAVE) $(GTKW_FILE) > /dev/null 2>&1 & \
-		else \
-			nohup $(GTKWAVE) $(WAVE_FILE) > /dev/null 2>&1 & \
-		fi; \
 	else \
 		echo "SIMULATION FAILED" | tee -a $(SIM_REPORT); \
-		if [ -f "$(GTKW_FILE)" ]; then \
-			nohup $(GTKWAVE) $(GTKW_FILE) > /dev/null 2>&1 & \
-		else \
-			nohup $(GTKWAVE) $(WAVE_FILE) > /dev/null 2>&1 & \
-		fi; \
 		exit $$SIM_EXIT; \
 	fi
+	@echo "Waveform saved to: $(WAVE_FILE)"
 
 list-tests:
 	@echo "Available testbenches:"

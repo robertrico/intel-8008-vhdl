@@ -1,16 +1,16 @@
 --------------------------------------------------------------------------------
 -- b8008_top.vhdl
 --------------------------------------------------------------------------------
--- Top-level system integrating b8008 CPU with ROM and RAM
+-- Top-level system integrating b8008 CPU with external ROM and internal RAM
 --
 -- Memory Map:
---   0x0000 - 0x0FFF (4KB): ROM (program code)
---   0x1000 - 0x13FF (1KB): RAM (data storage)
---   0x1400 - 0x3FFF:       Unmapped (returns 0x00)
+--   0x0000 - 0x1FFF (8KB): External ROM (directly active through rom_a/rom_d/rom_ce_n/rom_oe_n)
+--   0x2000 - 0x23FF (1KB): RAM (data storage)
+--   0x2400 - 0x3FFF:       Unmapped (returns 0x00)
 --
 -- This module connects:
 --   - b8008 CPU core
---   - rom_4kx8 (4KB ROM for program storage)
+--   - External ROM interface (directly directly via rom_a/rom_d/rom_ce_n/rom_oe_n)
 --   - ram_1kx8 (1KB RAM for data storage)
 --   - Address decode logic
 --------------------------------------------------------------------------------
@@ -23,10 +23,6 @@ library work;
 use work.b8008_types.all;
 
 entity b8008_top is
-    generic (
-        -- ROM initialization file
-        ROM_FILE : string := "test_programs/alu_test_as.mem"
-    );
     port (
         -- External clock and reset
         clk_in      : in std_logic;
@@ -85,7 +81,13 @@ entity b8008_top is
         io_port_out         : out std_logic_vector(7 downto 0);  -- Data written by OUT instruction
         io_port_num_out     : out std_logic_vector(4 downto 0);  -- Full port number (0-31)
         io_port_write       : out std_logic;                     -- Strobe: '1' for one phi2 cycle during OUT T3
-        io_port_read        : out std_logic                      -- Strobe: '1' for one phi2 cycle during INP T3
+        io_port_read        : out std_logic;                     -- Strobe: '1' for one phi2 cycle during INP T3
+
+        -- External ROM interface
+        rom_a               : out std_logic_vector(12 downto 0); -- ROM address (8KB)
+        rom_d               : in  std_logic_vector(7 downto 0);  -- ROM data input
+        rom_ce_n            : out std_logic;                     -- ROM chip enable (active low)
+        rom_oe_n            : out std_logic                      -- ROM output enable (active low)
     );
 end entity b8008_top;
 
@@ -131,18 +133,6 @@ architecture structural of b8008_top is
         );
     end component;
 
-    -- Component: 4KB ROM
-    component rom_4kx8 is
-        generic (
-            ROM_FILE : string := "test_programs/alu_test_as.mem"
-        );
-        port (
-            ADDR     : in  std_logic_vector(11 downto 0);
-            DATA_OUT : out std_logic_vector(7 downto 0);
-            CS_N     : in  std_logic
-        );
-    end component;
-
     -- Component: 1KB RAM
     component ram_1kx8 is
         port (
@@ -166,9 +156,8 @@ architecture structural of b8008_top is
     signal phi2        : std_logic;
 
     -- Memory signals
-    signal rom_cs_n    : std_logic;
-    signal rom_data    : std_logic_vector(7 downto 0);
-    signal ram_cs_n    : std_logic;
+    signal rom_cs_n_int : std_logic;  -- Internal copy for driving output
+    signal ram_cs_n     : std_logic;
     signal ram_data_in : std_logic_vector(7 downto 0);
     signal ram_data_out: std_logic_vector(7 downto 0);
     signal ram_rw_n    : std_logic;
@@ -345,18 +334,6 @@ begin
     -- MEMORY INSTANCES
     -- ========================================================================
 
-    -- ROM: 4KB at 0x0000-0x0FFF
-    -- Uses LATCHED address (stable during T3 data transfer)
-    u_rom : rom_4kx8
-        generic map (
-            ROM_FILE => ROM_FILE
-        )
-        port map (
-            ADDR     => latched_address(11 downto 0),
-            DATA_OUT => rom_data,
-            CS_N     => rom_cs_n
-        );
-
     -- RAM: 1KB at 0x1000-0x13FF
     -- Uses LATCHED address (stable during T3 data transfer)
     u_ram : ram_1kx8
@@ -374,17 +351,22 @@ begin
     -- ADDRESS DECODE LOGIC
     -- ========================================================================
 
-    -- ROM selected: address 0x0000-0x0FFF (top 2 bits = 00)
+    -- ROM selected: address 0x0000-0x1FFF (8KB, top bit = 0)
     -- Use LATCHED address for decode
-    rom_selected <= '1' when latched_address(13 downto 12) = "00" else '0';
+    rom_selected <= '1' when latched_address(13) = '0' else '0';
 
-    -- RAM selected: address 0x1000-0x13FF (bits 13:12 = 01, bit 11:10 = 00)
+    -- RAM selected: address 0x2000-0x23FF (1KB at start of upper 8KB)
     -- Use LATCHED address for decode
-    ram_selected <= '1' when latched_address(13 downto 10) = "0100" else '0';
+    ram_selected <= '1' when latched_address(13 downto 10) = "1000" else '0';
 
     -- Chip selects (active low)
-    rom_cs_n <= not rom_selected;
+    rom_cs_n_int <= not rom_selected;
     ram_cs_n <= not ram_selected;
+
+    -- External ROM interface
+    rom_a    <= latched_address(12 downto 0);  -- 13-bit address for 8KB ROM
+    rom_ce_n <= rom_cs_n_int;
+    rom_oe_n <= rom_cs_n_int;  -- Active during reads (directly active directly tied to CE for simplicity)
 
     -- ========================================================================
     -- DATA BUS MULTIPLEXING
@@ -542,7 +524,7 @@ begin
     cpu_data_in <= ("00" & int_vector & "101") when (s2_int = '1' and s1_int = '1' and s0_int = '0') else  -- T1I: jam RST instruction
                    io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1') and
                                        latched_address(13 downto 12) = "00") else  -- INP: I/O input during T3/T4/T5
-                   rom_data when (is_io = '0' and rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- ROM during T3/T4/T5
+                   rom_d when (is_io = '0' and rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- External ROM during T3/T4/T5
                    ram_data_out when (is_io = '0' and ram_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- RAM during T3/T4/T5
                    (others => '0');  -- Default: zeros when CPU is driving or no valid source
 

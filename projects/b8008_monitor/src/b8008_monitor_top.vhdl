@@ -60,19 +60,22 @@ entity b8008_monitor_top is
         -- Debug buttons (directly to GPIO, active low with pull-up)
         dbg_btn_run_stop  : in std_logic;   -- Run/Stop toggle
         dbg_btn_step_cycle : in std_logic;  -- Single full cycle step (220 clocks)
-        dbg_btn_step_sync : in std_logic    -- Step to SYNC (instruction boundary)
+        dbg_btn_step_sync : in std_logic;   -- Step to SYNC (instruction boundary)
+
+        -- External ROM interface
+        rom_a    : out std_logic_vector(12 downto 0);  -- ROM address (8KB)
+        rom_d    : in  std_logic_vector(7 downto 0);   -- ROM data input
+        rom_ce_n : out std_logic;                      -- ROM chip enable (active low)
+        rom_oe_n : out std_logic                       -- ROM output enable (active low)
     );
 end entity b8008_monitor_top;
 
 architecture rtl of b8008_monitor_top is
 
     --------------------------------------------------------------------------------
-    -- Component: b8008_top (CPU with ROM and RAM)
+    -- Component: b8008_top (CPU with external ROM and internal RAM)
     --------------------------------------------------------------------------------
     component b8008_top is
-        generic (
-            ROM_FILE : string := "test_programs/alu_test_as.mem"
-        );
         port (
             clk_in      : in std_logic;
             reset       : in std_logic;
@@ -114,7 +117,12 @@ architecture rtl of b8008_monitor_top is
             io_port_out         : out std_logic_vector(7 downto 0);
             io_port_num_out     : out std_logic_vector(4 downto 0);
             io_port_write       : out std_logic;
-            io_port_read        : out std_logic
+            io_port_read        : out std_logic;
+            -- External ROM interface
+            rom_a               : out std_logic_vector(12 downto 0);
+            rom_d               : in  std_logic_vector(7 downto 0);
+            rom_ce_n            : out std_logic;
+            rom_oe_n            : out std_logic
         );
     end component;
 
@@ -387,9 +395,6 @@ begin
     -- b8008 CPU System Instance
     --------------------------------------------------------------------------------
     u_system : b8008_top
-        generic map (
-            ROM_FILE => "./b8008_monitor.mem"
-        )
         port map (
             clk_in      => gated_clk,  -- Use gated clock for debug control
             reset       => reset_int,
@@ -431,7 +436,12 @@ begin
             io_port_out         => io_port_out,
             io_port_num_out     => io_port_num,
             io_port_write       => io_port_write,
-            io_port_read        => io_port_read
+            io_port_read        => io_port_read,
+            -- External ROM interface (directly to physical ROM pins)
+            rom_a               => rom_a,
+            rom_d               => rom_d,
+            rom_ce_n            => rom_ce_n,
+            rom_oe_n            => rom_oe_n
         );
 
     --------------------------------------------------------------------------------

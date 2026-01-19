@@ -252,11 +252,12 @@ LOCATE COMP "rom_a[12]" SITE "E12";
 IOBUF PORT "rom_a[12]" IO_TYPE=LVCMOS33 DRIVE=12;
 
 # ROM Control Signals (active-low, directly active directly wired directly active directly wired directly directly)
+# Pull-ups ensure ROM is disabled during FPGA configuration/power-up
 LOCATE COMP "rom_ce_n" SITE "C15";
-IOBUF PORT "rom_ce_n" IO_TYPE=LVCMOS33 DRIVE=12;
+IOBUF PORT "rom_ce_n" IO_TYPE=LVCMOS33 DRIVE=12 PULLMODE=UP;
 
 LOCATE COMP "rom_oe_n" SITE "B15";
-IOBUF PORT "rom_oe_n" IO_TYPE=LVCMOS33 DRIVE=12;
+IOBUF PORT "rom_oe_n" IO_TYPE=LVCMOS33 DRIVE=12 PULLMODE=UP;
 
 # ====================================================================================
 # Debug Buttons (X4 expansion connector, active low with internal pull-up)
