@@ -15,9 +15,9 @@
 ;   - Subroutine calls
 ;
 ; Memory Map:
-;   ROM: 0x0000-0x0FFF (4KB)
-;   RAM: 0x1000-0x13FF (1KB)
-;   Test data: 0x1000-0x100F (16 bytes)
+;   ROM: 0x0000-0x1FFF (8KB)
+;   RAM: 0x2000-0x23FF (1KB)
+;   Test data: 0x2000-0x200F (16 bytes)
 ;
 ; Expected Results (in registers at halt):
 ;   A: Final verification value (last inverted = 0xF0)
@@ -25,7 +25,7 @@
 ;   C: Array length (0x10 = 16)
 ;   D: Sum of 0-15 (should be 0x78 = 120 decimal)
 ;   E: Last inverted value (should be 0xF0)
-;   H: RAM base high (0x10)
+;   H: RAM base high (0x20)
 ;   L: Final address offset (0x0F)
 ;
 ; Checkpoint Results:
@@ -93,7 +93,7 @@ MAIN:
 ; Modifies: A, H, L, E
 ;-----------------------------------------------------------------------------
 FILL_RAM:
-        MVI     H,10h               ; H = RAM base high (0x10)
+        MVI     H,20h               ; H = RAM base high (0x20)
         MVI     L,00h               ; L = RAM base low
         MVI     E,00h               ; E = current value (start at 0)
 
@@ -121,7 +121,7 @@ FILL_LOOP:
 ; Modifies: A, H, L, E
 ;-----------------------------------------------------------------------------
 CALC_SUM:
-        MVI     H,10h               ; H = RAM base high (0x10)
+        MVI     H,20h               ; H = RAM base high (0x20)
         MVI     L,00h               ; L = RAM base low
         MVI     E,00h               ; E = accumulator (sum)
 
@@ -147,7 +147,7 @@ SUM_LOOP:
 ; Modifies: A, H, L, E
 ;-----------------------------------------------------------------------------
 INVERT_RAM:
-        MVI     H,10h               ; H = RAM base high (0x10)
+        MVI     H,20h               ; H = RAM base high (0x20)
         MVI     L,00h               ; L = RAM base low
 
 INVERT_LOOP:
@@ -173,7 +173,7 @@ INVERT_LOOP:
 ;-----------------------------------------------------------------------------
 VERIFY:
         ; Check first inverted value (should be 0xFF)
-        MVI     H,10h
+        MVI     H,20h
         MVI     L,00h
         MOV     A,M                 ; A = first value
         MOV     B,A                 ; B = first value

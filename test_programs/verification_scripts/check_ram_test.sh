@@ -71,7 +71,7 @@ echo "=== Final State ==="
 assert_final_state \
     "A=0xF0" \
     "B=0xFF" \
-    "H=0x10" \
+    "H=0x20" \
     "L=0x0F"
 
 # Print summary and exit

@@ -34,14 +34,14 @@ LF      equ     0Ah             ; Line feed
 RX_READY equ    80h             ; Bit 7 mask for RX ready flag
 
 ; Command buffer (in RAM, which starts at 0x1000)
-CMD_LEN equ     1000h           ; Buffer length storage (1 byte)
-CMD_BUF equ     1001h           ; Command buffer start address (16 bytes: 0x1001-0x1010)
+CMD_LEN equ     2000h           ; Buffer length storage (1 byte)
+CMD_BUF equ     2001h           ; Command buffer start address (16 bytes: 0x2001-0x2010)
 CMD_MAX equ     16              ; Maximum command length
 
 ; Dump command variables (RAM)
-DUMP_ADDR_H equ 1020h           ; Dump address high byte
-DUMP_ADDR_L equ 1021h           ; Dump address low byte
-DUMP_COUNT  equ 1022h           ; Dump byte count (1-255, 0 means 1)
+DUMP_ADDR_H equ 2020h           ; Dump address high byte
+DUMP_ADDR_L equ 2021h           ; Dump address low byte
+DUMP_COUNT  equ 2022h           ; Dump byte count (1-255, 0 means 1)
 
 ; ================================================================================
 ; MAIN PROGRAM
@@ -397,7 +397,7 @@ send_help:
 ; Destroys: A, H, L
 ;
 clear_buffer:
-        mvi h,10h               ; CMD_LEN high byte
+        mvi h,20h               ; CMD_LEN high byte
         mvi l,00h               ; CMD_LEN low byte
         mvi m,0                 ; Store 0 to buffer length
         ret
@@ -411,7 +411,7 @@ clear_buffer:
 ;
 add_to_buffer:
         ; Load current buffer length
-        mvi h,10h
+        mvi h,20h
         mvi l,00h               ; Point to CMD_LEN (0x1000)
         mov a,m                 ; A = current length
 
@@ -453,7 +453,7 @@ buffer_full:
 ;
 parse_command:
         ; Point HL to first character in buffer (CMD_BUF = 0x1001)
-        mvi h,10h
+        mvi h,20h
         mvi l,01h
         mov a,m                 ; Load first character
 
@@ -494,7 +494,7 @@ cmd_dump:
         call parse_dump_args    ; Sets DUMP_ADDR_H/L and DUMP_COUNT
 
         ; Get count (0 means 1)
-        mvi h,10h
+        mvi h,20h
         mvi l,22h               ; DUMP_COUNT
         mov a,m
         ora a                   ; Check if zero
@@ -504,7 +504,7 @@ cmd_dump:
 
 dump_loop_start:
         ; Load address into DE (we'll use HL for memory access)
-        mvi h,10h
+        mvi h,20h
         mvi l,20h               ; DUMP_ADDR_H
         mov d,m                 ; D = high byte
         inr l
@@ -537,7 +537,7 @@ dump_loop:
         call send_hex_byte
 
         ; Decrement count
-        mvi h,10h
+        mvi h,20h
         mvi l,22h               ; DUMP_COUNT
         mov a,m
         sui 1                   ; Decrement (8008 has no DCR A)
@@ -570,7 +570,7 @@ dump_done:
 ;
 parse_dump_args:
         ; Initialize count to 1
-        mvi h,10h
+        mvi h,20h
         mvi l,22h               ; DUMP_COUNT
         mvi m,1
 
@@ -586,7 +586,7 @@ parse_dump_args:
 
 parse_addr_loop:
         ; Check buffer bounds first (compare E with CMD_LEN)
-        mvi h,10h
+        mvi h,20h
         mvi l,00h               ; CMD_LEN at 0x1000
         mov a,m                 ; A = buffer length
         mov b,a                 ; Save length in B
@@ -595,7 +595,7 @@ parse_addr_loop:
         jnc parse_addr_done     ; Index >= length, stop
 
         ; Get character at CMD_BUF + E
-        mvi h,10h
+        mvi h,20h
         mvi l,01h               ; CMD_BUF base
         mov a,e
         add l
@@ -622,7 +622,7 @@ parse_addr_loop:
         mov c,a                 ; Save nibble in C
 
         ; Load current address into D (high) and A (low)
-        mvi h,10h
+        mvi h,20h
         mvi l,20h
         mov d,m                 ; D = high byte
         inr l
@@ -663,7 +663,7 @@ parse_addr_loop:
         mov d,a                 ; D = new high byte
 
         ; Store back
-        mvi h,10h
+        mvi h,20h
         mvi l,20h
         mov m,d                 ; Store high byte
         inr l
@@ -681,14 +681,14 @@ parse_count_start:
         inr e
 
         ; Initialize count to 0 (we'll build it up)
-        mvi h,10h
+        mvi h,20h
         mvi l,22h
         mvi m,0
 
         ; Skip any spaces after comma
 parse_count_skip_spaces:
         ; Check buffer bounds first (compare E with CMD_LEN)
-        mvi h,10h
+        mvi h,20h
         mvi l,00h               ; CMD_LEN at 0x1000
         mov a,m                 ; A = buffer length
         mov b,a                 ; Save length in B
@@ -697,7 +697,7 @@ parse_count_skip_spaces:
         jnc parse_count_done    ; Index >= length, stop
 
         ; Get character at CMD_BUF + E
-        mvi h,10h
+        mvi h,20h
         mvi l,01h
         mov a,e
         add l
@@ -712,7 +712,7 @@ parse_count_skip_spaces:
 
 parse_count_loop:
         ; Check buffer bounds first
-        mvi h,10h
+        mvi h,20h
         mvi l,00h               ; CMD_LEN
         mov a,m
         mov b,a
@@ -721,7 +721,7 @@ parse_count_loop:
         jnc parse_count_done    ; Index >= length, stop
 
         ; Get character at CMD_BUF + E
-        mvi h,10h
+        mvi h,20h
         mvi l,01h
         mov a,e
         add l
@@ -743,7 +743,7 @@ parse_count_loop_entry:
         ; count = (count << 4) | nibble
         mov c,a                 ; Save nibble in C
 
-        mvi h,10h
+        mvi h,20h
         mvi l,22h
         mov a,m                 ; A = current count
 
