@@ -38,6 +38,14 @@ entity b8008 is
         phi1_out : out std_logic;  -- Phase 1 clock output (for debugging)
         phi2_out : out std_logic;  -- Phase 2 clock output (for debugging)
 
+        -- One-cycle edge pulses on clk_in domain, so consumers of the CPU
+        -- can gate their own clk_in-domain logic on phi transitions without
+        -- being clocked by phi1/phi2 directly.
+        phi1_rising_out  : out std_logic;
+        phi1_falling_out : out std_logic;
+        phi2_rising_out  : out std_logic;
+        phi2_falling_out : out std_logic;
+
         -- ====================================================================
         -- DATA BUS (Address and data are time-multiplexed on this bus)
         -- Separate input/output for synthesis compatibility (GHDL doesn't synth inOut across hierarchy)
@@ -773,6 +781,10 @@ begin
     -- Clock outputs (for debugging)
     phi1_out <= phi1;
     phi2_out <= phi2;
+    phi1_rising_out  <= phi1_rising;
+    phi1_falling_out <= phi1_falling;
+    phi2_rising_out  <= phi2_rising;
+    phi2_falling_out <= phi2_falling;
 
     -- Timing and status outputs
     sync_out <= sync;

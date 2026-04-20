@@ -100,6 +100,10 @@ architecture structural of b8008_top is
             reset          : in std_logic;
             phi1_out       : out std_logic;
             phi2_out       : out std_logic;
+            phi1_rising_out  : out std_logic;
+            phi1_falling_out : out std_logic;
+            phi2_rising_out  : out std_logic;
+            phi2_falling_out : out std_logic;
             data_bus_in    : in  std_logic_vector(7 downto 0);
             data_bus_out   : out std_logic_vector(7 downto 0);
             data_bus_oe    : out std_logic;
@@ -154,6 +158,10 @@ architecture structural of b8008_top is
     signal cpu_data_oe  : std_logic;                    -- CPU output enable
     signal phi1        : std_logic;
     signal phi2        : std_logic;
+    signal phi1_rising  : std_logic;
+    signal phi1_falling : std_logic;
+    signal phi2_rising  : std_logic;
+    signal phi2_falling : std_logic;
 
     -- Memory signals
     signal rom_cs_n_int : std_logic;  -- Internal copy for driving output
@@ -254,11 +262,11 @@ begin
     -- T2: Upper 6 bits on D[5:0], cycle type on D[7:6] (latch only during SYNC high)
     -- CRITICAL: Only latch during SYNC=1 (first half) to avoid re-latching after PC increments
     -- Hold latched address stable during T3 (when data bus used for data transfer)
-    process(phi1, reset)
+    process(clk_in, reset)
     begin
         if reset = '1' then
             latched_address <= (others => '0');
-        elsif rising_edge(phi1) then
+        elsif rising_edge(clk_in) and phi1_rising = '1' then
             if is_t1 = '1' and sync_int = '1' then
                 -- T1 first half (SYNC high): Latch lower 8 bits from data bus
                 latched_address(7 downto 0) <= data_bus;
@@ -279,11 +287,11 @@ begin
 
     -- Set bootstrap_done flag after first T1I completes
     -- We detect when we LEAVE T1I state (transition to T2)
-    process(phi1, reset)
+    process(clk_in, reset)
     begin
         if reset = '1' then
             bootstrap_done <= '0';
-        elsif rising_edge(phi1) then
+        elsif rising_edge(clk_in) and phi1_rising = '1' then
             -- When we're in T2 and bootstrap isn't done yet, T1I just completed
             if bootstrap_done = '0' and s2_int = '1' and s1_int = '0' and s0_int = '0' then
                 bootstrap_done <= '1';
@@ -301,6 +309,10 @@ begin
             reset       => reset,
             phi1_out    => phi1,
             phi2_out    => phi2,
+            phi1_rising_out  => phi1_rising,
+            phi1_falling_out => phi1_falling,
+            phi2_rising_out  => phi2_rising,
+            phi2_falling_out => phi2_falling,
             data_bus_in  => cpu_data_in,     -- CPU reads from input-only path (no loop)
             data_bus_out => cpu_data_out,    -- CPU outputs to separate signal
             data_bus_oe  => cpu_data_oe,     -- CPU output enable
@@ -421,8 +433,9 @@ begin
 
     -- Output port latches - capture data written by OUT instruction
     -- OUT instruction: CPU drives data_bus with accumulator value during T3
-    -- Latch on phi2 (data is set up on phi2 rising edge of T3)
-    process(phi2, reset)
+    -- Latch on clk_in gated by phi2_rising (equivalent to rising_edge(phi2),
+    -- one clk cycle later, so the whole top stays on one clock domain)
+    process(clk_in, reset)
         variable port_base : integer;
         variable is_out_cycle : std_logic;
         variable is_inp_cycle : std_logic;
@@ -435,7 +448,7 @@ begin
             last_checkpoint_pc <= (others => '1');
             io_write_strobe <= '0';
             io_read_strobe  <= '0';
-        elsif rising_edge(phi2) then
+        elsif rising_edge(clk_in) and phi2_rising = '1' then
             -- Default: strobes off
             io_write_strobe <= '0';
             io_read_strobe  <= '0';
