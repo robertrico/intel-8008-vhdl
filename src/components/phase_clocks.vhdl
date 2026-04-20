@@ -23,7 +23,14 @@ entity phase_clocks is
         reset  : in STD_LOGIC;
         phi1   : out STD_LOGIC;
         phi2   : out STD_LOGIC;
-        sync   : out STD_LOGIC  -- Divide-by-two: distinguishes between two clock periods of each state
+        sync   : out STD_LOGIC;  -- Divide-by-two: distinguishes between two clock periods of each state
+        -- One-cycle pulses on clk_in domain, for downstream flops that want to
+        -- act on a phi1/phi2 edge without being clocked by phi1/phi2 directly.
+        -- Use as: process(clk_in) ... if rising_edge(clk_in) and phi1_rising='1' then ...
+        phi1_rising  : out STD_LOGIC;
+        phi1_falling : out STD_LOGIC;
+        phi2_rising  : out STD_LOGIC;
+        phi2_falling : out STD_LOGIC
     );
 end phase_clocks;
 
@@ -57,20 +64,42 @@ architecture rtl of phase_clocks is
     -- High during one clock cycle, low during next clock cycle
     -- Two clock cycles = one state
     signal sync_toggle : std_logic := '1';
+
+    -- Internal copies of phi1/phi2 so we can detect edges without reading output ports
+    signal phi1_reg  : std_logic := '1';
+    signal phi2_reg  : std_logic := '0';
+    signal phi1_prev : std_logic := '1';
+    signal phi2_prev : std_logic := '0';
 begin
     -- Registered outputs to eliminate glitches
     process(clk_in, reset)
     begin
         if reset = '1' then
-            phi1 <= '1';
-            phi2 <= '0';
+            phi1_reg  <= '1';
+            phi2_reg  <= '0';
+            phi1_prev <= '1';
+            phi2_prev <= '0';
             sync <= '1';  -- Start with SYNC high
         elsif rising_edge(clk_in) then
-            phi1 <= phi1_next;
-            phi2 <= phi2_next;
+            phi1_reg  <= phi1_next;
+            phi2_reg  <= phi2_next;
+            phi1_prev <= phi1_reg;
+            phi2_prev <= phi2_reg;
             sync <= sync_toggle;
         end if;
     end process;
+
+    phi1 <= phi1_reg;
+    phi2 <= phi2_reg;
+
+    -- One-cycle edge pulses, asserted the clk after the phi transition.
+    -- Downstream flops clocked on clk_in see the pulse and act exactly one
+    -- clk_in cycle after the phi edge occurred -- same ordering as
+    -- rising_edge(phi*) but on the clk_in domain.
+    phi1_rising  <= phi1_reg and not phi1_prev;
+    phi1_falling <= phi1_prev and not phi1_reg;
+    phi2_rising  <= phi2_reg and not phi2_prev;
+    phi2_falling <= phi2_prev and not phi2_reg;
 
     -- State machine and counter logic
     process(clk_in, reset)
