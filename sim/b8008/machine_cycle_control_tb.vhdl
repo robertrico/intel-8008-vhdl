@@ -20,8 +20,9 @@ architecture test of machine_cycle_control_tb is
     component machine_cycle_control is
         port (
             -- Clock and reset
-            phi1  : in std_logic;
-            reset : in std_logic;
+            clk         : in std_logic;
+            phi1_rising : in std_logic;
+            reset       : in std_logic;
 
             -- State inputs from State Timing Generator
             state_t1  : in std_logic;
@@ -56,9 +57,10 @@ architecture test of machine_cycle_control_tb is
         );
     end component;
 
-    -- Clock / reset
-    signal phi1  : std_logic := '0';
-    signal reset : std_logic := '0';
+    -- Clock / reset (phi1_rising held '1' so every clk rise acts as a phi1 edge)
+    signal clk         : std_logic := '0';
+    signal phi1_rising : std_logic := '1';
+    signal reset       : std_logic := '0';
 
     -- Inputs
     signal state_t1  : std_logic := '0';
@@ -115,7 +117,8 @@ begin
 
     uut : machine_cycle_control
         port map (
-            phi1                  => phi1,
+            clk                   => clk,
+            phi1_rising           => phi1_rising,
             reset                 => reset,
             state_t1              => state_t1,
             state_t2              => state_t2,
@@ -138,13 +141,13 @@ begin
             next_cycle            => next_cycle
         );
 
-    -- phi1 clock generator
-    phi1_proc : process
+    -- Master clock (replaces old phi1 clock)
+    clk_proc : process
     begin
         while not done loop
-            phi1 <= '0';
+            clk <= '0';
             wait for 5 ns;
-            phi1 <= '1';
+            clk <= '1';
             wait for 5 ns;
         end loop;
         wait;

@@ -21,8 +21,9 @@ use work.b8008_types.all;
 
 entity register_alu_control is
     port (
-        -- Clock input from Clock Generator
-        phi2 : in std_logic;
+        -- Master clock + phi2 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi2_rising : in std_logic;
 
         -- Status signals from State Timing Generator (encode T1-T5)
         status_s0 : in std_logic;
@@ -153,10 +154,10 @@ begin
                                (current_cycle = 1 and instr_needs_immediate = '1')))    -- 2-cycle: imm/mem ALU
                     else '0';
 
-    -- Debug: Report when we're trying to update flags
-    process(phi2)
+    -- Debug: Report when we're trying to update flags (gated on phi2 rising pulse)
+    process(clk)
     begin
-        if rising_edge(phi2) then
+        if rising_edge(clk) and phi2_rising = '1' then
             if state_is_t5 = '1' and instr_is_alu_op = '1' then
                 report "REG_ALU_CTRL: At T5 with ALU op, update_flags should pulse";
             end if;

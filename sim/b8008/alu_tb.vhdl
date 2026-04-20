@@ -20,7 +20,8 @@ architecture test of alu_tb is
     -- Component declaration
     component alu is
         port (
-            phi2             : in  std_logic;
+            clk              : in  std_logic;
+            phi2_rising      : in  std_logic;
             accumulator_in   : in  std_logic_vector(7 downto 0);
             reg_b_in         : in  std_logic_vector(7 downto 0);
             opcode           : in  std_logic_vector(2 downto 0);
@@ -39,8 +40,9 @@ architecture test of alu_tb is
         );
     end component;
 
-    -- Clock
-    signal phi2 : std_logic := '0';
+    -- Clock (formerly phi2; phi2_rising held '1' so every clk rise acts as a phi2 edge)
+    signal clk         : std_logic := '0';
+    signal phi2_rising : std_logic := '1';
     constant phi2_period : time := 20 ns;
 
     -- Inputs
@@ -78,7 +80,8 @@ begin
 
     uut : alu
         port map (
-            phi2             => phi2,
+            clk              => clk,
+            phi2_rising      => phi2_rising,
             accumulator_in   => accumulator_in,
             reg_b_in         => reg_b_in,
             opcode           => opcode,
@@ -96,13 +99,13 @@ begin
             flag_parity      => flag_parity
         );
 
-    -- Clock generator
-    phi2_proc : process
+    -- Clock generator (clk replaces former phi2)
+    clk_proc : process
     begin
         while not done loop
-            phi2 <= '0';
+            clk <= '0';
             wait for phi2_period / 2;
-            phi2 <= '1';
+            clk <= '1';
             wait for phi2_period / 2;
         end loop;
         wait;

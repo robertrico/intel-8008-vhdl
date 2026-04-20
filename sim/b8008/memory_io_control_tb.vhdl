@@ -18,7 +18,8 @@ architecture test of memory_io_control_tb is
 
     component memory_io_control is
         port (
-            phi1                  : in std_logic;
+            clk                   : in std_logic;
+            phi1_rising           : in std_logic;
             reset                 : in std_logic;
             state_t1              : in std_logic;
             state_t2              : in std_logic;
@@ -88,7 +89,8 @@ architecture test of memory_io_control_tb is
     end component;
 
     -- Clock
-    signal phi1 : std_logic := '0';
+    signal clk         : std_logic := '0';
+    signal phi1_rising : std_logic := '1';
     constant phi1_period : time := 500 ns;
 
     -- Inputs
@@ -163,11 +165,12 @@ architecture test of memory_io_control_tb is
 begin
 
     -- Clock generation
-    phi1 <= not phi1 after phi1_period / 2;
+    clk <= not clk after phi1_period / 2;
 
     uut : memory_io_control
         port map (
-            phi1                  => phi1,
+            clk                   => clk,
+            phi1_rising           => phi1_rising,
             reset                 => reset,
             state_t1              => state_t1,
             state_t2              => state_t2,

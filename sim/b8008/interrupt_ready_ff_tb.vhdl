@@ -18,7 +18,8 @@ architecture test of interrupt_ready_ff_tb is
 
     component interrupt_ready_ff is
         port (
-            phi2              : in std_logic;
+            clk               : in std_logic;
+            phi2_rising       : in std_logic;
             reset             : in std_logic;
             int_request       : in std_logic;
             int_clear         : in std_logic;
@@ -28,8 +29,9 @@ architecture test of interrupt_ready_ff_tb is
         );
     end component;
 
-    -- Clock
-    signal phi2 : std_logic := '0';
+    -- Clock (formerly phi2; phi2_rising held '1' so every clk rise acts as a phi2 edge)
+    signal clk         : std_logic := '0';
+    signal phi2_rising : std_logic := '1';
     constant phi2_period : time := 500 ns;
 
     -- Inputs
@@ -45,11 +47,12 @@ architecture test of interrupt_ready_ff_tb is
 begin
 
     -- Clock generation
-    phi2 <= not phi2 after phi2_period / 2;
+    clk <= not clk after phi2_period / 2;
 
     uut : interrupt_ready_ff
         port map (
-            phi2              => phi2,
+            clk               => clk,
+            phi2_rising       => phi2_rising,
             reset             => reset,
             int_request       => int_request,
             int_clear         => int_clear,
@@ -93,7 +96,7 @@ begin
         report "Test 2: Set interrupt request";
 
         int_request <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         int_request <= '0';
 
@@ -122,7 +125,7 @@ begin
         report "Test 4: Clear interrupt";
 
         int_clear <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         int_clear <= '0';
 
@@ -138,7 +141,7 @@ begin
         report "Test 5: Sample ready low";
 
         ready_in <= '0';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
 
         if ready_status /= '0' then
@@ -153,7 +156,7 @@ begin
         report "Test 6: Sample ready high";
 
         ready_in <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
 
         if ready_status /= '1' then
@@ -169,7 +172,7 @@ begin
 
         int_request <= '1';
         int_clear   <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         int_request <= '0';
         int_clear   <= '0';

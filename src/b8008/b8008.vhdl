@@ -115,8 +115,8 @@ architecture structural of b8008 is
 
     component state_timing_generator is
         port (
-            phi1                  : in std_logic;
-            phi2                  : in std_logic;
+            clk                   : in std_logic;
+            phi2_falling          : in std_logic;
             reset                 : in std_logic;
             advance_state         : in std_logic;
             interrupt_pending     : in std_logic;
@@ -143,7 +143,8 @@ architecture structural of b8008 is
 
     component machine_cycle_control is
         port (
-            phi1                  : in std_logic;
+            clk                   : in std_logic;
+            phi1_rising           : in std_logic;
             reset                 : in std_logic;
             state_t1              : in std_logic;
             state_t2              : in std_logic;
@@ -199,7 +200,8 @@ architecture structural of b8008 is
 
     component memory_io_control is
         port (
-            phi1                  : in std_logic;
+            clk                   : in std_logic;
+            phi1_rising           : in std_logic;
             reset                 : in std_logic;
             state_t1              : in std_logic;
             state_t2              : in std_logic;
@@ -270,7 +272,8 @@ architecture structural of b8008 is
 
     component interrupt_ready_ff is
         port (
-            phi2              : in std_logic;
+            clk               : in std_logic;
+            phi2_rising       : in std_logic;
             reset             : in std_logic;
             int_request       : in std_logic;
             int_clear         : in std_logic;
@@ -449,7 +452,8 @@ architecture structural of b8008 is
     -- Phase 8: ALU and Flags
     component register_alu_control is
         port (
-            phi2                  : in std_logic;
+            clk                   : in std_logic;
+            phi2_rising           : in std_logic;
             status_s0             : in std_logic;
             status_s1             : in std_logic;
             status_s2             : in std_logic;
@@ -475,7 +479,8 @@ architecture structural of b8008 is
 
     component alu is
         port (
-            phi2             : in std_logic;
+            clk              : in std_logic;
+            phi2_rising      : in std_logic;
             accumulator_in   : in std_logic_vector(7 downto 0);
             reg_b_in         : in std_logic_vector(7 downto 0);
             opcode           : in std_logic_vector(2 downto 0);
@@ -886,8 +891,8 @@ begin
 
     u_state_timing : state_timing_generator
         port map (
-            phi1                  => phi1,
-            phi2                  => phi2,
+            clk                   => clk_in,
+            phi2_falling          => phi2_falling,
             reset                 => reset,
             advance_state         => advance_state,
             interrupt_pending     => interrupt_pending,
@@ -913,7 +918,8 @@ begin
 
     u_interrupt_ready : interrupt_ready_ff
         port map (
-            phi2              => phi2,
+            clk               => clk_in,
+            phi2_rising       => phi2_rising,
             reset             => reset,
             int_request       => interrupt,
             int_clear         => int_clear,
@@ -924,7 +930,8 @@ begin
 
     u_machine_cycle : machine_cycle_control
         port map (
-            phi1                  => phi1,
+            clk                   => clk_in,
+            phi1_rising           => phi1_rising,
             reset                 => reset,
             state_t1              => state_t1,
             state_t2              => state_t2,
@@ -978,7 +985,8 @@ begin
 
     u_memory_io_control : memory_io_control
         port map (
-            phi1                  => phi1,
+            clk                   => clk_in,
+            phi1_rising           => phi1_rising,
             reset                 => reset,
             state_t1              => state_t1,
             state_t2              => state_t2,
@@ -1200,7 +1208,8 @@ begin
 
     u_register_alu_control : register_alu_control
         port map (
-            phi2                  => phi2,
+            clk                   => clk_in,
+            phi2_rising           => phi2_rising,
             status_s0             => status_s0,
             status_s1             => status_s1,
             status_s2             => status_s2,
@@ -1245,7 +1254,8 @@ begin
 
     u_alu : alu
         port map (
-            phi2             => phi2,
+            clk              => clk_in,
+            phi2_rising      => phi2_rising,
             accumulator_in   => accumulator,         -- Direct from register file's A register
             reg_b_in         => reg_b_out,           -- From temp register b
             opcode           => alu_opcode,          -- PPP field (bits 5:3) from instruction

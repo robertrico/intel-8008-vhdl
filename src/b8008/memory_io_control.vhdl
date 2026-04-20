@@ -37,8 +37,9 @@ use work.b8008_types.all;
 
 entity memory_io_control is
     port (
-        -- Clock (phi1 from clock generator)
-        phi1 : in std_logic;
+        -- Master clock + phi1 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi1_rising : in std_logic;
 
         -- Reset
         reset : in std_logic;
@@ -183,7 +184,7 @@ begin
     state_t5_edge <= '1' when (state_t5 = '1' and prev_state_t5 = '0') else '0';
 
     -- Track state transitions and generate edge signals
-    process(phi1, reset)
+    process(clk, reset)
     begin
         if reset = '1' then
             prev_state_t2 <= '0';
@@ -193,7 +194,7 @@ begin
             pc_was_loaded <= '0';
             suppress_pc_inc_next_cycle <= '0';
             ir_loaded_from_interrupt <= '0';
-        elsif rising_edge(phi1) then
+        elsif rising_edge(clk) and phi1_rising = '1' then
             -- Set flag when entering T1I (instruction will be jammed)
             if state_t1i = '1' and state_half = '1' then
                 ir_loaded_from_interrupt <= '1';

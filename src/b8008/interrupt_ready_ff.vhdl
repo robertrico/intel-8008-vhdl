@@ -18,8 +18,9 @@ use work.b8008_types.all;
 
 entity interrupt_ready_ff is
     port (
-        -- Clock (phi2 from clock generator)
-        phi2 : in std_logic;
+        -- Master clock + phi2 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi2_rising : in std_logic;
 
         -- Reset
         reset : in std_logic;
@@ -46,12 +47,12 @@ architecture rtl of interrupt_ready_ff is
 
 begin
 
-    -- Interrupt flip-flop
-    process(phi2, reset)
+    -- Interrupt flip-flop (gated on phi2 rising edge)
+    process(clk, reset)
     begin
         if reset = '1' then
             int_ff <= '0';
-        elsif rising_edge(phi2) then
+        elsif rising_edge(clk) and phi2_rising = '1' then
             if int_clear = '1' then
                 int_ff <= '0';
             elsif int_request = '1' then
@@ -60,12 +61,12 @@ begin
         end if;
     end process;
 
-    -- Ready flip-flop (samples external ready signal)
-    process(phi2, reset)
+    -- Ready flip-flop (samples external ready signal, gated on phi2 rising edge)
+    process(clk, reset)
     begin
         if reset = '1' then
             ready_ff <= '1';
-        elsif rising_edge(phi2) then
+        elsif rising_edge(clk) and phi2_rising = '1' then
             ready_ff <= ready_in;
         end if;
     end process;

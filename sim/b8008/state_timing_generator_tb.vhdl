@@ -19,8 +19,8 @@ architecture test of state_timing_generator_tb is
 
     component state_timing_generator is
         port (
-            phi1                  : in  std_logic;
-            phi2                  : in  std_logic;
+            clk                   : in  std_logic;
+            phi2_falling          : in  std_logic;
             reset                 : in  std_logic;
             advance_state         : in  std_logic;
             interrupt_pending     : in  std_logic;
@@ -41,8 +41,11 @@ architecture test of state_timing_generator_tb is
         );
     end component;
 
+    signal clk                   : std_logic := '0';
     signal phi1                  : std_logic := '0';
     signal phi2                  : std_logic := '0';
+    signal phi2_d                : std_logic := '0';
+    signal phi2_falling          : std_logic;
     signal reset                 : std_logic := '0';
     signal advance_state         : std_logic := '0';
     signal interrupt_pending     : std_logic := '0';
@@ -72,8 +75,8 @@ begin
 
     uut : state_timing_generator
         port map (
-            phi1                  => phi1,
-            phi2                  => phi2,
+            clk                   => clk,
+            phi2_falling          => phi2_falling,
             reset                 => reset,
             advance_state         => advance_state,
             interrupt_pending     => interrupt_pending,
@@ -93,17 +96,27 @@ begin
             status_s2             => status_s2
         );
 
-    -- Clock generation process (generates phi1 and phi2 non-overlapping clocks)
-    process
+    -- Master clock generation (100 MHz)
+    clk_proc : process
     begin
         while not done loop
-            -- PHI1 pulse
+            clk <= '0';
+            wait for CLK_PERIOD / 2;
+            clk <= '1';
+            wait for CLK_PERIOD / 2;
+        end loop;
+        wait;
+    end process;
+
+    -- Phi1/phi2 non-overlapping waveforms (reference signals for the TB)
+    phi_proc : process
+    begin
+        while not done loop
             phi1 <= '1';
             wait for PHI1_WIDTH;
             phi1 <= '0';
             wait for DEAD_TIME;
 
-            -- PHI2 pulse
             phi2 <= '1';
             wait for PHI2_WIDTH;
             phi2 <= '0';
@@ -111,6 +124,15 @@ begin
         end loop;
         wait;
     end process;
+
+    -- Derive phi2_falling as a one-cycle pulse on the clk domain
+    phi2_edge_proc : process(clk)
+    begin
+        if rising_edge(clk) then
+            phi2_d <= phi2;
+        end if;
+    end process;
+    phi2_falling <= phi2_d and not phi2;
 
     -- Test stimulus
     process

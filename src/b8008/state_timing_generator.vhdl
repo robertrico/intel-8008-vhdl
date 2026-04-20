@@ -19,9 +19,9 @@ use work.b8008_types.all;
 
 entity state_timing_generator is
     port (
-        -- Clock inputs from phase clock generator
-        phi1 : in std_logic;
-        phi2 : in std_logic;
+        -- Master clock + phi2 falling-edge pulse (one clk cycle wide)
+        clk          : in std_logic;
+        phi2_falling : in std_logic;
 
         -- Reset input for FPGA deterministic startup
         -- (The real 8008 powers up in STOPPED state; reset provides same behavior)
@@ -175,14 +175,14 @@ begin
     end process;
 
     -- State machine and cycle counter (sequential)
-    -- Advances on falling edge of phi2 (end of each clock cycle)
-    -- Reset forces STOPPED state for deterministic FPGA startup
-    process(phi2, reset)
+    -- Advances on falling edge of phi2 (end of each clock cycle), gated on
+    -- clk domain so the whole CPU shares one clock tree.
+    process(clk, reset)
     begin
         if reset = '1' then
             current_state <= S_STOPPED;
             cycle_count <= '0';
-        elsif falling_edge(phi2) then
+        elsif rising_edge(clk) and phi2_falling = '1' then
             -- Only advance if READY is high
             if ready = '1' then
                 if cycle_count = '0' then

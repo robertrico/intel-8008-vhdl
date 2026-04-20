@@ -21,9 +21,10 @@ use work.b8008_types.all;
 
 entity machine_cycle_control is
     port (
-        -- Clock and reset
-        phi1  : in std_logic;
-        reset : in std_logic;
+        -- Master clock + phi1 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi1_rising : in std_logic;
+        reset       : in std_logic;
 
         -- State inputs from State Timing Generator
         state_t1  : in std_logic;
@@ -136,7 +137,7 @@ begin
     t1i_rising <= state_t1i and not prev_state_t1i;
 
     -- Single synchronous process for all state machine logic
-    process(phi1, reset)
+    process(clk, reset)
     begin
         if reset = '1' then
             cycle_count <= 0;
@@ -149,7 +150,7 @@ begin
             prev_state_t4 <= '0';
             prev_state_t5 <= '0';
             prev_state_t1i <= '0';
-        elsif rising_edge(phi1) then
+        elsif rising_edge(clk) and phi1_rising = '1' then
             -- Update previous state values for edge detection
             prev_state_t1  <= state_t1;
             prev_state_t2  <= state_t2;

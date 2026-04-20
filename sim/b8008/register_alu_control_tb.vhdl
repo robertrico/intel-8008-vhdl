@@ -21,7 +21,8 @@ architecture test of register_alu_control_tb is
     component register_alu_control is
         port (
             -- Clock input from Clock Generator
-            phi2 : in std_logic;
+            clk         : in std_logic;
+            phi2_rising : in std_logic;
 
             -- Status signals from State Timing Generator (encode T1-T5)
             status_s0 : in std_logic;
@@ -59,8 +60,9 @@ architecture test of register_alu_control_tb is
         );
     end component;
 
-    -- Clock signal
-    signal phi2 : std_logic := '0';
+    -- Clock signal (formerly phi2; phi2_rising='1' always so every clk rise = phi2 edge)
+    signal clk         : std_logic := '0';
+    signal phi2_rising : std_logic := '1';
     constant phi2_period : time := 500 ns;
 
     -- Inputs
@@ -121,7 +123,8 @@ begin
 
     uut : register_alu_control
         port map (
-            phi2                  => phi2,
+            clk                   => clk,
+            phi2_rising           => phi2_rising,
             status_s0             => status_s0,
             status_s1             => status_s1,
             status_s2             => status_s2,
@@ -144,13 +147,13 @@ begin
             output_flags          => output_flags
         );
 
-    -- Clock generation
-    phi2_process : process
+    -- Clock generation (clk replaces former phi2)
+    clk_process : process
     begin
         while not done loop
-            phi2 <= '0';
+            clk <= '0';
             wait for phi2_period / 2;
-            phi2 <= '1';
+            clk <= '1';
             wait for phi2_period / 2;
         end loop;
         wait;
@@ -188,7 +191,7 @@ begin
 
         -- T3 (cycle 1): opcode byte is always loaded into Reg.b during C1 T3
         set_state(status_s0, status_s1, status_s2, "T3 ");
-        wait until phi2 = '1';  -- Wait for phi2 high
+        wait until clk = '1';  -- Wait for phi2 high
         wait for 10 ns;  -- Small delay for signals to settle
         if load_reg_b /= '1' then
             report "  ERROR: load_reg_b should be high at C1 T3 (opcode to Reg.b)" severity error;
@@ -196,13 +199,13 @@ begin
         else
             report "  PASS: load_reg_b asserted at C1 T3 (opcode latch)";
         end if;
-        wait until phi2 = '0';  -- Wait for phi2 to go low
+        wait until clk = '0';  -- Wait for phi2 to go low
         wait for phi2_period / 2;  -- Wait for next state
 
         -- T4: Load SSS to Reg.b (register ALU op / MOV pattern)
         -- Note: Reg.a is not loaded here in current design (it is hardwired to ACC)
         set_state(status_s0, status_s1, status_s2, "T4 ");
-        wait until phi2 = '1';
+        wait until clk = '1';
         wait for 10 ns;
         if load_reg_b /= '1' then
             report "  ERROR: load_reg_b should be high at C1 T4 (SSS to Reg.b)" severity error;
@@ -210,13 +213,13 @@ begin
         else
             report "  PASS: load_reg_b asserted at C1 T4";
         end if;
-        wait until phi2 = '0';
+        wait until clk = '0';
         wait for phi2_period / 2;
 
         -- T5: Execute ALU operation (flags latch on second half only)
         set_state(status_s0, status_s1, status_s2, "T5 ");
         state_half <= '1';
-        wait until phi2 = '1';
+        wait until clk = '1';
         wait for 10 ns;
         if alu_enable /= '1' then
             report "  ERROR: alu_enable should be high at T5" severity error;
@@ -231,7 +234,7 @@ begin
             report "  PASS: update_flags asserted at T5 second half";
         end if;
         state_half <= '0';
-        wait until phi2 = '0';
+        wait until clk = '0';
         wait for phi2_period / 2;
 
         -- Test 2: ALU OP I (two cycles, immediate operand)
@@ -248,7 +251,7 @@ begin
 
         -- Cycle 1, T3: opcode byte is always loaded into Reg.b during C1 T3
         set_state(status_s0, status_s1, status_s2, "T3 ");
-        wait until phi2 = '1';
+        wait until clk = '1';
         wait for 10 ns;
         if load_reg_b /= '1' then
             report "  ERROR: load_reg_b should be high at C1 T3 (opcode to Reg.b)" severity error;
@@ -256,7 +259,7 @@ begin
         else
             report "  PASS: load_reg_b asserted at C1 T3 (opcode latch)";
         end if;
-        wait until phi2 = '0';
+        wait until clk = '0';
         wait for phi2_period / 2;
 
         -- Move to Cycle 2
@@ -265,7 +268,7 @@ begin
 
         -- Cycle 2, T3: Fetch immediate data into Reg.b
         set_state(status_s0, status_s1, status_s2, "T3 ");
-        wait until phi2 = '1';
+        wait until clk = '1';
         wait for 10 ns;
         if load_reg_b /= '1' then
             report "  ERROR: load_reg_b should be high at C2 T3" severity error;
@@ -280,13 +283,13 @@ begin
         else
             report "  PASS: load_reg_a not asserted at C2 T3 (will load at T4)";
         end if;
-        wait until phi2 = '0';
+        wait until clk = '0';
         wait for phi2_period / 2;
 
         -- Cycle 2, T4: Reg.a is NOT loaded here - it is hardwired to ACC.
         -- load_reg_a is only asserted at C3 T3 for address-high (JMP/CALL).
         set_state(status_s0, status_s1, status_s2, "T4 ");
-        wait until phi2 = '1';
+        wait until clk = '1';
         wait for 10 ns;
         if load_reg_a = '1' then
             report "  ERROR: load_reg_a should NOT be high at C2 T4 (Reg.a is only C3 T3)" severity error;
@@ -294,12 +297,12 @@ begin
         else
             report "  PASS: load_reg_a not asserted at C2 T4 (ACC hardwired)";
         end if;
-        wait until phi2 = '0';
+        wait until clk = '0';
         wait for phi2_period / 2;
 
         -- Cycle 2, T5: Execute ALU
         set_state(status_s0, status_s1, status_s2, "T5 ");
-        wait until phi2 = '1';
+        wait until clk = '1';
         wait for 10 ns;
         if alu_enable /= '1' then
             report "  ERROR: alu_enable should be high at C2 T5" severity error;
@@ -307,7 +310,7 @@ begin
         else
             report "  PASS: alu_enable asserted at C2 T5";
         end if;
-        wait until phi2 = '0';
+        wait until clk = '0';
         wait for phi2_period / 2;
 
         -- Test 3: Non-ALU instruction (should not trigger ALU signals)

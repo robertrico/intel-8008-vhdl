@@ -31,8 +31,9 @@ use work.b8008_types.all;
 
 entity alu is
     port (
-        -- Clock for latching result
-        phi2 : in std_logic;
+        -- Master clock + phi2 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi2_rising : in std_logic;
 
         -- Operand input 1: Direct from Accumulator (hardwired)
         accumulator_in : in std_logic_vector(7 downto 0);
@@ -107,13 +108,13 @@ begin
 
     -- Latch ALU result on the rising edge of enable (T4->T5 transition)
     -- This prevents the result from changing when the register file is updated
-    process(phi2)
+    process(clk)
         variable carry_val : unsigned(8 downto 0);
         variable temp_result : std_logic_vector(8 downto 0);
         variable operand1 : std_logic_vector(7 downto 0);
         variable operand2 : std_logic_vector(7 downto 0);
     begin
-        if rising_edge(phi2) then
+        if rising_edge(clk) and phi2_rising = '1' then
             enable_prev <= enable;
 
             -- Latch result when enable goes from 0 to 1
