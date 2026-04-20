@@ -23,8 +23,9 @@ use work.b8008_types.all;
 
 entity temp_registers is
     port (
-        -- Clock input (phi2 for latching)
-        phi2 : in std_logic;
+        -- Master clock + phi2 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi2_rising : in std_logic;
 
         -- Reset (active high)
         reset : in std_logic;
@@ -65,13 +66,12 @@ begin
     internal_bus_oe  <= output_reg_a or output_reg_b;
 
     -- Latch Reg.a on phi2 rising edge when enabled
-    -- DUMB: just load whatever is on internal_bus
-    process(phi2, reset)
+    process(clk, reset)
     begin
         if reset = '1' then
             reg_a <= (others => '0');
-        elsif rising_edge(phi2) then
-            if load_reg_a = '1' then
+        elsif rising_edge(clk) then
+            if phi2_rising = '1' and load_reg_a = '1' then
                 reg_a <= internal_bus_in;
                 report "TEMP_REG: Loading Reg.a = 0x" & to_hstring(unsigned(internal_bus_in));
             end if;
@@ -79,13 +79,12 @@ begin
     end process;
 
     -- Latch Reg.b on phi2 rising edge when enabled
-    -- DUMB: just load whatever is on internal_bus
-    process(phi2, reset)
+    process(clk, reset)
     begin
         if reset = '1' then
             reg_b <= (others => '0');
-        elsif rising_edge(phi2) then
-            if load_reg_b = '1' then
+        elsif rising_edge(clk) then
+            if phi2_rising = '1' and load_reg_b = '1' then
                 reg_b <= internal_bus_in;
                 report "TEMP_REG: Loading Reg.b = 0x" & to_hstring(unsigned(internal_bus_in));
             end if;

@@ -20,8 +20,9 @@ use work.b8008_types.all;
 
 entity instruction_register is
     port (
-        -- Clock (phi1 from clock generator)
-        phi1 : in std_logic;
+        -- Master clock + phi1 falling-edge pulse (one clk cycle wide)
+        clk          : in std_logic;
+        phi1_falling : in std_logic;
 
         -- Reset
         reset : in std_logic;
@@ -55,14 +56,14 @@ architecture rtl of instruction_register is
 
 begin
 
-    -- Load instruction register from internal bus
-    -- Use falling_edge to sample in middle of clock cycle when data is stable
-    process(phi1, reset)
+    -- Load instruction register from internal bus, gated on phi1 falling edge
+    -- (samples in middle of phi1 cycle when data is stable)
+    process(clk, reset)
     begin
         if reset = '1' then
             ir <= (others => '0');
-        elsif falling_edge(phi1) then
-            if load_ir = '1' then
+        elsif rising_edge(clk) then
+            if phi1_falling = '1' and load_ir = '1' then
                 ir <= internal_bus_in;
                 report "IR: Loading from bus = 0x" & to_hstring(unsigned(internal_bus_in));
             end if;

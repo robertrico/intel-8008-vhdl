@@ -19,7 +19,8 @@ architecture test of stack_memory_tb is
 
     component stack_memory is
         port (
-            phi1           : in std_logic;
+            clk            : in std_logic;
+            phi1_rising    : in std_logic;
             reset          : in std_logic;
             addr_in        : in address_t;
             enable_level_0 : in std_logic;
@@ -36,8 +37,9 @@ architecture test of stack_memory_tb is
         );
     end component;
 
-    -- Clock
-    signal phi1 : std_logic := '0';
+    -- Clock (formerly phi1; phi1_rising held '1' so every clk rise acts as a phi1 edge)
+    signal clk         : std_logic := '0';
+    signal phi1_rising : std_logic := '1';
     constant phi1_period : time := 500 ns;
 
     -- Inputs
@@ -60,11 +62,12 @@ architecture test of stack_memory_tb is
 begin
 
     -- Clock generation
-    phi1 <= not phi1 after phi1_period / 2;
+    clk <= not clk after phi1_period / 2;
 
     uut : stack_memory
         port map (
-            phi1           => phi1,
+            clk            => clk,
+            phi1_rising    => phi1_rising,
             reset          => reset,
             addr_in        => addr_in,
             enable_level_0 => enable_level_0,
@@ -105,7 +108,7 @@ begin
         addr_in        <= to_unsigned(16#1234#, 14);  -- 0x1234 in 14 bits
         enable_level_0 <= '1';
         stack_write    <= '1';
-        wait until rising_edge(phi1);
+        wait until rising_edge(clk);
         wait for 10 ns;
         enable_level_0 <= '0';
         stack_write    <= '0';
@@ -132,7 +135,7 @@ begin
         addr_in        <= to_unsigned(16#3ABC#, 14);  -- 0x3ABC in 14 bits
         enable_level_3 <= '1';
         stack_write    <= '1';
-        wait until rising_edge(phi1);
+        wait until rising_edge(clk);
         wait for 10 ns;
         enable_level_3 <= '0';
         stack_write    <= '0';
@@ -173,7 +176,7 @@ begin
                 when others => null;
             end case;
 
-            wait until rising_edge(phi1);
+            wait until rising_edge(clk);
             wait for 10 ns;
 
             enable_level_0 <= '0';

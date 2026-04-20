@@ -20,7 +20,8 @@ architecture test of temp_registers_tb is
     -- Component declaration
     component temp_registers is
         port (
-            phi2             : in  std_logic;
+            clk              : in  std_logic;
+            phi2_rising      : in  std_logic;
             reset            : in  std_logic;
             load_reg_a       : in  std_logic;
             load_reg_b       : in  std_logic;
@@ -34,8 +35,9 @@ architecture test of temp_registers_tb is
         );
     end component;
 
-    -- Clock
-    signal phi2 : std_logic := '0';
+    -- Clock (formerly phi2; phi2_rising held '1' so every clk rise acts as a phi2 edge)
+    signal clk         : std_logic := '0';
+    signal phi2_rising : std_logic := '1';
     constant phi2_period : time := 500 ns;
 
     -- Inputs
@@ -74,7 +76,8 @@ begin
 
     uut : temp_registers
         port map (
-            phi2             => phi2,
+            clk              => clk,
+            phi2_rising      => phi2_rising,
             reset            => reset,
             load_reg_a       => load_reg_a,
             load_reg_b       => load_reg_b,
@@ -87,13 +90,14 @@ begin
             reg_b_out        => reg_b_out
         );
 
-    -- Clock generation
-    phi2_process : process
+    -- Clock generation (formerly phi2; phi2_rising='1' permanently so every
+    -- clk rise triggers the UUT -- matches the old rising_edge(phi2) semantics)
+    clk_process : process
     begin
         while not done loop
-            phi2 <= '0';
+            clk <= '0';
             wait for phi2_period / 2;
-            phi2 <= '1';
+            clk <= '1';
             wait for phi2_period / 2;
         end loop;
         wait;
@@ -116,7 +120,7 @@ begin
         bus_driver <= x"42";
         bus_drive_enable <= '1';
         load_reg_a <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;  -- Allow signal to settle
 
         if reg_a_out /= x"42" then
@@ -138,7 +142,7 @@ begin
         bus_driver <= x"A5";
         bus_drive_enable <= '1';
         load_reg_b <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
 
         if reg_b_out /= x"A5" then
@@ -189,7 +193,7 @@ begin
         bus_drive_enable <= '1';
         load_reg_a <= '1';
         load_reg_b <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
 
         if reg_a_out /= x"12" then
@@ -222,7 +226,7 @@ begin
         bus_drive_enable <= '1';
         load_reg_a <= '1';
         load_reg_b <= '0';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
 
         if reg_a_out /= x"34" then
@@ -248,7 +252,7 @@ begin
         bus_drive_enable <= '1';
         load_reg_a <= '0';
         load_reg_b <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
 
         if reg_a_out /= x"34" then

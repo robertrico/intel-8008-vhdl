@@ -20,8 +20,9 @@ use work.b8008_types.all;
 
 entity stack_pointer is
     port (
-        -- Clock (phi1 from clock generator)
-        phi1 : in std_logic;
+        -- Master clock + phi1 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi1_rising : in std_logic;
 
         -- Reset
         reset : in std_logic;
@@ -42,20 +43,22 @@ architecture rtl of stack_pointer is
 
 begin
 
-    -- Stack pointer logic
-    process(phi1, reset)
+    -- Stack pointer logic, gated on phi1 rising edge
+    process(clk, reset)
     begin
         if reset = '1' then
             sp <= (others => '0');
-        elsif rising_edge(phi1) then
-            if stack_push = '1' then
-                -- Push: increment (wraps from 111 to 000)
-                sp <= sp + 1;
-                report "STACK_PTR: Push, SP " & integer'image(to_integer(sp)) & " -> " & integer'image(to_integer(sp + 1));
-            elsif stack_pop = '1' then
-                -- Pop: decrement (wraps from 000 to 111)
-                sp <= sp - 1;
-                report "STACK_PTR: Pop, SP " & integer'image(to_integer(sp)) & " -> " & integer'image(to_integer(sp - 1));
+        elsif rising_edge(clk) then
+            if phi1_rising = '1' then
+                if stack_push = '1' then
+                    -- Push: increment (wraps from 111 to 000)
+                    sp <= sp + 1;
+                    report "STACK_PTR: Push, SP " & integer'image(to_integer(sp)) & " -> " & integer'image(to_integer(sp + 1));
+                elsif stack_pop = '1' then
+                    -- Pop: decrement (wraps from 000 to 111)
+                    sp <= sp - 1;
+                    report "STACK_PTR: Pop, SP " & integer'image(to_integer(sp)) & " -> " & integer'image(to_integer(sp - 1));
+                end if;
             end if;
         end if;
     end process;

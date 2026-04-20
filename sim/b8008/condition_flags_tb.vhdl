@@ -20,7 +20,8 @@ architecture test of condition_flags_tb is
     -- Component declaration
     component condition_flags is
         port (
-            phi2             : in  std_logic;
+            clk              : in  std_logic;
+            phi2_rising      : in  std_logic;
             reset            : in  std_logic;
             flag_carry_in    : in  std_logic;
             flag_zero_in     : in  std_logic;
@@ -41,8 +42,9 @@ architecture test of condition_flags_tb is
         );
     end component;
 
-    -- Clock
-    signal phi2 : std_logic := '0';
+    -- Clock (formerly phi2; phi2_rising held '1' so every clk rise acts as a phi2 edge)
+    signal clk         : std_logic := '0';
+    signal phi2_rising : std_logic := '1';
     constant phi2_period : time := 500 ns;
 
     -- Inputs
@@ -78,14 +80,15 @@ architecture test of condition_flags_tb is
 begin
 
     -- Clock generation
-    phi2 <= not phi2 after phi2_period / 2;
+    clk <= not clk after phi2_period / 2;
 
     -- Reconstructed tri-stated bus view for legacy assertions
     internal_bus <= internal_bus_out when internal_bus_oe = '1' else (others => 'Z');
 
     uut : condition_flags
         port map (
-            phi2             => phi2,
+            clk              => clk,
+            phi2_rising      => phi2_rising,
             reset            => reset,
             flag_carry_in    => flag_carry_in,
             flag_zero_in     => flag_zero_in,
@@ -139,7 +142,7 @@ begin
         flag_parity_in <= '1';
         update_flags   <= '1';
 
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
 
         if flag_carry /= '1' or flag_zero /= '1' or flag_sign /= '1' or flag_parity /= '1' then
@@ -161,7 +164,7 @@ begin
         flag_parity_in <= '1';
         update_flags   <= '1';
 
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
 
         if flag_carry /= '0' or flag_zero /= '1' or flag_sign /= '0' or flag_parity /= '1' then
@@ -277,7 +280,7 @@ begin
         -- Update Carry flag to 1
         flag_carry_in <= '1';
         update_flags  <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         update_flags  <= '0';
 

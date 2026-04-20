@@ -18,7 +18,8 @@ architecture test of instruction_register_tb is
 
     component instruction_register is
         port (
-            phi1             : in  std_logic;
+            clk              : in  std_logic;
+            phi1_falling     : in  std_logic;
             reset            : in  std_logic;
             internal_bus_in  : in  std_logic_vector(7 downto 0);
             internal_bus_out : out std_logic_vector(7 downto 0);
@@ -36,9 +37,13 @@ architecture test of instruction_register_tb is
         );
     end component;
 
-    -- Clock
-    signal phi1 : std_logic := '0';
+    -- Master clock + phi1 falling-edge enable pulse
+    signal clk : std_logic := '0';
+    signal phi1          : std_logic := '0';
+    signal phi1_d        : std_logic := '0';
+    signal phi1_falling  : std_logic;
     constant phi1_period : time := 500 ns;
+    constant clk_period  : time := 10 ns;
 
     -- Inputs
     signal reset     : std_logic := '0';
@@ -68,8 +73,20 @@ architecture test of instruction_register_tb is
 
 begin
 
-    -- Clock generation
+    -- Master clock generation (much faster than phi1)
+    clk <= not clk after clk_period / 2;
+
+    -- Phi1 square wave (simulated)
     phi1 <= not phi1 after phi1_period / 2;
+
+    -- Detect phi1 falling edge on clk domain: one-cycle pulse
+    phi1_edge_proc : process(clk)
+    begin
+        if rising_edge(clk) then
+            phi1_d <= phi1;
+        end if;
+    end process;
+    phi1_falling <= phi1_d and not phi1;
 
     -- Reconstruct a tri-stated internal bus: TB drives it or the IR drives it.
     internal_bus <= bus_driver when bus_drive_enable = '1' else
@@ -85,7 +102,8 @@ begin
 
     uut : instruction_register
         port map (
-            phi1             => phi1,
+            clk              => clk,
+            phi1_falling     => phi1_falling,
             reset            => reset,
             internal_bus_in  => internal_bus_in,
             internal_bus_out => internal_bus_out,

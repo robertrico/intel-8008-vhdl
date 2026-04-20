@@ -18,8 +18,9 @@ use work.b8008_types.all;
 
 entity stack_memory is
     port (
-        -- Clock (phi1 from clock generator)
-        phi1 : in std_logic;
+        -- Master clock + phi1 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi1_rising : in std_logic;
 
         -- Reset
         reset : in std_logic;
@@ -54,13 +55,13 @@ architecture rtl of stack_memory is
 
 begin
 
-    -- Write to stack on phi1 rising edge
-    process(phi1, reset)
+    -- Write to stack, gated on phi1 rising edge
+    process(clk, reset)
     begin
         if reset = '1' then
             stack <= (others => (others => '0'));
-        elsif rising_edge(phi1) then
-            if stack_write = '1' then
+        elsif rising_edge(clk) then
+            if phi1_rising = '1' and stack_write = '1' then
                 if enable_level_0 = '1' then
                     stack(0) <= addr_in;
                     report "STACK: Writing level 0 = 0x" & to_hstring(unsigned(addr_in));

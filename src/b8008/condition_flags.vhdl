@@ -28,8 +28,9 @@ use work.b8008_types.all;
 
 entity condition_flags is
     port (
-        -- Clock (phi2 from clock generator)
-        phi2 : in std_logic;
+        -- Master clock + phi2 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi2_rising : in std_logic;
 
         -- Reset
         reset : in std_logic;
@@ -87,16 +88,16 @@ architecture rtl of condition_flags is
 
 begin
 
-    -- Update flag flip-flops on phi2 rising edge
-    process(phi2, reset)
+    -- Update flag flip-flops on phi2 rising edge (gated)
+    process(clk, reset)
     begin
         if reset = '1' then
             carry_ff  <= '0';
             zero_ff   <= '0';
             sign_ff   <= '0';
             parity_ff <= '0';
-        elsif rising_edge(phi2) then
-            if update_flags = '1' then
+        elsif rising_edge(clk) then
+            if phi2_rising = '1' and update_flags = '1' then
                 carry_ff  <= flag_carry_in;
                 zero_ff   <= flag_zero_in;
                 sign_ff   <= flag_sign_in;

@@ -335,11 +335,12 @@ architecture structural of b8008 is
     -- Phase 5: Stack System
     component stack_pointer is
         port (
-            phi1       : in std_logic;
-            reset      : in std_logic;
-            stack_push : in std_logic;
-            stack_pop  : in std_logic;
-            sp_out     : out std_logic_vector(2 downto 0)
+            clk         : in std_logic;
+            phi1_rising : in std_logic;
+            reset       : in std_logic;
+            stack_push  : in std_logic;
+            stack_pop   : in std_logic;
+            sp_out      : out std_logic_vector(2 downto 0)
         );
     end component;
 
@@ -363,7 +364,8 @@ architecture structural of b8008 is
 
     component stack_memory is
         port (
-            phi1           : in std_logic;
+            clk            : in std_logic;
+            phi1_rising    : in std_logic;
             reset          : in std_logic;
             addr_in        : in address_t;
             enable_level_0 : in std_logic;
@@ -401,7 +403,8 @@ architecture structural of b8008 is
 
     component register_file is
         port (
-            phi2            : in std_logic;
+            clk             : in std_logic;
+            phi2_rising     : in std_logic;
             reset           : in std_logic;
             data_in         : in std_logic_vector(7 downto 0);
             data_out        : out std_logic_vector(7 downto 0);
@@ -428,7 +431,8 @@ architecture structural of b8008 is
     -- Phase 7: Temp Registers
     component temp_registers is
         port (
-            phi2                : in std_logic;
+            clk                 : in std_logic;
+            phi2_rising         : in std_logic;
             reset               : in std_logic;
             load_reg_a          : in std_logic;
             load_reg_b          : in std_logic;
@@ -492,7 +496,8 @@ architecture structural of b8008 is
 
     component condition_flags is
         port (
-            phi2             : in std_logic;
+            clk              : in std_logic;
+            phi2_rising      : in std_logic;
             reset            : in std_logic;
             flag_carry_in    : in std_logic;
             flag_zero_in     : in std_logic;
@@ -516,7 +521,8 @@ architecture structural of b8008 is
     -- Phase 9: External Interface
     component instruction_register is
         port (
-            phi1             : in std_logic;
+            clk              : in std_logic;
+            phi1_falling     : in std_logic;
             reset            : in std_logic;
             internal_bus_in  : in  std_logic_vector(7 downto 0);
             internal_bus_out : out std_logic_vector(7 downto 0);
@@ -1097,11 +1103,12 @@ begin
 
     u_stack_pointer : stack_pointer
         port map (
-            phi1       => phi1,
-            reset      => reset,
-            stack_push => stack_push,
-            stack_pop  => stack_pop,
-            sp_out     => sp
+            clk         => clk_in,
+            phi1_rising => phi1_rising,
+            reset       => reset,
+            stack_push  => stack_push,
+            stack_pop   => stack_pop,
+            sp_out      => sp
         );
 
     u_stack_addr_decoder : stack_addr_decoder
@@ -1123,7 +1130,8 @@ begin
 
     u_stack_memory : stack_memory
         port map (
-            phi1           => phi1,
+            clk            => clk_in,
+            phi1_rising    => phi1_rising,
             reset          => reset,
             addr_in        => pc_addr,  -- PC address to store during CALL/RST
             enable_level_0 => stack_enable_0,
@@ -1162,7 +1170,8 @@ begin
 
     u_register_file : register_file
         port map (
-            phi2            => phi2,
+            clk             => clk_in,
+            phi2_rising     => phi2_rising,
             reset           => reset,
             data_in         => regfile_data_in,
             data_out        => regfile_data_out,
@@ -1216,7 +1225,8 @@ begin
 
     u_temp_registers : temp_registers
         port map (
-            phi2                => phi2,
+            clk                 => clk_in,
+            phi2_rising         => phi2_rising,
             reset               => reset,
             load_reg_a          => load_reg_a,
             load_reg_b          => load_reg_b,
@@ -1255,7 +1265,8 @@ begin
 
     u_condition_flags : condition_flags
         port map (
-            phi2             => phi2,
+            clk              => clk_in,
+            phi2_rising      => phi2_rising,
             reset            => reset,
             flag_carry_in    => alu_flag_carry,
             flag_zero_in     => alu_flag_zero,
@@ -1281,7 +1292,8 @@ begin
 
     u_instruction_register : instruction_register
         port map (
-            phi1             => phi1,
+            clk              => clk_in,
+            phi1_falling     => phi1_falling,
             reset            => reset,
             internal_bus_in  => internal_bus,
             internal_bus_out => ir_bus_out,

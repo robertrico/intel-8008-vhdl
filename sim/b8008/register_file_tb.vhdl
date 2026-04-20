@@ -18,7 +18,8 @@ architecture test of register_file_tb is
 
     component register_file is
         port (
-            phi2         : in std_logic;
+            clk          : in std_logic;
+            phi2_rising  : in std_logic;
             reset        : in std_logic;
             data_in      : in std_logic_vector(7 downto 0);
             data_out     : out std_logic_vector(7 downto 0);
@@ -41,8 +42,9 @@ architecture test of register_file_tb is
         );
     end component;
 
-    -- Clock
-    signal phi2 : std_logic := '0';
+    -- Clock (formerly phi2; phi2_rising held '1' so every clk rise acts as a phi2 edge)
+    signal clk         : std_logic := '0';
+    signal phi2_rising : std_logic := '1';
     constant phi2_period : time := 500 ns;
 
     -- Inputs
@@ -73,11 +75,12 @@ architecture test of register_file_tb is
 begin
 
     -- Clock generation
-    phi2 <= not phi2 after phi2_period / 2;
+    clk <= not clk after phi2_period / 2;
 
     uut : register_file
         port map (
-            phi2         => phi2,
+            clk          => clk,
+            phi2_rising  => phi2_rising,
             reset        => reset,
             data_in      => data_in,
             data_out     => data_out,
@@ -129,7 +132,7 @@ begin
         data_in   <= x"42";
         enable_a     <= '1';
         write_enable <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         enable_a     <= '0';
         write_enable <= '0';
@@ -158,7 +161,7 @@ begin
         data_in   <= x"3F";
         enable_h     <= '1';
         write_enable <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         enable_h     <= '0';
         write_enable <= '0';
@@ -179,7 +182,7 @@ begin
         data_in   <= x"2A";
         enable_l     <= '1';
         write_enable <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         enable_l     <= '0';
         write_enable <= '0';
@@ -201,7 +204,7 @@ begin
         data_in   <= x"11";
         enable_b     <= '1';
         write_enable <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         enable_b     <= '0';
         write_enable <= '0';
@@ -212,7 +215,7 @@ begin
         data_in   <= x"22";
         enable_c     <= '1';
         write_enable <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         enable_c     <= '0';
         write_enable <= '0';
@@ -223,7 +226,7 @@ begin
         data_in   <= x"33";
         enable_d     <= '1';
         write_enable <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         enable_d     <= '0';
         write_enable <= '0';
@@ -234,7 +237,7 @@ begin
         data_in   <= x"44";
         enable_e     <= '1';
         write_enable <= '1';
-        wait until rising_edge(phi2);
+        wait until rising_edge(clk);
         wait for 10 ns;
         enable_e     <= '0';
         write_enable <= '0';

@@ -25,8 +25,9 @@ use work.b8008_types.all;
 
 entity register_file is
     port (
-        -- Clock (phi2 from clock generator - data latched on phi2)
-        phi2 : in std_logic;
+        -- Master clock + phi2 rising-edge pulse (one clk cycle wide)
+        clk         : in std_logic;
+        phi2_rising : in std_logic;
 
         -- Reset
         reset : in std_logic;
@@ -76,8 +77,8 @@ architecture rtl of register_file is
 
 begin
 
-    -- Write to registers on phi2 rising edge
-    process(phi2, reset)
+    -- Write to registers on phi2 rising edge (gated)
+    process(clk, reset)
     begin
         if reset = '1' then
             reg_a <= (others => '0');
@@ -87,8 +88,8 @@ begin
             reg_e <= (others => '0');
             reg_h <= (others => '0');
             reg_l <= (others => '0');
-        elsif rising_edge(phi2) then
-            if write_enable = '1' then
+        elsif rising_edge(clk) then
+            if phi2_rising = '1' and write_enable = '1' then
                 if enable_a = '1' then
                     reg_a <= data_in;
                     report "REGFILE: Writing A register = 0x" & to_hstring(unsigned(data_in));

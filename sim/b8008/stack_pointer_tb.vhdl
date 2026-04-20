@@ -19,16 +19,18 @@ architecture test of stack_pointer_tb is
 
     component stack_pointer is
         port (
-            phi1       : in std_logic;
-            reset      : in std_logic;
-            stack_push : in std_logic;
-            stack_pop  : in std_logic;
-            sp_out     : out std_logic_vector(2 downto 0)
+            clk         : in std_logic;
+            phi1_rising : in std_logic;
+            reset       : in std_logic;
+            stack_push  : in std_logic;
+            stack_pop   : in std_logic;
+            sp_out      : out std_logic_vector(2 downto 0)
         );
     end component;
 
-    -- Clock
-    signal phi1 : std_logic := '0';
+    -- Clock (formerly phi1; held phi1_rising='1' so every clk rise acts as a phi1 edge)
+    signal clk         : std_logic := '0';
+    signal phi1_rising : std_logic := '1';
     constant phi1_period : time := 500 ns;
 
     -- Inputs
@@ -42,15 +44,16 @@ architecture test of stack_pointer_tb is
 begin
 
     -- Clock generation
-    phi1 <= not phi1 after phi1_period / 2;
+    clk <= not clk after phi1_period / 2;
 
     uut : stack_pointer
         port map (
-            phi1       => phi1,
-            reset      => reset,
-            stack_push => stack_push,
-            stack_pop  => stack_pop,
-            sp_out     => sp_out
+            clk         => clk,
+            phi1_rising => phi1_rising,
+            reset       => reset,
+            stack_push  => stack_push,
+            stack_pop   => stack_pop,
+            sp_out      => sp_out
         );
 
     test_process : process
@@ -82,7 +85,7 @@ begin
 
         for i in 1 to 3 loop
             stack_push <= '1';
-            wait until rising_edge(phi1);
+            wait until rising_edge(clk);
             wait for 10 ns;
             stack_push <= '0';
             wait for 10 ns;
@@ -102,7 +105,7 @@ begin
 
         for i in 2 downto 1 loop
             stack_pop <= '1';
-            wait until rising_edge(phi1);
+            wait until rising_edge(clk);
             wait for 10 ns;
             stack_pop <= '0';
             wait for 10 ns;
@@ -128,7 +131,7 @@ begin
 
         for i in 0 to 7 loop
             stack_push <= '1';
-            wait until rising_edge(phi1);
+            wait until rising_edge(clk);
             wait for 10 ns;
             stack_push <= '0';
             wait for 10 ns;
@@ -153,7 +156,7 @@ begin
 
         -- SP is at 0, pop should wrap to 7
         stack_pop <= '1';
-        wait until rising_edge(phi1);
+        wait until rising_edge(clk);
         wait for 10 ns;
         stack_pop <= '0';
         wait for 10 ns;
