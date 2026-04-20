@@ -101,11 +101,15 @@ architecture structural of b8008 is
 
     component phase_clocks is
         port (
-            clk_in : in std_logic;
-            reset  : in std_logic;
-            phi1   : out std_logic;
-            phi2   : out std_logic;
-            sync   : out std_logic
+            clk_in       : in std_logic;
+            reset        : in std_logic;
+            phi1         : out std_logic;
+            phi2         : out std_logic;
+            sync         : out std_logic;
+            phi1_rising  : out std_logic;
+            phi1_falling : out std_logic;
+            phi2_rising  : out std_logic;
+            phi2_falling : out std_logic
         );
     end component;
 
@@ -282,12 +286,13 @@ architecture structural of b8008 is
 
     component program_counter is
         port (
-            phi1      : in  std_logic;
-            reset     : in  std_logic;
-            control   : in  pc_control_t;
-            data_in   : in  address_t;
-            pc_out    : out address_t;
-            carry_out : out std_logic
+            clk         : in  std_logic;
+            phi1_rising : in  std_logic;
+            reset       : in  std_logic;
+            control     : in  pc_control_t;
+            data_in     : in  address_t;
+            pc_out      : out address_t;
+            carry_out   : out std_logic
         );
     end component;
 
@@ -549,6 +554,10 @@ architecture structural of b8008 is
     -- Clock signals
     signal phi1 : std_logic;
     signal phi2 : std_logic;
+    signal phi1_rising  : std_logic;
+    signal phi1_falling : std_logic;
+    signal phi2_rising  : std_logic;
+    signal phi2_falling : std_logic;
 
     -- Internal data bus - now a MUX instead of tri-state for synthesis compatibility
     -- Each module has separate output and output-enable signals
@@ -858,11 +867,15 @@ begin
 
     u_phase_clocks : phase_clocks
         port map (
-            clk_in => clk_in,
-            reset  => reset,
-            phi1   => phi1,
-            phi2   => phi2,
-            sync   => sync
+            clk_in       => clk_in,
+            reset        => reset,
+            phi1         => phi1,
+            phi2         => phi2,
+            sync         => sync,
+            phi1_rising  => phi1_rising,
+            phi1_falling => phi1_falling,
+            phi2_rising  => phi2_rising,
+            phi2_falling => phi2_falling
         );
 
     u_state_timing : state_timing_generator
@@ -1034,12 +1047,13 @@ begin
 
     u_program_counter : program_counter
         port map (
-            phi1      => phi1,
-            reset     => reset,
-            control   => pc_control,
-            data_in   => pc_data_in,
-            pc_out    => pc_addr,
-            carry_out => pc_carry
+            clk         => clk_in,
+            phi1_rising => phi1_rising,
+            reset       => reset,
+            control     => pc_control,
+            data_in     => pc_data_in,
+            pc_out      => pc_addr,
+            carry_out   => pc_carry
         );
 
     u_ahl_pointer : ahl_pointer

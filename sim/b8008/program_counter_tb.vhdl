@@ -20,21 +20,23 @@ architecture test of program_counter_tb is
 
     component program_counter is
         port (
-            phi1      : in  std_logic;
-            reset     : in  std_logic;
-            control   : in  pc_control_t;
-            data_in   : in  address_t;
-            pc_out    : out address_t;
-            carry_out : out std_logic
+            clk         : in  std_logic;
+            phi1_rising : in  std_logic;
+            reset       : in  std_logic;
+            control     : in  pc_control_t;
+            data_in     : in  address_t;
+            pc_out      : out address_t;
+            carry_out   : out std_logic
         );
     end component;
 
-    signal phi1      : std_logic := '0';
-    signal reset     : std_logic := '0';
-    signal control   : pc_control_t := PC_HOLD;
-    signal data_in   : address_t := (others => '0');
-    signal pc_out    : address_t;
-    signal carry_out : std_logic;
+    signal clk         : std_logic := '0';
+    signal phi1_rising : std_logic := '1';  -- always-enable: every clk rise = one phi1 edge
+    signal reset       : std_logic := '0';
+    signal control     : pc_control_t := PC_HOLD;
+    signal data_in     : address_t := (others => '0');
+    signal pc_out      : address_t;
+    signal carry_out   : std_logic;
 
     constant STROBE_TIME : time := 10 ns;  -- Duration of control strobe pulse
 
@@ -61,21 +63,23 @@ begin
     -- Unit under test
     uut : program_counter
         port map (
-            phi1      => phi1,
-            reset     => reset,
-            control   => control,
-            data_in   => data_in,
-            pc_out    => pc_out,
-            carry_out => carry_out
+            clk         => clk,
+            phi1_rising => phi1_rising,
+            reset       => reset,
+            control     => control,
+            data_in     => data_in,
+            pc_out      => pc_out,
+            carry_out   => carry_out
         );
 
-    -- Clock generator: phi1 period equals STROBE_TIME so exactly one rising
-    -- edge falls inside each control-strobe window.
-    phi1_proc : process
+    -- Master-clock generator. phi1_rising is held '1' so every clk rising
+    -- edge triggers a PC update -- equivalent to the old rising_edge(phi1)
+    -- behavior when phi1 ticks at STROBE_TIME period.
+    clk_proc : process
     begin
-        phi1 <= '0';
+        clk <= '0';
         wait for STROBE_TIME / 2;
-        phi1 <= '1';
+        clk <= '1';
         wait for STROBE_TIME / 2;
     end process;
 

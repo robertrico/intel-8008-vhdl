@@ -10,9 +10,9 @@
 -- - Holds when hold control is high or all controls low
 -- - NO conditional logic, NO knowledge of instructions or interrupts
 --
--- SYNTHESIS NOTE: Uses synchronous design with phi1 clock.
--- The output is the NEXT PC value when an operation is requested,
--- allowing the address to be correct on the same clock edge.
+-- SYNTHESIS NOTE: Clocked by the master clk; updates only on phi1_rising
+-- pulse so every flop in the CPU shares one clock tree. Semantically
+-- equivalent to a rising_edge(phi1) trigger, one clk cycle later.
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -24,8 +24,9 @@ use work.b8008_types.all;
 
 entity program_counter is
     port (
-        -- Clock (phi1 from clock generator)
-        phi1      : in  std_logic;
+        -- Master clock + phi1 rising-edge pulse (one clk cycle wide)
+        clk         : in  std_logic;
+        phi1_rising : in  std_logic;
 
         -- Reset
         reset     : in  std_logic;
@@ -93,34 +94,38 @@ begin
 
     carry_out <= next_carry when control.increment_lower = '1' else carry_flag;
 
-    -- Synchronous: update the register on phi1
-    process(phi1, reset)
+    -- Synchronous: update on the master clock, but only act on a phi1 rising
+    -- edge (gated by phi1_rising pulse). Equivalent to the former
+    -- rising_edge(phi1) trigger, now single-clock-domain friendly.
+    process(clk, reset)
     begin
         if reset = '1' then
             pc_reg <= (others => '0');
             carry_flag <= '0';
-        elsif rising_edge(phi1) then
-            -- Update register based on active operation
-            if control.load = '1' then
-                pc_reg <= data_in;
-                carry_flag <= '0';
-                report "PC: Loading 0x" & to_hstring(data_in);
-            elsif control.increment_upper = '1' then
-                pc_reg <= pc_incremented_upper;
-                carry_flag <= '0';
-                report "PC: Upper byte increment (carry), full PC = 0x" & to_hstring(pc_incremented_upper);
-            elsif control.increment_lower = '1' then
-                pc_reg <= pc_incremented_lower;
-                if unsigned(pc_reg(7 downto 0)) = x"FF" then
-                    carry_flag <= '1';
-                    report "PC: Lower byte increment 0x" & to_hstring(unsigned(pc_reg(7 downto 0))) & " -> 0x00 (CARRY)";
-                else
+        elsif rising_edge(clk) then
+            if phi1_rising = '1' then
+                -- Update register based on active operation
+                if control.load = '1' then
+                    pc_reg <= data_in;
                     carry_flag <= '0';
+                    report "PC: Loading 0x" & to_hstring(data_in);
+                elsif control.increment_upper = '1' then
+                    pc_reg <= pc_incremented_upper;
+                    carry_flag <= '0';
+                    report "PC: Upper byte increment (carry), full PC = 0x" & to_hstring(pc_incremented_upper);
+                elsif control.increment_lower = '1' then
+                    pc_reg <= pc_incremented_lower;
+                    if unsigned(pc_reg(7 downto 0)) = x"FF" then
+                        carry_flag <= '1';
+                        report "PC: Lower byte increment 0x" & to_hstring(unsigned(pc_reg(7 downto 0))) & " -> 0x00 (CARRY)";
+                    else
+                        carry_flag <= '0';
+                    end if;
+                    report "PC: Lower byte = 0x" & to_hstring(unsigned(pc_incremented_lower(7 downto 0))) &
+                           ", full PC = 0x" & to_hstring(pc_incremented_lower);
                 end if;
-                report "PC: Lower byte = 0x" & to_hstring(unsigned(pc_incremented_lower(7 downto 0))) &
-                       ", full PC = 0x" & to_hstring(pc_incremented_lower);
+                -- When no operation active, pc_reg holds its value
             end if;
-            -- When no operation active, pc_reg holds its value (implicit latch behavior)
         end if;
     end process;
 
