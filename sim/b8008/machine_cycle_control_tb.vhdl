@@ -19,6 +19,10 @@ architecture test of machine_cycle_control_tb is
 
     component machine_cycle_control is
         port (
+            -- Clock and reset
+            phi1  : in std_logic;
+            reset : in std_logic;
+
             -- State inputs from State Timing Generator
             state_t1  : in std_logic;
             state_t2  : in std_logic;
@@ -45,9 +49,16 @@ architecture test of machine_cycle_control_tb is
             cycle_type : out std_logic_vector(1 downto 0);  -- D6, D7 (only valid during T2)
 
             -- Cycle tracking (for observation/debug)
-            current_cycle : out integer range 0 to 3  -- Which cycle of instruction (1, 2, or 3)
+            current_cycle : out integer range 0 to 3;  -- Which cycle of instruction (1, 2, or 3)
+
+            -- Next cycle prediction
+            next_cycle : out integer range 0 to 3
         );
     end component;
+
+    -- Clock / reset
+    signal phi1  : std_logic := '0';
+    signal reset : std_logic := '0';
 
     -- Inputs
     signal state_t1  : std_logic := '0';
@@ -71,6 +82,7 @@ architecture test of machine_cycle_control_tb is
     signal instr_is_hlt_flag : std_logic;
     signal cycle_type        : std_logic_vector(1 downto 0);
     signal current_cycle     : integer range 0 to 3;
+    signal next_cycle        : integer range 0 to 3;
 
     -- Test control
     signal done : boolean := false;
@@ -103,6 +115,8 @@ begin
 
     uut : machine_cycle_control
         port map (
+            phi1                  => phi1,
+            reset                 => reset,
             state_t1              => state_t1,
             state_t2              => state_t2,
             state_t3              => state_t3,
@@ -120,8 +134,21 @@ begin
             advance_state         => advance_state,
             instr_is_hlt_flag     => instr_is_hlt_flag,
             cycle_type            => cycle_type,
-            current_cycle         => current_cycle
+            current_cycle         => current_cycle,
+            next_cycle            => next_cycle
         );
+
+    -- phi1 clock generator
+    phi1_proc : process
+    begin
+        while not done loop
+            phi1 <= '0';
+            wait for 5 ns;
+            phi1 <= '1';
+            wait for 5 ns;
+        end loop;
+        wait;
+    end process;
 
     -- Test stimulus
     process
@@ -190,11 +217,15 @@ begin
 
         -- Reset for new instruction
         wait for 50 ns;
-        instr_needs_immediate <= '1';
+        -- At T1 of cycle 1 the decoder flags still reflect the previous
+        -- instruction (none / no extra cycles). Flags for THIS instruction
+        -- are raised after T1 so cycle_count stays at 0 during cycle 1.
+        instr_needs_immediate <= '0';
         instr_needs_address <= '0';
 
         -- Cycle 1: PCI (fetch instruction)
         simulate_state(state_t1);
+        instr_needs_immediate <= '1';
         simulate_state(state_t2);
         if cycle_type /= "00" then
             report "  ERROR: Cycle 1 T2 should be PCI (00)" severity error;
@@ -242,11 +273,14 @@ begin
         report "  Should: Cycle 1 (PCI), Cycle 2 (PCR), Cycle 3 (PCR)";
 
         wait for 50 ns;
+        -- Start fresh: decoder flags represent the PREVIOUS instruction during
+        -- cycle 1 T1. Raise after T1 to reflect the current instruction.
         instr_needs_immediate <= '0';
-        instr_needs_address <= '1';
+        instr_needs_address <= '0';
 
         -- Cycle 1: PCI
         simulate_state(state_t1);
+        instr_needs_address <= '1';
         simulate_state(state_t2);
         if cycle_type /= "00" then
             report "  ERROR: Cycle 1 should be PCI" severity error;

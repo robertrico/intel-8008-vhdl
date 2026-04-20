@@ -20,6 +20,8 @@ architecture test of program_counter_tb is
 
     component program_counter is
         port (
+            phi1      : in  std_logic;
+            reset     : in  std_logic;
             control   : in  pc_control_t;
             data_in   : in  address_t;
             pc_out    : out address_t;
@@ -27,6 +29,8 @@ architecture test of program_counter_tb is
         );
     end component;
 
+    signal phi1      : std_logic := '0';
+    signal reset     : std_logic := '0';
     signal control   : pc_control_t := PC_HOLD;
     signal data_in   : address_t := (others => '0');
     signal pc_out    : address_t;
@@ -57,11 +61,23 @@ begin
     -- Unit under test
     uut : program_counter
         port map (
+            phi1      => phi1,
+            reset     => reset,
             control   => control,
             data_in   => data_in,
             pc_out    => pc_out,
             carry_out => carry_out
         );
+
+    -- Clock generator: phi1 period equals STROBE_TIME so exactly one rising
+    -- edge falls inside each control-strobe window.
+    phi1_proc : process
+    begin
+        phi1 <= '0';
+        wait for STROBE_TIME / 2;
+        phi1 <= '1';
+        wait for STROBE_TIME / 2;
+    end process;
 
     -- Test stimulus
     process
@@ -274,6 +290,8 @@ begin
         wait for STROBE_TIME;
 
         control <= PC_INCREMENT_LOWER;
+        wait for STROBE_TIME;
+        control <= PC_HOLD;
         wait for STROBE_TIME;
 
         if pc_out /= to_unsigned(102, 14) then

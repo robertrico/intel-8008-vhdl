@@ -20,40 +20,49 @@ architecture test of alu_tb is
     -- Component declaration
     component alu is
         port (
-            reg_a_in        : in std_logic_vector(7 downto 0);
-            reg_b_in        : in std_logic_vector(7 downto 0);
-            opcode          : in std_logic_vector(2 downto 0);
-            carry_in        : in std_logic;
-            carry_lookahead : in std_logic_vector(7 downto 0);
-            enable          : in std_logic;
-            output_result   : in std_logic;
-            internal_bus    : inout std_logic_vector(7 downto 0);
-            result          : out std_logic_vector(8 downto 0);
-            flag_carry      : out std_logic;
-            flag_zero       : out std_logic;
-            flag_sign       : out std_logic;
-            flag_parity     : out std_logic
+            phi2             : in  std_logic;
+            accumulator_in   : in  std_logic_vector(7 downto 0);
+            reg_b_in         : in  std_logic_vector(7 downto 0);
+            opcode           : in  std_logic_vector(2 downto 0);
+            is_inr_dcr       : in  std_logic;
+            is_rotate        : in  std_logic;
+            carry_in         : in  std_logic;
+            enable           : in  std_logic;
+            output_result    : in  std_logic;
+            internal_bus_out : out std_logic_vector(7 downto 0);
+            internal_bus_oe  : out std_logic;
+            result           : out std_logic_vector(8 downto 0);
+            flag_carry       : out std_logic;
+            flag_zero        : out std_logic;
+            flag_sign        : out std_logic;
+            flag_parity      : out std_logic
         );
     end component;
 
+    -- Clock
+    signal phi2 : std_logic := '0';
+    constant phi2_period : time := 20 ns;
+
     -- Inputs
-    signal reg_a_in        : std_logic_vector(7 downto 0) := (others => '0');
+    signal accumulator_in  : std_logic_vector(7 downto 0) := (others => '0');
     signal reg_b_in        : std_logic_vector(7 downto 0) := (others => '0');
     signal opcode          : std_logic_vector(2 downto 0) := (others => '0');
+    signal is_inr_dcr      : std_logic := '0';
+    signal is_rotate       : std_logic := '0';
     signal carry_in        : std_logic := '0';
-    signal carry_lookahead : std_logic_vector(7 downto 0) := (others => '0');
     signal enable          : std_logic := '0';
     signal output_result   : std_logic := '0';
 
-    -- Internal bus
-    signal internal_bus : std_logic_vector(7 downto 0);
-
     -- Outputs
+    signal internal_bus_out : std_logic_vector(7 downto 0);
+    signal internal_bus_oe  : std_logic;
     signal result      : std_logic_vector(8 downto 0);
     signal flag_carry  : std_logic;
     signal flag_zero   : std_logic;
     signal flag_sign   : std_logic;
     signal flag_parity : std_logic;
+
+    signal done : boolean := false;
 
     -- Operation constants
     constant OP_ADD : std_logic_vector(2 downto 0) := "000";
@@ -69,41 +78,65 @@ begin
 
     uut : alu
         port map (
-            reg_a_in        => reg_a_in,
-            reg_b_in        => reg_b_in,
-            opcode          => opcode,
-            carry_in        => carry_in,
-            carry_lookahead => carry_lookahead,
-            enable          => enable,
-            output_result   => output_result,
-            internal_bus    => internal_bus,
-            result          => result,
-            flag_carry      => flag_carry,
-            flag_zero       => flag_zero,
-            flag_sign       => flag_sign,
-            flag_parity     => flag_parity
+            phi2             => phi2,
+            accumulator_in   => accumulator_in,
+            reg_b_in         => reg_b_in,
+            opcode           => opcode,
+            is_inr_dcr       => is_inr_dcr,
+            is_rotate        => is_rotate,
+            carry_in         => carry_in,
+            enable           => enable,
+            output_result    => output_result,
+            internal_bus_out => internal_bus_out,
+            internal_bus_oe  => internal_bus_oe,
+            result           => result,
+            flag_carry       => flag_carry,
+            flag_zero        => flag_zero,
+            flag_sign        => flag_sign,
+            flag_parity      => flag_parity
         );
+
+    -- Clock generator
+    phi2_proc : process
+    begin
+        while not done loop
+            phi2 <= '0';
+            wait for phi2_period / 2;
+            phi2 <= '1';
+            wait for phi2_period / 2;
+        end loop;
+        wait;
+    end process;
 
     -- Test stimulus
     test_process : process
         variable errors : integer := 0;
+
+        -- Pulse enable 0->1 to latch ALU result, then leave high so outputs
+        -- reflect the latched value for assertions.
+        procedure strobe_enable is
+        begin
+            enable <= '0';
+            wait for phi2_period * 2;
+            enable <= '1';
+            wait for phi2_period * 2;
+        end procedure;
     begin
         report "========================================";
         report "ALU Test";
         report "========================================";
 
         wait for 100 ns;
-        enable <= '1';
 
         -- Test 1: ADD operation
         report "";
         report "Test 1: ADD 0x42 + 0x10";
 
-        reg_a_in <= x"42";  -- 66
+        accumulator_in <= x"42";  -- 66
         reg_b_in <= x"10";  -- 16
         opcode <= OP_ADD;
         carry_in <= '0';
-        wait for 50 ns;
+        strobe_enable;
 
         if result /= "0" & x"52" then  -- 82
             report "  ERROR: ADD result should be 0x52, got 0x" & to_hstring(result(7 downto 0)) severity error;
@@ -121,10 +154,10 @@ begin
         report "";
         report "Test 2: ADD 0xFF + 0x02 (overflow)";
 
-        reg_a_in <= x"FF";
+        accumulator_in <= x"FF";
         reg_b_in <= x"02";
         opcode <= OP_ADD;
-        wait for 50 ns;
+        strobe_enable;
 
         if flag_carry /= '1' then
             report "  ERROR: Carry flag should be set" severity error;
@@ -137,11 +170,11 @@ begin
         report "";
         report "Test 3: ADC 0x10 + 0x20 with carry=1";
 
-        reg_a_in <= x"10";
+        accumulator_in <= x"10";
         reg_b_in <= x"20";
         opcode <= OP_ADC;
         carry_in <= '1';
-        wait for 50 ns;
+        strobe_enable;
 
         if result /= "0" & x"31" then  -- 16 + 32 + 1 = 49
             report "  ERROR: ADC result should be 0x31, got 0x" & to_hstring(result(7 downto 0)) severity error;
@@ -154,11 +187,11 @@ begin
         report "";
         report "Test 4: SUB 0x50 - 0x30";
 
-        reg_a_in <= x"50";  -- 80
+        accumulator_in <= x"50";  -- 80
         reg_b_in <= x"30";  -- 48
         opcode <= OP_SUB;
         carry_in <= '0';
-        wait for 50 ns;
+        strobe_enable;
 
         if result /= "0" & x"20" then  -- 32
             report "  ERROR: SUB result should be 0x20, got 0x" & to_hstring(result(7 downto 0)) severity error;
@@ -171,10 +204,10 @@ begin
         report "";
         report "Test 5: SUB 0x10 - 0x20 (underflow)";
 
-        reg_a_in <= x"10";
+        accumulator_in <= x"10";
         reg_b_in <= x"20";
         opcode <= OP_SUB;
-        wait for 50 ns;
+        strobe_enable;
 
         if flag_sign /= '1' then
             report "  ERROR: Sign flag should be set for negative result" severity error;
@@ -187,10 +220,10 @@ begin
         report "";
         report "Test 6: AND 0xFF & 0x0F";
 
-        reg_a_in <= x"FF";
+        accumulator_in <= x"FF";
         reg_b_in <= x"0F";
         opcode <= OP_AND;
-        wait for 50 ns;
+        strobe_enable;
 
         if result /= "0" & x"0F" then
             report "  ERROR: AND result should be 0x0F, got 0x" & to_hstring(result(7 downto 0)) severity error;
@@ -203,10 +236,10 @@ begin
         report "";
         report "Test 7: XOR 0xAA ^ 0x55";
 
-        reg_a_in <= x"AA";  -- 10101010
+        accumulator_in <= x"AA";  -- 10101010
         reg_b_in <= x"55";  -- 01010101
         opcode <= OP_XOR;
-        wait for 50 ns;
+        strobe_enable;
 
         if result /= "0" & x"FF" then  -- 11111111
             report "  ERROR: XOR result should be 0xFF, got 0x" & to_hstring(result(7 downto 0)) severity error;
@@ -219,10 +252,10 @@ begin
         report "";
         report "Test 8: OR 0xF0 | 0x0F";
 
-        reg_a_in <= x"F0";
+        accumulator_in <= x"F0";
         reg_b_in <= x"0F";
         opcode <= OP_OR;
-        wait for 50 ns;
+        strobe_enable;
 
         if result /= "0" & x"FF" then
             report "  ERROR: OR result should be 0xFF, got 0x" & to_hstring(result(7 downto 0)) severity error;
@@ -235,10 +268,10 @@ begin
         report "";
         report "Test 9: SUB 0x42 - 0x42 (zero result)";
 
-        reg_a_in <= x"42";
+        accumulator_in <= x"42";
         reg_b_in <= x"42";
         opcode <= OP_SUB;
-        wait for 50 ns;
+        strobe_enable;
 
         if flag_zero /= '1' then
             report "  ERROR: Zero flag should be set" severity error;
@@ -251,13 +284,14 @@ begin
         report "";
         report "Test 10: Parity flag (even number of 1's)";
 
-        reg_a_in <= x"00";
+        accumulator_in <= x"00";
         reg_b_in <= x"03";  -- 00000011 (two 1's = even)
         opcode <= OP_OR;
-        wait for 50 ns;
+        strobe_enable;
 
-        if flag_parity /= '0' then  -- Even parity = 0 in 8008
-            report "  ERROR: Parity flag should be 0 for even parity" severity error;
+        if flag_parity /= '1' then  -- Even parity sets P=1 in 8008
+            report "  ERROR: Parity flag should be 1 for even parity, got " &
+                   std_logic'image(flag_parity) severity error;
             errors := errors + 1;
         else
             report "  PASS: Parity flag correct for even parity";
@@ -267,10 +301,10 @@ begin
         report "";
         report "Test 11: CMP 0x50 - 0x30 (sets flags only)";
 
-        reg_a_in <= x"50";
+        accumulator_in <= x"50";
         reg_b_in <= x"30";
         opcode <= OP_CMP;
-        wait for 50 ns;
+        strobe_enable;
 
         -- CMP is like SUB, result is 0x20
         if result /= "0" & x"20" then
@@ -284,11 +318,11 @@ begin
         report "";
         report "Test 12: Enable = 0 (ALU disabled)";
 
-        reg_a_in <= x"FF";
+        accumulator_in <= x"FF";
         reg_b_in <= x"FF";
         opcode <= OP_ADD;
         enable <= '0';
-        wait for 50 ns;
+        wait for phi2_period * 2;
 
         if result /= "000000000" then
             report "  ERROR: Result should be 0 when disabled, got 0x" & to_hstring(result(7 downto 0)) severity error;
@@ -314,6 +348,7 @@ begin
         end if;
         report "========================================";
 
+        done <= true;
         wait;
     end process;
 

@@ -20,17 +20,17 @@ architecture test of temp_registers_tb is
     -- Component declaration
     component temp_registers is
         port (
-            phi2                : in std_logic;
-            load_reg_a          : in std_logic;
-            load_reg_b          : in std_logic;
-            output_reg_a        : in std_logic;
-            output_reg_b        : in std_logic;
-            instr_is_inr_dcr    : in std_logic;
-            instr_is_binary_alu : in std_logic;
-            reg_a_direct        : in std_logic_vector(7 downto 0);
-            internal_bus        : inout std_logic_vector(7 downto 0);
-            reg_a_out           : out std_logic_vector(7 downto 0);
-            reg_b_out           : out std_logic_vector(7 downto 0)
+            phi2             : in  std_logic;
+            reset            : in  std_logic;
+            load_reg_a       : in  std_logic;
+            load_reg_b       : in  std_logic;
+            output_reg_a     : in  std_logic;
+            output_reg_b     : in  std_logic;
+            internal_bus_in  : in  std_logic_vector(7 downto 0);
+            internal_bus_out : out std_logic_vector(7 downto 0);
+            internal_bus_oe  : out std_logic;
+            reg_a_out        : out std_logic_vector(7 downto 0);
+            reg_b_out        : out std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -39,17 +39,18 @@ architecture test of temp_registers_tb is
     constant phi2_period : time := 500 ns;
 
     -- Inputs
+    signal reset            : std_logic := '0';
     signal load_reg_a       : std_logic := '0';
     signal load_reg_b       : std_logic := '0';
     signal output_reg_a     : std_logic := '0';
     signal output_reg_b     : std_logic := '0';
-    signal instr_is_inr_dcr : std_logic := '0';
-    signal instr_is_binary_alu : std_logic := '0';
-    signal reg_a_direct     : std_logic_vector(7 downto 0) := (others => '0');
 
-    -- Bidirectional bus
-    signal internal_bus : std_logic_vector(7 downto 0) := (others => 'Z');
-    signal bus_driver   : std_logic_vector(7 downto 0) := (others => 'Z');
+    -- Separate input / output buses that mimic the old inout behaviour
+    signal internal_bus_in  : std_logic_vector(7 downto 0) := (others => '0');
+    signal internal_bus_out : std_logic_vector(7 downto 0);
+    signal internal_bus_oe  : std_logic;
+    signal internal_bus     : std_logic_vector(7 downto 0) := (others => 'Z');
+    signal bus_driver       : std_logic_vector(7 downto 0) := (others => 'Z');
     signal bus_drive_enable : std_logic := '0';
 
     -- Outputs
@@ -62,21 +63,28 @@ architecture test of temp_registers_tb is
 begin
 
     -- External bus driver (simulates other blocks driving the bus)
-    internal_bus <= bus_driver when bus_drive_enable = '1' else (others => 'Z');
+    -- Unified tri-state bus view: either the external stimulus or the UUT's
+    -- output drives the bus; otherwise it's high-impedance.
+    internal_bus <= bus_driver when bus_drive_enable = '1' else
+                    internal_bus_out when internal_bus_oe = '1' else
+                    (others => 'Z');
+
+    -- Drive the module's input bus with whatever is currently on the shared bus.
+    internal_bus_in <= bus_driver when bus_drive_enable = '1' else (others => '0');
 
     uut : temp_registers
         port map (
-            phi2                => phi2,
-            load_reg_a          => load_reg_a,
-            load_reg_b          => load_reg_b,
-            output_reg_a        => output_reg_a,
-            output_reg_b        => output_reg_b,
-            instr_is_inr_dcr    => instr_is_inr_dcr,
-            instr_is_binary_alu => instr_is_binary_alu,
-            reg_a_direct        => reg_a_direct,
-            internal_bus        => internal_bus,
-            reg_a_out           => reg_a_out,
-            reg_b_out           => reg_b_out
+            phi2             => phi2,
+            reset            => reset,
+            load_reg_a       => load_reg_a,
+            load_reg_b       => load_reg_b,
+            output_reg_a     => output_reg_a,
+            output_reg_b     => output_reg_b,
+            internal_bus_in  => internal_bus_in,
+            internal_bus_out => internal_bus_out,
+            internal_bus_oe  => internal_bus_oe,
+            reg_a_out        => reg_a_out,
+            reg_b_out        => reg_b_out
         );
 
     -- Clock generation

@@ -17,8 +17,8 @@
 ;   CP5:  After MVI M,0xFF - L=0xFF (can write 0xFF)
 ;   CP6:  Final            - success
 ;
-; Test data is stored at address 0x1000-0x100F (RAM space)
-; RAM is mapped at 0x1000-0x13FF
+; Test data is stored at address 0x2000-0x200F (RAM space)
+; RAM is mapped at 0x2000-0x23FF
 ; Expected final state:
 ;   A = 0x00 (success)
 ;   B = 0x04 (4 tests completed)
@@ -43,14 +43,14 @@ MAIN:
         MVI     B,00h           ; B = test counter (0)
 
         ;===========================================
-        ; TEST 1: MVI M - Write 0xAA to memory at 0x1000
+        ; TEST 1: MVI M - Write 0xAA to memory at 0x2000
         ;===========================================
-        MVI     H,10h
-        MVI     L,00h           ; H:L = 0x1000 (RAM space)
-        MVI     M,0AAh          ; Write 0xAA to memory[0x1000]
+        MVI     H,20h
+        MVI     L,00h           ; H:L = 0x2000 (RAM space)
+        MVI     M,0AAh          ; Write 0xAA to memory[0x2000]
 
         ; Read it back using MOV r,M
-        MOV     A,M             ; A = memory[0x1000]
+        MOV     A,M             ; A = memory[0x2000]
         ; CHECKPOINT 1: Verify MVI M wrote 0xAA
         MOV     L,A             ; Save A to L for checkpoint
         MVI     A,01h
@@ -64,12 +64,12 @@ MAIN:
         ;===========================================
         ; TEST 2: MVI M - Write 0x55 to different address
         ;===========================================
-        MVI     H,10h           ; Make sure H is set
-        MVI     L,01h           ; H:L = 0x1001
-        MVI     M,55h           ; Write 0x55 to memory[0x1001]
+        MVI     H,20h           ; Make sure H is set
+        MVI     L,01h           ; H:L = 0x2001
+        MVI     M,55h           ; Write 0x55 to memory[0x2001]
 
         ; Read it back
-        MOV     A,M             ; A = memory[0x1001]
+        MOV     A,M             ; A = memory[0x2001]
         ; CHECKPOINT 2: Verify MVI M wrote 0x55
         MOV     L,A             ; Save A to L for checkpoint
         MVI     A,02h
@@ -82,11 +82,11 @@ MAIN:
 
         ;===========================================
         ; TEST 3: MVI M - Verify first write wasn't corrupted
-        ; Go back and check that 0x1000 still has 0xAA
+        ; Go back and check that 0x2000 still has 0xAA
         ;===========================================
-        MVI     H,10h           ; Make sure H is set
-        MVI     L,00h           ; H:L = 0x1000
-        MOV     A,M             ; A = memory[0x1000]
+        MVI     H,20h           ; Make sure H is set
+        MVI     L,00h           ; H:L = 0x2000
+        MOV     A,M             ; A = memory[0x2000]
         ; CHECKPOINT 3: Verify first write still intact
         MOV     L,A             ; Save A to L for checkpoint
         MVI     A,03h
@@ -101,13 +101,13 @@ MAIN:
         ; TEST 4: MVI M - Write 0x00 to memory
         ; Test that 0x00 can be written (edge case)
         ;===========================================
-        MVI     H,10h           ; Make sure H is set
-        MVI     L,02h           ; H:L = 0x1002
-        MVI     M,00h           ; Write 0x00 to memory[0x1002]
+        MVI     H,20h           ; Make sure H is set
+        MVI     L,02h           ; H:L = 0x2002
+        MVI     M,00h           ; Write 0x00 to memory[0x2002]
 
         ; Read it back - need to be careful here
         ; If we use MOV A,M when memory has 0x00, A should be 0
-        MOV     A,M             ; A = memory[0x1002]
+        MOV     A,M             ; A = memory[0x2002]
         ; CHECKPOINT 4: Verify MVI M wrote 0x00
         MOV     L,A             ; Save A to L for checkpoint
         MVI     A,04h
@@ -118,10 +118,10 @@ MAIN:
         JNZ     FAIL
 
         ; Double-check by writing a different value and reading back
-        MVI     H,10h           ; Make sure H is set
-        MVI     L,02h           ; H:L = 0x1002
+        MVI     H,20h           ; Make sure H is set
+        MVI     L,02h           ; H:L = 0x2002
         MVI     M,0FFh          ; Write 0xFF to same location
-        MOV     A,M             ; A = memory[0x1002]
+        MOV     A,M             ; A = memory[0x2002]
         ; CHECKPOINT 5: Verify MVI M wrote 0xFF
         MOV     L,A             ; Save A to L for checkpoint
         MVI     A,05h

@@ -18,10 +18,14 @@ architecture test of io_buffer_tb is
 
     component io_buffer is
         port (
-            external_data : inout std_logic_vector(7 downto 0);
-            internal_bus  : inout std_logic_vector(7 downto 0);
-            enable        : in std_logic;
-            direction     : in std_logic
+            external_data_in  : in  std_logic_vector(7 downto 0);
+            external_data_out : out std_logic_vector(7 downto 0);
+            external_data_oe  : out std_logic;
+            internal_bus_in   : in  std_logic_vector(7 downto 0);
+            internal_bus_out  : out std_logic_vector(7 downto 0);
+            internal_bus_oe   : out std_logic;
+            enable            : in  std_logic;
+            direction         : in  std_logic
         );
     end component;
 
@@ -29,7 +33,15 @@ architecture test of io_buffer_tb is
     signal enable    : std_logic := '0';
     signal direction : std_logic := '0';
 
-    -- Bidirectional buses
+    -- Buffer in/out split ports
+    signal external_data_in  : std_logic_vector(7 downto 0) := (others => '0');
+    signal external_data_out : std_logic_vector(7 downto 0);
+    signal external_data_oe  : std_logic;
+    signal internal_bus_in   : std_logic_vector(7 downto 0) := (others => '0');
+    signal internal_bus_out  : std_logic_vector(7 downto 0);
+    signal internal_bus_oe   : std_logic;
+
+    -- Reconstructed tri-stated buses
     signal external_data : std_logic_vector(7 downto 0);
     signal internal_bus  : std_logic_vector(7 downto 0);
 
@@ -39,16 +51,27 @@ architecture test of io_buffer_tb is
 
 begin
 
-    -- Drive buses from testbench
-    external_data <= external_driver;
-    internal_bus  <= internal_driver;
+    -- Reconstruct tri-state buses:
+    -- External bus: TB driver OR io_buffer's output (when oe)
+    external_data <= external_data_out when external_data_oe = '1' else external_driver;
+
+    -- Internal bus: TB driver OR io_buffer's output (when oe)
+    internal_bus <= internal_bus_out when internal_bus_oe = '1' else internal_driver;
+
+    -- Feed the UUT's input ports with the current bus values
+    external_data_in <= external_data;
+    internal_bus_in  <= internal_bus;
 
     uut : io_buffer
         port map (
-            external_data => external_data,
-            internal_bus  => internal_bus,
-            enable        => enable,
-            direction     => direction
+            external_data_in  => external_data_in,
+            external_data_out => external_data_out,
+            external_data_oe  => external_data_oe,
+            internal_bus_in   => internal_bus_in,
+            internal_bus_out  => internal_bus_out,
+            internal_bus_oe   => internal_bus_oe,
+            enable            => enable,
+            direction         => direction
         );
 
     test_process : process

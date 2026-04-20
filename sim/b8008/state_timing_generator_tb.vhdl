@@ -21,6 +21,7 @@ architecture test of state_timing_generator_tb is
         port (
             phi1                  : in  std_logic;
             phi2                  : in  std_logic;
+            reset                 : in  std_logic;
             advance_state         : in  std_logic;
             interrupt_pending     : in  std_logic;
             ready                 : in  std_logic;
@@ -42,6 +43,7 @@ architecture test of state_timing_generator_tb is
 
     signal phi1                  : std_logic := '0';
     signal phi2                  : std_logic := '0';
+    signal reset                 : std_logic := '0';
     signal advance_state         : std_logic := '0';
     signal interrupt_pending     : std_logic := '0';
     signal ready                 : std_logic := '1';
@@ -72,6 +74,7 @@ begin
         port map (
             phi1                  => phi1,
             phi2                  => phi2,
+            reset                 => reset,
             advance_state         => advance_state,
             interrupt_pending     => interrupt_pending,
             ready                 => ready,

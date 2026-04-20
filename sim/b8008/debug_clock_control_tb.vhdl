@@ -41,11 +41,13 @@ architecture sim of debug_clock_control_tb is
     signal phi1_in : std_logic := '0';
     signal phi2_in : std_logic := '0';
     signal sync_in : std_logic := '0';
+    signal bootstrap_done : std_logic := '0';  -- don't trigger hardware break in this TB
     signal clk_out : std_logic;
     signal is_running : std_logic;
     signal next_is_phi1 : std_logic;
     signal next_is_phi2 : std_logic;
     signal triggered : std_logic;
+    signal reset_request : std_logic;
 
     -- Simulation control
     signal sim_done : boolean := false;
@@ -75,11 +77,13 @@ begin
             phi1_in         => phi1_in,
             phi2_in         => phi2_in,
             sync_in         => sync_in,
+            bootstrap_done  => bootstrap_done,
             clk_out         => clk_out,
             is_running      => is_running,
             next_is_phi1    => next_is_phi1,
             next_is_phi2    => next_is_phi2,
-            triggered       => triggered
+            triggered       => triggered,
+            reset_request   => reset_request
         );
 
     ---------------------------------------------------------------------------

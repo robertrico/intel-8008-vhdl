@@ -18,19 +18,21 @@ architecture test of instruction_register_tb is
 
     component instruction_register is
         port (
-            phi1         : in std_logic;
-            reset        : in std_logic;
-            internal_bus : inout std_logic_vector(7 downto 0);
-            load_ir      : in std_logic;
-            output_ir    : in std_logic;
-            ir_bit_7     : out std_logic;
-            ir_bit_6     : out std_logic;
-            ir_bit_5     : out std_logic;
-            ir_bit_4     : out std_logic;
-            ir_bit_3     : out std_logic;
-            ir_bit_2     : out std_logic;
-            ir_bit_1     : out std_logic;
-            ir_bit_0     : out std_logic
+            phi1             : in  std_logic;
+            reset            : in  std_logic;
+            internal_bus_in  : in  std_logic_vector(7 downto 0);
+            internal_bus_out : out std_logic_vector(7 downto 0);
+            internal_bus_oe  : out std_logic;
+            load_ir          : in  std_logic;
+            output_ir        : in  std_logic;
+            ir_bit_7         : out std_logic;
+            ir_bit_6         : out std_logic;
+            ir_bit_5         : out std_logic;
+            ir_bit_4         : out std_logic;
+            ir_bit_3         : out std_logic;
+            ir_bit_2         : out std_logic;
+            ir_bit_1         : out std_logic;
+            ir_bit_0         : out std_logic
         );
     end component;
 
@@ -43,8 +45,11 @@ architecture test of instruction_register_tb is
     signal load_ir   : std_logic := '0';
     signal output_ir : std_logic := '0';
 
-    -- Bidirectional bus
+    -- Bidirectional bus (reconstructed)
     signal internal_bus     : std_logic_vector(7 downto 0);
+    signal internal_bus_in  : std_logic_vector(7 downto 0) := (others => '0');
+    signal internal_bus_out : std_logic_vector(7 downto 0);
+    signal internal_bus_oe  : std_logic;
     signal bus_driver       : std_logic_vector(7 downto 0) := (others => 'Z');
     signal bus_drive_enable : std_logic := '0';
 
@@ -66,8 +71,13 @@ begin
     -- Clock generation
     phi1 <= not phi1 after phi1_period / 2;
 
-    -- Drive internal bus from testbench when needed (conditional to avoid bus conflicts)
-    internal_bus <= bus_driver when bus_drive_enable = '1' else (others => 'Z');
+    -- Reconstruct a tri-stated internal bus: TB drives it or the IR drives it.
+    internal_bus <= bus_driver when bus_drive_enable = '1' else
+                    internal_bus_out when internal_bus_oe = '1' else
+                    (others => 'Z');
+
+    -- Feed IR's input side with whatever is currently on the bus.
+    internal_bus_in <= bus_driver when bus_drive_enable = '1' else (others => '0');
 
     -- Reconstruct IR byte from individual bits
     ir_byte <= ir_bit_7 & ir_bit_6 & ir_bit_5 & ir_bit_4 &
@@ -75,19 +85,21 @@ begin
 
     uut : instruction_register
         port map (
-            phi1         => phi1,
-            reset        => reset,
-            internal_bus => internal_bus,
-            load_ir      => load_ir,
-            output_ir    => output_ir,
-            ir_bit_7     => ir_bit_7,
-            ir_bit_6     => ir_bit_6,
-            ir_bit_5     => ir_bit_5,
-            ir_bit_4     => ir_bit_4,
-            ir_bit_3     => ir_bit_3,
-            ir_bit_2     => ir_bit_2,
-            ir_bit_1     => ir_bit_1,
-            ir_bit_0     => ir_bit_0
+            phi1             => phi1,
+            reset            => reset,
+            internal_bus_in  => internal_bus_in,
+            internal_bus_out => internal_bus_out,
+            internal_bus_oe  => internal_bus_oe,
+            load_ir          => load_ir,
+            output_ir        => output_ir,
+            ir_bit_7         => ir_bit_7,
+            ir_bit_6         => ir_bit_6,
+            ir_bit_5         => ir_bit_5,
+            ir_bit_4         => ir_bit_4,
+            ir_bit_3         => ir_bit_3,
+            ir_bit_2         => ir_bit_2,
+            ir_bit_1         => ir_bit_1,
+            ir_bit_0         => ir_bit_0
         );
 
     test_process : process

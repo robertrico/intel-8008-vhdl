@@ -33,9 +33,14 @@ architecture test of register_alu_control_tb is
             instr_uses_temp_regs  : in std_logic;
             instr_needs_immediate : in std_logic;
             instr_writes_reg      : in std_logic;
+            instr_is_write        : in std_logic;
+            instr_is_io           : in std_logic;
 
             -- Machine cycle control input
             current_cycle : in integer range 0 to 3;
+
+            -- State half for timing
+            state_half : in std_logic;
 
             -- Interrupt input
             interrupt : in std_logic;
@@ -66,7 +71,10 @@ architecture test of register_alu_control_tb is
     signal instr_uses_temp_regs  : std_logic := '0';
     signal instr_needs_immediate : std_logic := '0';
     signal instr_writes_reg      : std_logic := '0';
+    signal instr_is_write        : std_logic := '0';
+    signal instr_is_io           : std_logic := '0';
     signal current_cycle : integer range 0 to 3 := 0;
+    signal state_half    : std_logic := '0';
     signal interrupt : std_logic := '0';
 
     -- Outputs
@@ -121,7 +129,10 @@ begin
             instr_uses_temp_regs  => instr_uses_temp_regs,
             instr_needs_immediate => instr_needs_immediate,
             instr_writes_reg      => instr_writes_reg,
+            instr_is_write        => instr_is_write,
+            instr_is_io           => instr_is_io,
             current_cycle         => current_cycle,
+            state_half            => state_half,
             interrupt             => interrupt,
             load_reg_a            => load_reg_a,
             load_reg_b            => load_reg_b,
@@ -175,39 +186,36 @@ begin
         set_state(status_s0, status_s1, status_s2, "T2 ");
         wait for phi2_period;
 
-        -- T3: For register ALU ops, no temp reg loading at T3 (that's for immediate ops)
+        -- T3 (cycle 1): opcode byte is always loaded into Reg.b during C1 T3
         set_state(status_s0, status_s1, status_s2, "T3 ");
         wait until phi2 = '1';  -- Wait for phi2 high
         wait for 10 ns;  -- Small delay for signals to settle
-        if load_reg_b = '1' then
-            report "  ERROR: load_reg_b should NOT be high at T3 for register ALU op" severity error;
+        if load_reg_b /= '1' then
+            report "  ERROR: load_reg_b should be high at C1 T3 (opcode to Reg.b)" severity error;
             errors := errors + 1;
         else
-            report "  PASS: load_reg_b not asserted at T3 (register ALU ops load at T4)";
+            report "  PASS: load_reg_b asserted at C1 T3 (opcode latch)";
         end if;
         wait until phi2 = '0';  -- Wait for phi2 to go low
         wait for phi2_period / 2;  -- Wait for next state
 
-        -- T4: Load SSS to Reg.b, load accumulator to Reg.a
+        -- T4: Load SSS to Reg.b (register ALU op / MOV pattern)
+        -- Note: Reg.a is not loaded here in current design (it is hardwired to ACC)
         set_state(status_s0, status_s1, status_s2, "T4 ");
         wait until phi2 = '1';
         wait for 10 ns;
-        if load_reg_a /= '1' then
-            report "  ERROR: load_reg_a should be high at T4" severity error;
-            errors := errors + 1;
-        end if;
         if load_reg_b /= '1' then
-            report "  ERROR: load_reg_b should be high at T4" severity error;
+            report "  ERROR: load_reg_b should be high at C1 T4 (SSS to Reg.b)" severity error;
             errors := errors + 1;
-        end if;
-        if load_reg_a = '1' and load_reg_b = '1' then
-            report "  PASS: Both load_reg_a and load_reg_b asserted at T4";
+        else
+            report "  PASS: load_reg_b asserted at C1 T4";
         end if;
         wait until phi2 = '0';
         wait for phi2_period / 2;
 
-        -- T5: Execute ALU operation
+        -- T5: Execute ALU operation (flags latch on second half only)
         set_state(status_s0, status_s1, status_s2, "T5 ");
+        state_half <= '1';
         wait until phi2 = '1';
         wait for 10 ns;
         if alu_enable /= '1' then
@@ -217,11 +225,12 @@ begin
             report "  PASS: alu_enable asserted at T5";
         end if;
         if update_flags /= '1' then
-            report "  ERROR: update_flags should be high at T5" severity error;
+            report "  ERROR: update_flags should be high at T5 (state_half=1)" severity error;
             errors := errors + 1;
         else
-            report "  PASS: update_flags asserted at T5";
+            report "  PASS: update_flags asserted at T5 second half";
         end if;
+        state_half <= '0';
         wait until phi2 = '0';
         wait for phi2_period / 2;
 
@@ -237,15 +246,15 @@ begin
         current_cycle <= 0;
         wait for 100 ns;
 
-        -- Cycle 1, T3: Fetch instruction (no temp reg loading for immediate ops at C1)
+        -- Cycle 1, T3: opcode byte is always loaded into Reg.b during C1 T3
         set_state(status_s0, status_s1, status_s2, "T3 ");
         wait until phi2 = '1';
         wait for 10 ns;
-        if load_reg_b = '1' then
-            report "  ERROR: load_reg_b should NOT be high at C1 T3 for immediate ALU op" severity error;
+        if load_reg_b /= '1' then
+            report "  ERROR: load_reg_b should be high at C1 T3 (opcode to Reg.b)" severity error;
             errors := errors + 1;
         else
-            report "  PASS: load_reg_b not asserted at C1 T3";
+            report "  PASS: load_reg_b asserted at C1 T3 (opcode latch)";
         end if;
         wait until phi2 = '0';
         wait for phi2_period / 2;
@@ -274,15 +283,16 @@ begin
         wait until phi2 = '0';
         wait for phi2_period / 2;
 
-        -- Cycle 2, T4: Load accumulator to Reg.a
+        -- Cycle 2, T4: Reg.a is NOT loaded here - it is hardwired to ACC.
+        -- load_reg_a is only asserted at C3 T3 for address-high (JMP/CALL).
         set_state(status_s0, status_s1, status_s2, "T4 ");
         wait until phi2 = '1';
         wait for 10 ns;
-        if load_reg_a /= '1' then
-            report "  ERROR: load_reg_a should be high at C2 T4" severity error;
+        if load_reg_a = '1' then
+            report "  ERROR: load_reg_a should NOT be high at C2 T4 (Reg.a is only C3 T3)" severity error;
             errors := errors + 1;
         else
-            report "  PASS: load_reg_a asserted at C2 T4";
+            report "  PASS: load_reg_a not asserted at C2 T4 (ACC hardwired)";
         end if;
         wait until phi2 = '0';
         wait for phi2_period / 2;

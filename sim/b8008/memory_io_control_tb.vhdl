@@ -33,6 +33,7 @@ architecture test of memory_io_control_tb is
             status_s2             : in std_logic;
             cycle_type            : in std_logic_vector(1 downto 0);
             current_cycle         : in integer range 0 to 3;
+            next_cycle            : in integer range 0 to 3;
             advance_state         : in std_logic;
             instr_is_hlt_flag     : in std_logic;
             instr_needs_immediate : in std_logic;
@@ -80,6 +81,7 @@ architecture test of memory_io_control_tb is
             pc_increment_lower    : out std_logic;
             pc_increment_upper    : out std_logic;
             pc_carry_in           : in  std_logic;
+            pc_lower_byte         : in  std_logic_vector(7 downto 0);
             pc_load               : out std_logic;
             pc_hold               : out std_logic
         );
@@ -104,6 +106,7 @@ architecture test of memory_io_control_tb is
     signal status_s2             : std_logic := '0';
     signal cycle_type            : std_logic_vector(1 downto 0) := "00";
     signal current_cycle         : integer range 0 to 3 := 0;
+    signal next_cycle            : integer range 0 to 3 := 0;
     signal advance_state         : std_logic := '0';
     signal instr_is_hlt_flag     : std_logic := '0';
     signal instr_needs_immediate : std_logic := '0';
@@ -124,6 +127,7 @@ architecture test of memory_io_control_tb is
     signal interrupt_pending     : std_logic := '0';
     signal ready_status          : std_logic := '1';
     signal pc_carry_in           : std_logic := '0';
+    signal pc_lower_byte         : std_logic_vector(7 downto 0) := (others => '0');
 
     -- Outputs
     signal ir_load             : std_logic;
@@ -178,6 +182,7 @@ begin
             status_s2             => status_s2,
             cycle_type            => cycle_type,
             current_cycle         => current_cycle,
+            next_cycle            => next_cycle,
             advance_state         => advance_state,
             instr_is_hlt_flag     => instr_is_hlt_flag,
             instr_needs_immediate => instr_needs_immediate,
@@ -225,6 +230,7 @@ begin
             pc_increment_lower    => pc_increment_lower,
             pc_increment_upper    => pc_increment_upper,
             pc_carry_in           => pc_carry_in,
+            pc_lower_byte         => pc_lower_byte,
             pc_load               => pc_load,
             pc_hold               => pc_hold
         );
@@ -329,9 +335,11 @@ begin
         report "";
         report "Test 5: PCC cycle T3 state (I/O write - OUT)";
 
-        cycle_type     <= "10";  -- PCC
-        instr_is_write <= '1';   -- OUT (write)
-        state_t3       <= '1';
+        cycle_type       <= "10";  -- PCC
+        instr_is_write   <= '1';   -- OUT (write)
+        instr_reads_reg  <= '1';   -- OUT reads accumulator to port
+        instr_writes_reg <= '0';
+        state_t3         <= '1';
         wait for 50 ns;
 
         if io_buffer_enable /= '1' or io_buffer_direction /= '1' then
@@ -341,7 +349,8 @@ begin
             report "  PASS: OUT enables I/O write";
         end if;
 
-        state_t3 <= '0';
+        state_t3         <= '0';
+        instr_reads_reg  <= '0';
         wait for 50 ns;
 
         -- Test 6: T1 state (address output)
@@ -369,14 +378,17 @@ begin
         report "TESTING MULTI-CYCLE INSTRUCTION HANDLING";
         report "========================================";
 
-        -- Test 7: T4 cycle 2 - Register write (LrI instruction)
+        -- Test 7: T5 cycle 2 - Register write (LrI instruction)
+        -- Per updated module: LrI/LrM/INP writes at T5 cycle 2, not T4
         report "";
-        report "Test 7: T4 cycle 2 - Write register after immediate load";
+        report "Test 7: T5 cycle 2 - Write register after immediate load";
 
-        current_cycle      <= 1;
-        instr_writes_reg   <= '1';
-        instr_ddd_field    <= "011";  -- D register
-        state_t4           <= '1';
+        current_cycle         <= 1;
+        instr_writes_reg      <= '1';
+        instr_needs_immediate <= '1';
+        instr_is_alu          <= '0';
+        instr_ddd_field       <= "011";  -- D register
+        state_t5              <= '1';
         wait for 50 ns;
 
         if scratchpad_write /= '1' then
@@ -388,20 +400,24 @@ begin
             report "  ERROR: Should select register D (011)" severity error;
             errors := errors + 1;
         else
-            report "  PASS: Register write in T4 correct";
+            report "  PASS: Register write in T5 correct";
         end if;
 
-        state_t4 <= '0';
-        instr_writes_reg <= '0';
+        state_t5              <= '0';
+        instr_writes_reg      <= '0';
+        instr_needs_immediate <= '0';
         wait for 50 ns;
 
         -- Test 8: T4 cycle 3 - Stack push (CALL instruction)
+        -- Module pushes only in second half of T4 (state_half=1) to wait for
+        -- potential PC upper-byte increment.
         report "";
-        report "Test 8: T4 cycle 3 - Stack push for CALL";
+        report "Test 8: T4 cycle 3 (state_half=1) - Stack push for CALL";
 
         current_cycle <= 2;
         instr_is_call <= '1';
         state_t4      <= '1';
+        state_half    <= '1';
         wait for 50 ns;
 
         if stack_push /= '1' then
@@ -411,7 +427,8 @@ begin
             report "  PASS: CALL stack push in T4 correct";
         end if;
 
-        state_t4 <= '0';
+        state_t4      <= '0';
+        state_half    <= '0';
         instr_is_call <= '0';
         wait for 50 ns;
 
@@ -545,9 +562,11 @@ begin
         report "";
         report "Test 13: PCC OUT - I/O write from A register";
 
-        cycle_type     <= "10";  -- PCC
-        instr_is_write <= '1';
-        state_t3       <= '1';
+        cycle_type       <= "10";  -- PCC
+        instr_is_write   <= '1';
+        instr_reads_reg  <= '1';   -- OUT reads the accumulator
+        instr_writes_reg <= '0';
+        state_t3         <= '1';
         wait for 50 ns;
 
         if io_buffer_enable /= '1' or io_buffer_direction /= '1' then
@@ -567,8 +586,9 @@ begin
             report "  PASS: OUT I/O write from A correct";
         end if;
 
-        state_t3 <= '0';
-        instr_is_write <= '0';
+        state_t3        <= '0';
+        instr_is_write  <= '0';
+        instr_reads_reg <= '0';
         wait for 50 ns;
 
         -- Summary

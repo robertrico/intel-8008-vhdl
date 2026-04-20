@@ -34,7 +34,7 @@
 ;   C: 0xC0 (RRC result: 0x81 rotated right = 0xC0, carry=1)
 ;   D: 0x03 (RAL result: 0x81 rotated left with carry=1 = 0x03)
 ;   E: 0xC0 (RAR result: 0x81 rotated right with carry=1 = 0xC0)
-;   H: 0x10 (RAM pointer high)
+;   H: 0x20 (RAM pointer high)
 ;   L: 0x05 (test counter)
 
         cpu     8008new
@@ -190,10 +190,10 @@ TEST8_PASS:
         ; TEST 11: ADD M (Add Memory)
         ; Set up H:L to point to test data, add from memory
         ;===========================================
-        MVI     H,10h               ; H = 0x10 (RAM base)
+        MVI     H,20h               ; H = 0x20 (RAM base)
         MVI     L,00h               ; L = 0x00
         MVI     A,05h               ; A = 5
-        MOV     M,A                 ; Store 5 at RAM[0x1000]
+        MOV     M,A                 ; Store 5 at RAM[0x2000]
 
         MVI     A,03h               ; A = 3
         ADD     M                   ; A = A + RAM[H:L] = 3 + 5 = 8
@@ -210,10 +210,10 @@ TEST8_PASS:
         ; TEST 12: SUB M (Subtract Memory)
         ; Need to set up H:L and memory again
         ;===========================================
-        MVI     H,10h               ; H = 0x10 (RAM base)
+        MVI     H,20h               ; H = 0x20 (RAM base)
         MVI     L,00h               ; L = 0x00
         MVI     A,05h               ; A = 5
-        MOV     M,A                 ; Store 5 at RAM[0x1000]
+        MOV     M,A                 ; Store 5 at RAM[0x2000]
 
         MVI     A,0Ah               ; A = 10
         SUB     M                   ; A = A - RAM[H:L] = 10 - 5 = 5

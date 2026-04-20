@@ -37,7 +37,7 @@
 #   C: 0xC0 (RRC result)
 #   D: 0x03 (RAL result)
 #   E: 0xC0 (RAR result)
-#   H: 0x10 (RAM pointer high)
+#   H: 0x20 (RAM pointer high)
 #   L: 0x05 (test marker)
 # ============================================================================
 
@@ -131,7 +131,7 @@ assert_final_state \
     "C=0xC0" \
     "D=0x03" \
     "E=0xC0" \
-    "H=0x10" \
+    "H=0x20" \
     "L=0x05"
 
 # Print summary and exit

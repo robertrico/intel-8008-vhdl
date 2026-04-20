@@ -86,7 +86,7 @@ assert_checkpoint 12 \
 
 # CP13: MOV M,H
 assert_checkpoint 13 \
-    "L=0x10"
+    "L=0x20"
 
 # CP14: MOV M,L
 assert_checkpoint 14 \

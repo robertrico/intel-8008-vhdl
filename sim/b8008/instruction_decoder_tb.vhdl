@@ -206,9 +206,26 @@ begin
         test_instruction("00010110", "MVI C,Imm (LrI)", 2, '0', '0', instruction_byte,
                         instr_needs_immediate, instr_needs_address, instr_is_io, instr_is_write, errors);
 
-        -- LMI (MVI M, Imm) - 3 cycles, write to memory
-        test_instruction("00111110", "MVI M,Imm (LMI)", 3, '0', '1', instruction_byte,
-                        instr_needs_immediate, instr_needs_address, instr_is_io, instr_is_write, errors);
+        -- LMI (MVI M, Imm) - 3 cycles, writes to memory, AND fetches immediate
+        -- Decoder sets both instr_needs_immediate='1' and instr_needs_address='1'
+        -- (the generic helper's cycles->flags mapping doesn't apply here).
+        instruction_byte <= "00111110";
+        wait for 10 ns;
+        if instr_needs_immediate /= '1' then
+            report "  ERROR: MVI M,Imm (LMI) - instr_needs_immediate should be '1', got " &
+                   std_logic'image(instr_needs_immediate) severity error;
+            errors := errors + 1;
+        end if;
+        if instr_needs_address /= '1' then
+            report "  ERROR: MVI M,Imm (LMI) - instr_needs_address should be '1', got " &
+                   std_logic'image(instr_needs_address) severity error;
+            errors := errors + 1;
+        end if;
+        if instr_is_write /= '1' then
+            report "  ERROR: MVI M,Imm (LMI) - instr_is_write should be '1', got " &
+                   std_logic'image(instr_is_write) severity error;
+            errors := errors + 1;
+        end if;
 
         -- INr, DCr - 1 cycle
         test_instruction("00000000", "INR A (INr)", 1, '0', '0', instruction_byte,

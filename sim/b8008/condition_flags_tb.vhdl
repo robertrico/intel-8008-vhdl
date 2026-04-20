@@ -20,23 +20,24 @@ architecture test of condition_flags_tb is
     -- Component declaration
     component condition_flags is
         port (
-            phi2           : in std_logic;
-            reset          : in std_logic;
-            flag_carry_in  : in std_logic;
-            flag_zero_in   : in std_logic;
-            flag_sign_in   : in std_logic;
-            flag_parity_in : in std_logic;
-            update_flags   : in std_logic;
-            condition_code : in std_logic_vector(1 downto 0);
-            test_true      : in std_logic;
-            eval_condition : in std_logic;
-            output_flags   : in std_logic;
-            internal_bus   : inout std_logic_vector(7 downto 0);
-            condition_met  : out std_logic;
-            flag_carry     : out std_logic;
-            flag_zero      : out std_logic;
-            flag_sign      : out std_logic;
-            flag_parity    : out std_logic
+            phi2             : in  std_logic;
+            reset            : in  std_logic;
+            flag_carry_in    : in  std_logic;
+            flag_zero_in     : in  std_logic;
+            flag_sign_in     : in  std_logic;
+            flag_parity_in   : in  std_logic;
+            update_flags     : in  std_logic;
+            condition_code   : in  std_logic_vector(1 downto 0);
+            test_true        : in  std_logic;
+            eval_condition   : in  std_logic;
+            output_flags     : in  std_logic;
+            internal_bus_out : out std_logic_vector(7 downto 0);
+            internal_bus_oe  : out std_logic;
+            condition_met    : out std_logic;
+            flag_carry       : out std_logic;
+            flag_zero        : out std_logic;
+            flag_sign        : out std_logic;
+            flag_parity      : out std_logic
         );
     end component;
 
@@ -56,8 +57,10 @@ architecture test of condition_flags_tb is
     signal eval_condition : std_logic := '0';
     signal output_flags   : std_logic := '0';
 
-    -- Internal bus
-    signal internal_bus : std_logic_vector(7 downto 0);
+    -- Internal bus (TB reconstructs a tri-stated bus for legacy checks)
+    signal internal_bus_out : std_logic_vector(7 downto 0);
+    signal internal_bus_oe  : std_logic;
+    signal internal_bus     : std_logic_vector(7 downto 0);
 
     -- Outputs
     signal condition_met : std_logic;
@@ -77,25 +80,29 @@ begin
     -- Clock generation
     phi2 <= not phi2 after phi2_period / 2;
 
+    -- Reconstructed tri-stated bus view for legacy assertions
+    internal_bus <= internal_bus_out when internal_bus_oe = '1' else (others => 'Z');
+
     uut : condition_flags
         port map (
-            phi2           => phi2,
-            reset          => reset,
-            flag_carry_in  => flag_carry_in,
-            flag_zero_in   => flag_zero_in,
-            flag_sign_in   => flag_sign_in,
-            flag_parity_in => flag_parity_in,
-            update_flags   => update_flags,
-            condition_code => condition_code,
-            test_true      => test_true,
-            eval_condition => eval_condition,
-            output_flags   => output_flags,
-            internal_bus   => internal_bus,
-            condition_met  => condition_met,
-            flag_carry     => flag_carry,
-            flag_zero      => flag_zero,
-            flag_sign      => flag_sign,
-            flag_parity    => flag_parity
+            phi2             => phi2,
+            reset            => reset,
+            flag_carry_in    => flag_carry_in,
+            flag_zero_in     => flag_zero_in,
+            flag_sign_in     => flag_sign_in,
+            flag_parity_in   => flag_parity_in,
+            update_flags     => update_flags,
+            condition_code   => condition_code,
+            test_true        => test_true,
+            eval_condition   => eval_condition,
+            output_flags     => output_flags,
+            internal_bus_out => internal_bus_out,
+            internal_bus_oe  => internal_bus_oe,
+            condition_met    => condition_met,
+            flag_carry       => flag_carry,
+            flag_zero        => flag_zero,
+            flag_sign        => flag_sign,
+            flag_parity      => flag_parity
         );
 
     -- Test stimulus

@@ -24,12 +24,12 @@
 ;   CP10: After MOV M,C - L=0xBB (readback)
 ;   CP11: After MOV M,D - L=0xCC (readback)
 ;   CP12: After MOV M,E - L=0xDD (readback)
-;   CP13: After MOV M,H - L=0x10 (readback, H=0x10)
+;   CP13: After MOV M,H - L=0x20 (readback, H=0x20)
 ;   CP14: After MOV M,L - L=0x0E (readback, L=0x0E)
 ;   CP15: Final        - A=0x00
 ;
-; RAM is mapped at 0x1000-0x13FF
-; Test uses RAM addresses 0x1000-0x100F
+; RAM is mapped at 0x2000-0x23FF
+; Test uses RAM addresses 0x2000-0x200F
 ;
 ; Expected final state:
 ;   A = 0x00 (success indicator)
@@ -58,23 +58,23 @@ MAIN:
         ; SETUP: Initialize test data in RAM
         ; Write known values to RAM for reading tests
         ;===========================================
-        MVI     H,10h           ; H = 0x10 (high byte of RAM)
+        MVI     H,20h           ; H = 0x20 (high byte of RAM)
         MVI     L,00h           ; L = 0x00
 
-        ; Store test values at 0x1000-0x1006
-        MVI     M,11h           ; [0x1000] = 0x11 (for MOV A,M)
+        ; Store test values at 0x2000-0x2006
+        MVI     M,11h           ; [0x2000] = 0x11 (for MOV A,M)
         INR     L               ; L = 0x01
-        MVI     M,22h           ; [0x1001] = 0x22 (for MOV B,M)
+        MVI     M,22h           ; [0x2001] = 0x22 (for MOV B,M)
         INR     L               ; L = 0x02
-        MVI     M,33h           ; [0x1002] = 0x33 (for MOV C,M)
+        MVI     M,33h           ; [0x2002] = 0x33 (for MOV C,M)
         INR     L               ; L = 0x03
-        MVI     M,44h           ; [0x1003] = 0x44 (for MOV D,M)
+        MVI     M,44h           ; [0x2003] = 0x44 (for MOV D,M)
         INR     L               ; L = 0x04
-        MVI     M,55h           ; [0x1004] = 0x55 (for MOV E,M)
+        MVI     M,55h           ; [0x2004] = 0x55 (for MOV E,M)
         INR     L               ; L = 0x05
-        MVI     M,66h           ; [0x1005] = 0x66 (for MOV H,M - tricky!)
+        MVI     M,66h           ; [0x2005] = 0x66 (for MOV H,M - tricky!)
         INR     L               ; L = 0x06
-        MVI     M,77h           ; [0x1006] = 0x77 (for MOV L,M - tricky!)
+        MVI     M,77h           ; [0x2006] = 0x77 (for MOV L,M - tricky!)
 
         ;===========================================
         ; PART 1: MOV r,M Tests (Read from memory)
@@ -83,9 +83,9 @@ MAIN:
         ;-------------------------------------------
         ; TEST 1: MOV A,M - Load A from [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,00h           ; H:L = 0x1000
-        MOV     A,M             ; A = [0x1000] = 0x11
+        MVI     H,20h
+        MVI     L,00h           ; H:L = 0x2000
+        MOV     A,M             ; A = [0x2000] = 0x11
         ; CHECKPOINT 1: Verify MOV A,M
         MOV     L,A             ; Save A to L
         MVI     A,01h
@@ -99,11 +99,11 @@ MAIN:
         ;-------------------------------------------
         ; TEST 2: MOV B,M - Load B from [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,01h           ; H:L = 0x1001
+        MVI     H,20h
+        MVI     L,01h           ; H:L = 0x2001
         MVI     C,00h           ; Save B count in temp
         MOV     C,B             ; C = B (save counter)
-        MOV     B,M             ; B = [0x1001] = 0x22
+        MOV     B,M             ; B = [0x2001] = 0x22
         ; CHECKPOINT 2: Verify MOV B,M
         MOV     L,B             ; Save B to L
         MVI     A,02h
@@ -118,9 +118,9 @@ MAIN:
         ;-------------------------------------------
         ; TEST 3: MOV C,M - Load C from [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,02h           ; H:L = 0x1002
-        MOV     C,M             ; C = [0x1002] = 0x33
+        MVI     H,20h
+        MVI     L,02h           ; H:L = 0x2002
+        MOV     C,M             ; C = [0x2002] = 0x33
         ; CHECKPOINT 3: Verify MOV C,M
         MOV     L,C             ; Save C to L
         MVI     A,03h
@@ -134,9 +134,9 @@ MAIN:
         ;-------------------------------------------
         ; TEST 4: MOV D,M - Load D from [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,03h           ; H:L = 0x1003
-        MOV     D,M             ; D = [0x1003] = 0x44
+        MVI     H,20h
+        MVI     L,03h           ; H:L = 0x2003
+        MOV     D,M             ; D = [0x2003] = 0x44
         ; CHECKPOINT 4: Verify MOV D,M
         MOV     L,D             ; Save D to L
         MVI     A,04h
@@ -150,9 +150,9 @@ MAIN:
         ;-------------------------------------------
         ; TEST 5: MOV E,M - Load E from [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,04h           ; H:L = 0x1004
-        MOV     E,M             ; E = [0x1004] = 0x55
+        MVI     H,20h
+        MVI     L,04h           ; H:L = 0x2004
+        MOV     E,M             ; E = [0x2004] = 0x55
         ; CHECKPOINT 5: Verify MOV E,M
         MOV     L,E             ; Save E to L
         MVI     A,05h
@@ -167,9 +167,9 @@ MAIN:
         ; TEST 6: MOV H,M - Load H from [H:L]
         ; TRICKY: This changes H which changes the pointer!
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,05h           ; H:L = 0x1005
-        MOV     H,M             ; H = [0x1005] = 0x66, now H:L = 0x6605
+        MVI     H,20h
+        MVI     L,05h           ; H:L = 0x2005
+        MOV     H,M             ; H = [0x2005] = 0x66, now H:L = 0x6605
         ; CHECKPOINT 6: Verify MOV H,M
         MOV     L,H             ; Save H to L (H is now 0x66)
         MVI     A,06h
@@ -184,9 +184,9 @@ MAIN:
         ; TEST 7: MOV L,M - Load L from [H:L]
         ; TRICKY: This changes L which changes the pointer!
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,06h           ; H:L = 0x1006
-        MOV     L,M             ; L = [0x1006] = 0x77, now H:L = 0x1077
+        MVI     H,20h
+        MVI     L,06h           ; H:L = 0x2006
+        MOV     L,M             ; L = [0x2006] = 0x77, now H:L = 0x2077
         ; CHECKPOINT 7: Verify MOV L,M (L is now 0x77)
         ; Can't save L to L! Save to E temporarily
         MOV     E,L             ; Save L to E
@@ -205,13 +205,13 @@ MAIN:
         ;-------------------------------------------
         ; TEST 8: MOV M,A - Store A to [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,08h           ; H:L = 0x1008
+        MVI     H,20h
+        MVI     L,08h           ; H:L = 0x2008
         MVI     A,0AAh          ; A = 0xAA
-        MOV     M,A             ; [0x1008] = A = 0xAA
+        MOV     M,A             ; [0x2008] = A = 0xAA
         ; Read back and verify
         MVI     A,00h           ; Clear A
-        MOV     A,M             ; A = [0x1008]
+        MOV     A,M             ; A = [0x2008]
         ; CHECKPOINT 8: Verify MOV M,A
         MOV     L,A             ; Save A to L
         MVI     A,08h
@@ -225,11 +225,11 @@ MAIN:
         ;-------------------------------------------
         ; TEST 9: MOV M,B - Store B to [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,09h           ; H:L = 0x1009
-        MOV     M,B             ; [0x1009] = B = 0x08
+        MVI     H,20h
+        MVI     L,09h           ; H:L = 0x2009
+        MOV     M,B             ; [0x2009] = B = 0x08
         ; Read back and verify
-        MOV     A,M             ; A = [0x1009]
+        MOV     A,M             ; A = [0x2009]
         ; CHECKPOINT 9: Verify MOV M,B
         MOV     L,A             ; Save A to L
         MVI     A,09h
@@ -243,12 +243,12 @@ MAIN:
         ;-------------------------------------------
         ; TEST 10: MOV M,C - Store C to [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,0Ah           ; H:L = 0x100A
+        MVI     H,20h
+        MVI     L,0Ah           ; H:L = 0x200A
         MVI     C,0BBh          ; C = 0xBB
-        MOV     M,C             ; [0x100A] = C = 0xBB
+        MOV     M,C             ; [0x200A] = C = 0xBB
         ; Read back and verify
-        MOV     A,M             ; A = [0x100A]
+        MOV     A,M             ; A = [0x200A]
         ; CHECKPOINT 10: Verify MOV M,C
         MOV     L,A             ; Save A to L
         MVI     A,0Ah
@@ -262,12 +262,12 @@ MAIN:
         ;-------------------------------------------
         ; TEST 11: MOV M,D - Store D to [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,0Bh           ; H:L = 0x100B
+        MVI     H,20h
+        MVI     L,0Bh           ; H:L = 0x200B
         MVI     D,0CCh          ; D = 0xCC
-        MOV     M,D             ; [0x100B] = D = 0xCC
+        MOV     M,D             ; [0x200B] = D = 0xCC
         ; Read back and verify
-        MOV     A,M             ; A = [0x100B]
+        MOV     A,M             ; A = [0x200B]
         ; CHECKPOINT 11: Verify MOV M,D
         MOV     L,A             ; Save A to L
         MVI     A,0Bh
@@ -281,12 +281,12 @@ MAIN:
         ;-------------------------------------------
         ; TEST 12: MOV M,E - Store E to [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,0Ch           ; H:L = 0x100C
+        MVI     H,20h
+        MVI     L,0Ch           ; H:L = 0x200C
         MVI     E,0DDh          ; E = 0xDD
-        MOV     M,E             ; [0x100C] = E = 0xDD
+        MOV     M,E             ; [0x200C] = E = 0xDD
         ; Read back and verify
-        MOV     A,M             ; A = [0x100C]
+        MOV     A,M             ; A = [0x200C]
         ; CHECKPOINT 12: Verify MOV M,E
         MOV     L,A             ; Save A to L
         MVI     A,0Ch
@@ -300,29 +300,29 @@ MAIN:
         ;-------------------------------------------
         ; TEST 13: MOV M,H - Store H to [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,0Dh           ; H:L = 0x100D
-        MOV     M,H             ; [0x100D] = H = 0x10
+        MVI     H,20h
+        MVI     L,0Dh           ; H:L = 0x200D
+        MOV     M,H             ; [0x200D] = H = 0x20
         ; Read back and verify
-        MOV     A,M             ; A = [0x100D]
+        MOV     A,M             ; A = [0x200D]
         ; CHECKPOINT 13: Verify MOV M,H
         MOV     L,A             ; Save A to L
         MVI     A,0Dh
-        OUT     CHKPT           ; CP13: L=0x10
+        OUT     CHKPT           ; CP13: L=0x20
         MOV     A,L             ; Restore A
 
-        CPI     10h             ; Check A = 0x10
+        CPI     20h             ; Check A = 0x20
         JNZ     FAIL
         INR     B               ; B = 13
 
         ;-------------------------------------------
         ; TEST 14: MOV M,L - Store L to [H:L]
         ;-------------------------------------------
-        MVI     H,10h
-        MVI     L,0Eh           ; H:L = 0x100E, L = 0x0E
-        MOV     M,L             ; [0x100E] = L = 0x0E
+        MVI     H,20h
+        MVI     L,0Eh           ; H:L = 0x200E, L = 0x0E
+        MOV     M,L             ; [0x200E] = L = 0x0E
         ; Read back and verify
-        MOV     A,M             ; A = [0x100E]
+        MOV     A,M             ; A = [0x200E]
         ; CHECKPOINT 14: Verify MOV M,L
         MOV     L,A             ; Save A to L
         MVI     A,0Eh

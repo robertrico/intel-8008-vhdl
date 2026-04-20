@@ -27,11 +27,8 @@ end entity interrupt_test_tb;
 
 architecture testbench of interrupt_test_tb is
 
-    -- Component declaration
+    -- Component declaration: b8008_top (external ROM interface)
     component b8008_top is
-        generic (
-            ROM_FILE : string := "test_programs/alu_test_as.mem"
-        );
         port (
             clk_in      : in  std_logic;
             reset       : in  std_logic;
@@ -64,7 +61,32 @@ architecture testbench of interrupt_test_tb is
             debug_flag_parity   : out std_logic;
             debug_io_port_8     : out std_logic_vector(7 downto 0);
             debug_io_port_9     : out std_logic_vector(7 downto 0);
-            debug_io_port_10    : out std_logic_vector(7 downto 0)
+            debug_io_port_10    : out std_logic_vector(7 downto 0);
+            debug_state_half    : out std_logic;
+            io_port_in          : in  std_logic_vector(7 downto 0);
+            io_port_in_select   : in  std_logic_vector(2 downto 0);
+            io_port_in_enable   : in  std_logic;
+            io_port_out         : out std_logic_vector(7 downto 0);
+            io_port_num_out     : out std_logic_vector(4 downto 0);
+            io_port_write       : out std_logic;
+            io_port_read        : out std_logic;
+            rom_a               : out std_logic_vector(12 downto 0);
+            rom_d               : in  std_logic_vector(7 downto 0);
+            rom_ce_n            : out std_logic;
+            rom_oe_n            : out std_logic
+        );
+    end component;
+
+    -- Component declaration: external ROM simulator
+    component rom_8kx8 is
+        generic (
+            ROM_FILE : string := "test_programs/alu_test_as.mem"
+        );
+        port (
+            ADDR     : in  std_logic_vector(12 downto 0);
+            DATA_OUT : out std_logic_vector(7 downto 0);
+            CS_N     : in  std_logic;
+            OE_N     : in  std_logic
         );
     end component;
 
@@ -101,6 +123,22 @@ architecture testbench of interrupt_test_tb is
     signal debug_io_port_8     : std_logic_vector(7 downto 0);
     signal debug_io_port_9     : std_logic_vector(7 downto 0);
     signal debug_io_port_10    : std_logic_vector(7 downto 0);
+    signal debug_state_half    : std_logic;
+
+    -- External I/O port interface (unused here, tied inactive)
+    signal io_port_in          : std_logic_vector(7 downto 0) := (others => '0');
+    signal io_port_in_select   : std_logic_vector(2 downto 0) := (others => '0');
+    signal io_port_in_enable   : std_logic := '0';
+    signal io_port_out         : std_logic_vector(7 downto 0);
+    signal io_port_num_out     : std_logic_vector(4 downto 0);
+    signal io_port_write       : std_logic;
+    signal io_port_read        : std_logic;
+
+    -- External ROM bus
+    signal rom_a               : std_logic_vector(12 downto 0);
+    signal rom_d               : std_logic_vector(7 downto 0);
+    signal rom_ce_n            : std_logic;
+    signal rom_oe_n            : std_logic;
 
     -- Clock generation
     constant CLK_PERIOD : time := 10 ns;  -- 100 MHz
@@ -116,9 +154,6 @@ begin
     -- ========================================================================
 
     dut : b8008_top
-        generic map (
-            ROM_FILE => ROM_FILE
-        )
         port map (
             clk_in      => clk_in,
             reset       => reset,
@@ -151,7 +186,31 @@ begin
             debug_flag_parity   => debug_flag_parity,
             debug_io_port_8     => debug_io_port_8,
             debug_io_port_9     => debug_io_port_9,
-            debug_io_port_10    => debug_io_port_10
+            debug_io_port_10    => debug_io_port_10,
+            debug_state_half    => debug_state_half,
+            io_port_in          => io_port_in,
+            io_port_in_select   => io_port_in_select,
+            io_port_in_enable   => io_port_in_enable,
+            io_port_out         => io_port_out,
+            io_port_num_out     => io_port_num_out,
+            io_port_write       => io_port_write,
+            io_port_read        => io_port_read,
+            rom_a               => rom_a,
+            rom_d               => rom_d,
+            rom_ce_n            => rom_ce_n,
+            rom_oe_n            => rom_oe_n
+        );
+
+    -- External ROM stub loaded with test program
+    u_rom : rom_8kx8
+        generic map (
+            ROM_FILE => ROM_FILE
+        )
+        port map (
+            ADDR     => rom_a,
+            DATA_OUT => rom_d,
+            CS_N     => rom_ce_n,
+            OE_N     => rom_oe_n
         );
 
     -- ========================================================================

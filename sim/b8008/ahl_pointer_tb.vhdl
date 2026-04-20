@@ -21,7 +21,9 @@ architecture test of ahl_pointer_tb is
             state_t1              : in std_logic;
             state_t2              : in std_logic;
             current_cycle         : in integer range 0 to 3;
+            next_cycle            : in integer range 0 to 3;
             instr_is_mem_indirect : in std_logic;
+            instr_needs_address   : in std_logic;
             ahl_select            : out std_logic_vector(2 downto 0);
             ahl_active            : out std_logic
         );
@@ -31,7 +33,9 @@ architecture test of ahl_pointer_tb is
     signal state_t1              : std_logic := '0';
     signal state_t2              : std_logic := '0';
     signal current_cycle         : integer range 0 to 3 := 0;
+    signal next_cycle            : integer range 0 to 3 := 0;
     signal instr_is_mem_indirect : std_logic := '0';
+    signal instr_needs_address   : std_logic := '0';
 
     -- Outputs
     signal ahl_select : std_logic_vector(2 downto 0);
@@ -53,7 +57,9 @@ begin
             state_t1              => state_t1,
             state_t2              => state_t2,
             current_cycle         => current_cycle,
+            next_cycle            => next_cycle,
             instr_is_mem_indirect => instr_is_mem_indirect,
+            instr_needs_address   => instr_needs_address,
             ahl_select            => ahl_select,
             ahl_active            => ahl_active
         );
@@ -72,6 +78,7 @@ begin
         state_t1 <= '0';
         state_t2 <= '0';
         current_cycle <= 1;
+        next_cycle <= 1;
         instr_is_mem_indirect <= '0';
         wait for 10 ns;
 
@@ -89,6 +96,7 @@ begin
         state_t1 <= '1';
         state_t2 <= '0';
         current_cycle <= 1;
+        next_cycle <= 1;
         instr_is_mem_indirect <= '1';
         wait for 10 ns;
 
@@ -146,6 +154,7 @@ begin
         state_t1 <= '1';
         state_t2 <= '0';
         current_cycle <= 0;
+        next_cycle <= 0;
         instr_is_mem_indirect <= '1';
         wait for 10 ns;
 
@@ -163,6 +172,7 @@ begin
         state_t1 <= '1';
         state_t2 <= '0';
         current_cycle <= 2;
+        next_cycle <= 2;
         instr_is_mem_indirect <= '1';
         wait for 10 ns;
 
@@ -180,6 +190,7 @@ begin
         state_t1 <= '1';
         state_t2 <= '1';
         current_cycle <= 1;
+        next_cycle <= 1;
         instr_is_mem_indirect <= '1';
         wait for 10 ns;
 
