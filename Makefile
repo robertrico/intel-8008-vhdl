@@ -131,13 +131,26 @@ PROG ?= alu_test_as
 ROM_FILE = test_programs/$(PROG).mem
 SIM_TIME ?= 60ms
 
+# ----------------------------------------------------------------------------
+# Auto-assemble: %.mem rebuilds from %.asm when .asm is newer.
+# Prevents the stale-artifact class of failure where a test runs against an
+# out-of-date .mem (the class that silently broke check_io_test.sh and
+# check_ram_test.sh after the RAM relocation).
+# ----------------------------------------------------------------------------
+$(PROG_DIR)/%.mem: $(PROG_DIR)/%.asm
+	@echo "=== Auto-assembling $*.asm (.mem is stale) ==="
+	@cd $(PROG_DIR) && \
+	$(ASL) -cpu 8008new -L $*.asm && \
+	$(P2HEX) $*.p $*.hex -r 0-8191 && \
+	python3 ../$(HEX2MEM) $*.hex $*.mem
+
 # CLAUDE - These are the main tests
 # Usage:
 #   make test-b8008-top                    - Run with default program (alu_test_as)
 #   make test-b8008-top PROG=search_as     - Run with search program
 #   make test-b8008-top PROG=ram_intensive_as - Run with RAM intensive test
 #   make test-b8008-top PROG=search_as SIM_TIME=30ms - Custom simulation time
-test-b8008-top: $(BUILD_DIR)
+test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	@echo "========================================="
 	@echo "Testing b8008_top - Complete System"
 	@echo "Program: $(ROM_FILE)"
@@ -250,7 +263,7 @@ test-serial: $(BUILD_DIR)
 # NOT run the whole suite everytime.
 
 # Interrupt test with dedicated testbench
-test-interrupt: $(BUILD_DIR)
+test-interrupt: $(BUILD_DIR) $(PROG_DIR)/interrupt_test_as.mem
 	@echo "========================================="
 	@echo "Testing Interrupt Handling"
 	@echo "Program: test_programs/interrupt_test_as.mem"
