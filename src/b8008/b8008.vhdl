@@ -35,6 +35,11 @@ entity b8008 is
         clk_in : in std_logic;   -- Master clock input
         reset  : in std_logic;   -- Asynchronous reset (active high)
 
+        -- When low, freezes the phase-clock state machine so the CPU holds
+        -- its current state. Used by debug_clock_control for stop/step.
+        -- Defaults to '1' (always run) for existing instantiations.
+        run_enable : in std_logic := '1';
+
         phi1_out : out std_logic;  -- Phase 1 clock output (for debugging)
         phi2_out : out std_logic;  -- Phase 2 clock output (for debugging)
 
@@ -111,6 +116,7 @@ architecture structural of b8008 is
         port (
             clk_in       : in std_logic;
             reset        : in std_logic;
+            run_enable   : in std_logic;
             phi1         : out std_logic;
             phi2         : out std_logic;
             sync         : out std_logic;
@@ -892,6 +898,7 @@ begin
         port map (
             clk_in       => clk_in,
             reset        => reset,
+            run_enable   => run_enable,
             phi1         => phi1,
             phi2         => phi2,
             sync         => sync,

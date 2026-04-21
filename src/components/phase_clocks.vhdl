@@ -21,6 +21,11 @@ entity phase_clocks is
     Port (
         clk_in : in STD_LOGIC;
         reset  : in STD_LOGIC;
+        -- When low, the phase state machine freezes in place: phi1/phi2 hold
+        -- their current levels and no rising/falling pulses are emitted.
+        -- Defaults to '1' (always run) so existing unconnected instantiations
+        -- behave as before.
+        run_enable : in STD_LOGIC := '1';
         phi1   : out STD_LOGIC;
         phi2   : out STD_LOGIC;
         sync   : out STD_LOGIC;  -- Divide-by-two: distinguishes between two clock periods of each state
@@ -71,7 +76,9 @@ architecture rtl of phase_clocks is
     signal phi1_prev : std_logic := '1';
     signal phi2_prev : std_logic := '0';
 begin
-    -- Registered outputs to eliminate glitches
+    -- Registered outputs to eliminate glitches. When run_enable='0', phi1_reg
+    -- and phi2_reg hold their current value (phi1_next/phi2_next are also
+    -- frozen below) and phi*_prev also freezes -- so no edge pulses fire.
     process(clk_in, reset)
     begin
         if reset = '1' then
@@ -81,11 +88,13 @@ begin
             phi2_prev <= '0';
             sync <= '1';  -- Start with SYNC high
         elsif rising_edge(clk_in) then
-            phi1_reg  <= phi1_next;
-            phi2_reg  <= phi2_next;
-            phi1_prev <= phi1_reg;
-            phi2_prev <= phi2_reg;
-            sync <= sync_toggle;
+            if run_enable = '1' then
+                phi1_reg  <= phi1_next;
+                phi2_reg  <= phi2_next;
+                phi1_prev <= phi1_reg;
+                phi2_prev <= phi2_reg;
+                sync <= sync_toggle;
+            end if;
         end if;
     end process;
 
@@ -101,7 +110,9 @@ begin
     phi2_rising  <= phi2_reg and not phi2_prev;
     phi2_falling <= phi2_prev and not phi2_reg;
 
-    -- State machine and counter logic
+    -- State machine and counter logic. Gated on run_enable so that when the
+    -- debug controller asserts stop the entire phase state freezes with the
+    -- CPU naturally halted (no phi edges means no downstream updates).
     process(clk_in, reset)
     begin
         if reset = '1' then
@@ -110,7 +121,7 @@ begin
             phi2_next <= '0';
             current_phase <= PHI_1;
             sync_toggle <= '1';  -- Start with SYNC high
-        elsif rising_edge(clk_in) then
+        elsif rising_edge(clk_in) and run_enable = '1' then
             case current_phase is
                 -- PHI1 active phase
                 when PHI_1 =>

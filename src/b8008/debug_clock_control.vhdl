@@ -3,13 +3,16 @@
 --------------------------------------------------------------------------------
 -- Three-Button Debug Controller for Intel 8008
 --
--- Simple clock gating with step capability.
+-- Produces a run_enable hold signal (not a gated clock). The CPU stays on the
+-- raw master clock at all times; this controller freezes the phase_clocks
+-- state machine to pause/step. That keeps every CPU flop on one clock tree
+-- and avoids the LUT-on-clock skew problem the old gated clk_out caused.
 --
 -- Behavior:
---   - Run/Stop while running: Gate clocks OFF (CPU freezes)
---   - Run/Stop while stopped: Assert reset, ungate clocks (restart)
---   - Step Phi while stopped: Run until next phi falling edge
---   - Step Sync while stopped: Run until sync toggles
+--   - Run/Stop while running: run_enable -> '0' (CPU freezes in place)
+--   - Run/Stop while stopped: run_enable -> '1' + brief reset pulse
+--   - Step Phi while stopped: run_enable pulses '1' until next phi falling edge
+--   - Step Sync while stopped: run_enable pulses '1' until sync toggles
 --
 -- Copyright (c) 2025 Robert Rico
 --------------------------------------------------------------------------------
@@ -35,8 +38,9 @@ entity debug_clock_control is
         sync_in         : in  std_logic;
         bootstrap_done  : in  std_logic;   -- Stop after bootstrap completes
 
-        -- Gated clock output to CPU
-        clk_out         : out std_logic;
+        -- Run enable: drive to CPU's run_enable input. Held '0' to freeze
+        -- the phase_clocks state machine; pulsed/held '1' to run or step.
+        run_enable      : out std_logic;
 
         -- Status outputs
         is_running      : out std_logic;
@@ -81,9 +85,11 @@ architecture rtl of debug_clock_control is
 begin
 
     ---------------------------------------------------------------------------
-    -- Clock Gating
+    -- Run Enable (replaces the former combinational clock gate on clk_in)
     ---------------------------------------------------------------------------
-    clk_out <= clk_in when (clk_enable = '1' or stepping_phi = '1' or stepping_sync = '1') else '0';
+    -- Goes to the CPU's run_enable input, which freezes phase_clocks when '0'.
+    -- Held '1' while running, and pulsed '1' during step operations.
+    run_enable <= clk_enable or stepping_phi or stepping_sync;
 
     ---------------------------------------------------------------------------
     -- Edge Detection

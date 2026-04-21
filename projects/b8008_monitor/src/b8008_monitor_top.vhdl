@@ -79,6 +79,7 @@ architecture rtl of b8008_monitor_top is
         port (
             clk_in      : in std_logic;
             reset       : in std_logic;
+            run_enable  : in std_logic;
             interrupt   : in std_logic;
             int_vector  : in std_logic_vector(2 downto 0);
             phi1_out    : out std_logic;
@@ -185,7 +186,7 @@ architecture rtl of b8008_monitor_top is
             phi2_in         : in  std_logic;
             sync_in         : in  std_logic;
             bootstrap_done  : in  std_logic;
-            clk_out         : out std_logic;
+            run_enable      : out std_logic;
             is_running      : out std_logic;
             next_is_phi1    : out std_logic;
             next_is_phi2    : out std_logic;
@@ -250,7 +251,7 @@ architecture rtl of b8008_monitor_top is
     signal clk_counter : unsigned(25 downto 0) := (others => '0');
 
     -- Debug clock control signals
-    signal gated_clk : std_logic;
+    signal dbg_run_enable : std_logic;
     signal dbg_is_running : std_logic;
     signal dbg_next_is_phi1 : std_logic;
     signal dbg_next_is_phi2 : std_logic;
@@ -354,7 +355,7 @@ begin
             phi2_in         => phi2,
             sync_in         => sync_sig,
             bootstrap_done  => bootstrap_done and not sw(1),  -- Hardware break after bootstrap (SW1 ON = low = enables)
-            clk_out         => gated_clk,
+            run_enable      => dbg_run_enable,
             is_running      => dbg_is_running,
             next_is_phi1    => dbg_next_is_phi1,
             next_is_phi2    => dbg_next_is_phi2,
@@ -396,8 +397,9 @@ begin
     --------------------------------------------------------------------------------
     u_system : b8008_top
         port map (
-            clk_in      => gated_clk,  -- Use gated clock for debug control
+            clk_in      => clk,               -- CPU is always on raw master clock
             reset       => reset_int,
+            run_enable  => dbg_run_enable,    -- Debug hold: '0' freezes phi state machine
             interrupt   => bootstrap_int,
             int_vector  => "000",  -- RST 0 for bootstrap
             phi1_out    => phi1,

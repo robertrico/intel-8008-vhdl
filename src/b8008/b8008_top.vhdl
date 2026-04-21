@@ -27,6 +27,10 @@ entity b8008_top is
         -- External clock and reset
         clk_in      : in std_logic;
         reset       : in std_logic;
+        -- Debug hold: drive low to freeze the CPU in place. Defaults to '1'
+        -- (always running) so projects that don't wire a debug controller
+        -- continue to work with no code change.
+        run_enable  : in std_logic := '1';
         interrupt   : in std_logic;  -- Bootstrap interrupt (tie high after reset)
         int_vector  : in std_logic_vector(2 downto 0) := "000";  -- RST vector (0-7) to jam during T1I
 
@@ -98,6 +102,7 @@ architecture structural of b8008_top is
         port (
             clk_in         : in std_logic;
             reset          : in std_logic;
+            run_enable     : in std_logic;
             phi1_out       : out std_logic;
             phi2_out       : out std_logic;
             phi1_rising_out  : out std_logic;
@@ -307,6 +312,7 @@ begin
         port map (
             clk_in      => clk_in,
             reset       => reset,
+            run_enable  => run_enable,
             phi1_out    => phi1,
             phi2_out    => phi2,
             phi1_rising_out  => phi1_rising,
