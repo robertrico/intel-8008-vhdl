@@ -346,11 +346,14 @@ begin
     -- MEMORY INSTANCES
     -- ========================================================================
 
-    -- RAM: 1KB at 0x1000-0x13FF
+    -- RAM: 1KB at 0x2000-0x23FF (was 0x1000-0x13FF before commit c2d0753)
     -- Uses LATCHED address (stable during T3 data transfer)
+    -- Clocked on clk_in now (was phi1); CS_N + RW_N already gate writes
+    -- to PCW/T3 windows, so multiple clk edges during that window just
+    -- rewrite the same value.
     u_ram : ram_1kx8
         port map (
-            CLK          => phi1,
+            CLK          => clk_in,
             ADDR         => latched_address(9 downto 0),
             DATA_IN      => ram_data_in,
             DATA_OUT     => ram_data_out,
