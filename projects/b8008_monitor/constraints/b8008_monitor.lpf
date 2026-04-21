@@ -11,6 +11,24 @@
 LOCATE COMP "clk" SITE "P3";
 IOBUF PORT "clk" IO_TYPE=LVDS;
 
+# Declare the real clk frequency so nextpnr times against 100 MHz instead
+# of its default 12 MHz placeholder. Any slack failure reported under this
+# constraint is a real signal to investigate.
+#
+# NOTE on expected (false-positive) slack failures:
+# The CPU flops are all on the clk domain but each one is gated by a
+# phi1_rising / phi1_falling / phi2_rising / phi2_falling one-clk enable
+# pulse emitted once per phi edge (~220 clk cycles apart). The static
+# timing analyzer has no model of these enables and treats every clk edge
+# as a potential update, so long combinational paths between CE-gated
+# flops can appear to violate 10 ns even though real hardware has
+# ~hundreds of ns to settle. If a path ends in a flop whose D-side
+# combinational depth is clearly inside the CPU core (register_file,
+# temp_registers, internal_bus mux, data_bus mux, alu result), that slack
+# failure is the multicycle false-positive and can be ignored until we
+# add proper multicycle path annotations.
+FREQUENCY PORT "clk" 100 MHz;
+
 # ====================================================================================
 # UART Interface
 # ====================================================================================
