@@ -23,6 +23,12 @@ library work;
 use work.b8008_types.all;
 
 entity b8008_top is
+    generic (
+        -- Master clock frequency. Forwarded into b8008 → phase_clocks so the
+        -- two-phase 8008 clock keeps its 0.8/0.6 µs widths whatever speed the
+        -- board feeds clk_in at. Default 100 MHz preserves all existing TBs.
+        CLK_FREQ_HZ : integer := 100_000_000
+    );
     port (
         -- External clock and reset
         clk_in      : in std_logic;
@@ -99,6 +105,9 @@ architecture structural of b8008_top is
 
     -- Component: b8008 CPU
     component b8008 is
+        generic (
+            CLK_FREQ_HZ : integer := 100_000_000
+        );
         port (
             clk_in         : in std_logic;
             reset          : in std_logic;
@@ -309,6 +318,9 @@ begin
     -- ========================================================================
 
     u_cpu : b8008
+        generic map (
+            CLK_FREQ_HZ => CLK_FREQ_HZ
+        )
         port map (
             clk_in      => clk_in,
             reset       => reset,

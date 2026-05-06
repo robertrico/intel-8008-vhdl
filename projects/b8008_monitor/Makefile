@@ -23,3 +23,8 @@ include ../project.mk
 # project.mk's PROJECT_SRCS only picks up ./src/*.vhdl, so we need to add usart components
 # Note: b8008_usart wraps usart with 8008-specific handshaking
 ALL_SRCS := $(B8008_SRCS) $(COMP_DIR)/usart.vhdl $(COMP_DIR)/b8008_usart.vhdl $(COMP_DIR)/debouncer.vhdl $(SRC_DIR)/debug_clock_control.vhdl ./src/b8008_monitor_top.vhdl
+
+# ECP5 PLL primitive wrapper — read by Yosys, not GHDL.
+# GHDL sees only the component declaration in b8008_monitor_top.vhdl and emits
+# a black-box module reference; Yosys binds the real cell from this Verilog.
+EXTRA_V_SRCS += $(COMP_DIR)/pll_25mhz.v

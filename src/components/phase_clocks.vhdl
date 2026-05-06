@@ -18,6 +18,14 @@ use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
 entity phase_clocks is
+    Generic (
+        -- Master clock frequency. Dividers below scale automatically so PHI1
+        -- stays 0.8 µs, PHI2 stays 0.6 µs, dead times stay 0.4 µs regardless
+        -- of how fast the input clock runs. Default 100 MHz keeps every existing
+        -- testbench and project unchanged; the b8008 monitor overrides this to
+        -- 25 MHz when feeding from its on-chip PLL.
+        CLK_FREQ_HZ : integer := 100_000_000
+    );
     Port (
         clk_in : in STD_LOGIC;
         reset  : in STD_LOGIC;
@@ -42,21 +50,23 @@ end phase_clocks;
 architecture rtl of phase_clocks is
     type clk_phase is (PHI_1, PHI_2, DEAD_PHI, DEAD_PHI_2);
 
-    -- Intel 8008 Timing Constraints (assuming 100 MHz input clock = 10ns period):
+    -- Intel 8008 Timing Constraints:
     -- Max cycle time: 3 µs (rising PHI1 to next rising PHI1)
-    -- Min PHI1 pulse width: 0.7 µs (70 clocks @ 100 MHz)
-    -- Min PHI2 pulse width: 0.55 µs (55 clocks @ 100 MHz)
-
-    -- Timing configuration:
-    -- PHI1: 0.8 µs (80 clocks) - exceeds 0.7 µs minimum
-    -- Dead time 1: 0.4 µs (40 clocks)
-    -- PHI2: 0.6 µs (60 clocks) - exceeds 0.55 µs minimum
-    -- Dead time 2: 0.4 µs (40 clocks)
-    -- Total cycle: 2.2 µs - meets 3 µs maximum
-
-    constant PHI1_DIVIDER : integer := 80;    -- 0.8 µs PHI1 pulse width
-    constant PHI2_DIVIDER : integer := 60;    -- 0.6 µs PHI2 pulse width
-    constant DEAD_DIVIDER : integer := 40;    -- 0.4 µs dead time
+    -- Min PHI1 pulse width: 0.7 µs
+    -- Min PHI2 pulse width: 0.55 µs
+    --
+    -- Target waveform (regardless of CLK_FREQ_HZ):
+    --   PHI1: 0.8 µs (exceeds 0.7 µs minimum)
+    --   Dead time 1: 0.4 µs
+    --   PHI2: 0.6 µs (exceeds 0.55 µs minimum)
+    --   Dead time 2: 0.4 µs
+    --   Total cycle: 2.2 µs (meets 3 µs maximum)
+    --
+    -- Dividers = (target_pulse_ns / clk_period_ns) = CLK_FREQ_HZ * target_us / 1e6.
+    -- Computed at elaboration so synth and sim both see plain integer constants.
+    constant PHI1_DIVIDER : integer := (CLK_FREQ_HZ / 1_250_000);  -- 0.8 µs
+    constant PHI2_DIVIDER : integer := (CLK_FREQ_HZ * 6) / 10_000_000;  -- 0.6 µs
+    constant DEAD_DIVIDER : integer := (CLK_FREQ_HZ * 4) / 10_000_000;  -- 0.4 µs
 
     signal counter : integer range 0 to 127 := 0;
     signal current_phase : clk_phase := PHI_1;

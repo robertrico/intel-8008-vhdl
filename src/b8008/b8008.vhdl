@@ -28,6 +28,12 @@ library work;
 use work.b8008_types.all;
 
 entity b8008 is
+    generic (
+        -- Master clock frequency. Forwarded to phase_clocks so PHI1/PHI2 widths
+        -- stay 0.8/0.6 µs whatever clk_in actually runs at. Default keeps every
+        -- existing testbench and project at 100 MHz behaviour unchanged.
+        CLK_FREQ_HZ : integer := 100_000_000
+    );
     port (
         -- ====================================================================
         -- CLOCKS AND RESET
@@ -113,6 +119,9 @@ architecture structural of b8008 is
     -- ------------------------------------------------------------------------
 
     component phase_clocks is
+        generic (
+            CLK_FREQ_HZ : integer := 100_000_000
+        );
         port (
             clk_in       : in std_logic;
             reset        : in std_logic;
@@ -895,6 +904,9 @@ begin
     -- ------------------------------------------------------------------------
 
     u_phase_clocks : phase_clocks
+        generic map (
+            CLK_FREQ_HZ => CLK_FREQ_HZ
+        )
         port map (
             clk_in       => clk_in,
             reset        => reset,

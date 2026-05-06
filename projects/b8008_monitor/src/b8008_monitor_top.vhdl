@@ -76,6 +76,9 @@ architecture rtl of b8008_monitor_top is
     -- Component: b8008_top (CPU with external ROM and internal RAM)
     --------------------------------------------------------------------------------
     component b8008_top is
+        generic (
+            CLK_FREQ_HZ : integer := 100_000_000
+        );
         port (
             clk_in      : in std_logic;
             reset       : in std_logic;
@@ -173,6 +176,19 @@ architecture rtl of b8008_monitor_top is
     end component;
 
     --------------------------------------------------------------------------------
+    -- Component: pll_25mhz (ECP5 PLL: 100 MHz -> 25 MHz)
+    -- Implementation lives in src/components/pll_25mhz.v and is read by Yosys.
+    -- GHDL only sees this component declaration and emits a black-box reference.
+    --------------------------------------------------------------------------------
+    component pll_25mhz is
+        port (
+            clk_in  : in  std_logic;
+            clk_out : out std_logic;
+            locked  : out std_logic
+        );
+    end component;
+
+    --------------------------------------------------------------------------------
     -- Component: debug_clock_control (Three-button debug controller)
     --------------------------------------------------------------------------------
     component debug_clock_control is
@@ -198,6 +214,11 @@ architecture rtl of b8008_monitor_top is
     --------------------------------------------------------------------------------
     -- Internal Signals
     --------------------------------------------------------------------------------
+    -- System clock from PLL (25 MHz). Drives every flop in the design.
+    -- The 100 MHz LVDS input pin (`clk`) only feeds the PLL.
+    signal clk_sys      : std_logic;
+    signal pll_locked   : std_logic;
+
     -- POR (Power-On Reset) and reset control
     signal por_active   : std_logic := '1';
     signal reset_sync   : std_logic_vector(2 downto 0) := (others => '1');
@@ -266,14 +287,35 @@ architecture rtl of b8008_monitor_top is
 begin
 
     --------------------------------------------------------------------------------
+    -- PLL: 100 MHz LVDS input -> 25 MHz system clock
+    --------------------------------------------------------------------------------
+    -- Design's measured fmax is ~44 MHz; running off the raw 100 MHz osc caused
+    -- the CPU register paths to fail timing and the monitor to emit garbage on
+    -- UART. Drop to 25 MHz everywhere (well under fmax). Drives ALL flops below;
+    -- the only thing on the 100 MHz domain is the PLL CLKI input itself.
+    u_pll : pll_25mhz
+        port map (
+            clk_in  => clk,
+            clk_out => clk_sys,
+            locked  => pll_locked
+        );
+
+    --------------------------------------------------------------------------------
     -- Power-On Reset (POR)
     --------------------------------------------------------------------------------
-    process(clk)
+    -- POR holds reset until the PLL has locked AND the counter has run out.
+    -- Counter rolls 4x slower at 25 MHz than at 100 MHz, but that's fine for POR.
+    process(clk_sys)
     begin
-        if rising_edge(clk) then
-            clk_counter <= clk_counter + 1;
-            if clk_counter(19) = '1' then
-                por_active <= '0';
+        if rising_edge(clk_sys) then
+            if pll_locked = '0' then
+                clk_counter <= (others => '0');
+                por_active  <= '1';
+            else
+                clk_counter <= clk_counter + 1;
+                if clk_counter(19) = '1' then
+                    por_active <= '0';
+                end if;
             end if;
         end if;
     end process;
@@ -281,9 +323,9 @@ begin
     --------------------------------------------------------------------------------
     -- Reset Synchronization
     --------------------------------------------------------------------------------
-    process(clk)
+    process(clk_sys)
     begin
-        if rising_edge(clk) then
+        if rising_edge(clk_sys) then
             reset_sync <= reset_sync(1 downto 0) & sw(0);
         end if;
     end process;
@@ -301,12 +343,12 @@ begin
     --------------------------------------------------------------------------------
     u_debounce_run_stop : debouncer
         generic map (
-            CLK_FREQ_HZ   => 100_000_000,
+            CLK_FREQ_HZ   => 25_000_000,
             DEBOUNCE_MS   => 20,
             PULSE_STRETCH => 1
         )
         port map (
-            clk         => clk,
+            clk         => clk_sys,
             rst         => not por_active,  -- Only reset on POR, not debug reset
             btn         => dbg_btn_run_stop,
             btn_pressed => run_stop_pressed
@@ -314,12 +356,12 @@ begin
 
     u_debounce_step_cycle : debouncer
         generic map (
-            CLK_FREQ_HZ   => 100_000_000,
+            CLK_FREQ_HZ   => 25_000_000,
             DEBOUNCE_MS   => 20,
             PULSE_STRETCH => 1
         )
         port map (
-            clk         => clk,
+            clk         => clk_sys,
             rst         => not por_active,  -- Only reset on POR, not debug reset
             btn         => dbg_btn_step_cycle,
             btn_pressed => step_cycle_pressed
@@ -327,12 +369,12 @@ begin
 
     u_debounce_step_sync : debouncer
         generic map (
-            CLK_FREQ_HZ   => 100_000_000,
+            CLK_FREQ_HZ   => 25_000_000,
             DEBOUNCE_MS   => 20,
             PULSE_STRETCH => 1
         )
         port map (
-            clk         => clk,
+            clk         => clk_sys,
             rst         => not por_active,  -- Only reset on POR, not debug reset
             btn         => dbg_btn_step_sync,
             btn_pressed => step_sync_pressed
@@ -346,7 +388,7 @@ begin
     --------------------------------------------------------------------------------
     u_debug_clk : debug_clock_control
         port map (
-            clk_in          => clk,
+            clk_in          => clk_sys,
             reset           => por_active or reset_sw,  -- Don't include dbg_reset_request (feedback loop)
             btn_run_stop    => run_stop_pressed,
             btn_step_cycle  => step_cycle_pressed,
@@ -396,8 +438,11 @@ begin
     -- b8008 CPU System Instance
     --------------------------------------------------------------------------------
     u_system : b8008_top
+        generic map (
+            CLK_FREQ_HZ => 25_000_000          -- PLL output frequency
+        )
         port map (
-            clk_in      => clk,               -- CPU is always on raw master clock
+            clk_in      => clk_sys,            -- 25 MHz from on-chip PLL
             reset       => reset_int,
             run_enable  => dbg_run_enable,    -- Debug hold: '0' freezes phi state machine
             interrupt   => bootstrap_int,
@@ -456,13 +501,13 @@ begin
     --------------------------------------------------------------------------------
     u_uart : b8008_usart
         generic map (
-            CLK_FREQ_HZ => 100_000_000,
+            CLK_FREQ_HZ => 25_000_000,
             BAUD_RATE   => 115200,
             RX_PORT_NUM => "001",    -- INP 1 for UART RX
             TX_PORT_NUM => "01001"   -- OUT 9 for UART TX
         )
         port map (
-            clk          => clk,
+            clk          => clk_sys,
             rst          => reset_int,
             io_port_read => io_port_read,
             io_port_write => io_port_write,

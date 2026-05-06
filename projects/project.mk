@@ -31,6 +31,10 @@ GHDL_FLAGS ?= --std=08 --work=work
 # Usage: make synth YOSYS_ECP5_FLAGS="-abc9 -nosrl"
 YOSYS_ECP5_FLAGS ?=
 
+# Extra Verilog sources to read alongside the GHDL output (e.g. ECP5 PLL wrappers).
+# Project Makefiles can append: EXTRA_V_SRCS += $(COMP_DIR)/pll_25mhz.v
+EXTRA_V_SRCS ?=
+
 # Assembler and ROM generation
 ASL ?= ~/Development/asl-current/asl
 P2HEX ?= ~/Development/asl-current/p2hex
@@ -226,7 +230,7 @@ endif
 $(JSON): $(VERILOG) | create-build-dir create-reports-dir
 	@echo "=== Yosys: Synthesizing for ECP5 ==="
 	@if [ -n "$(YOSYS_ECP5_FLAGS)" ]; then echo "  Extra flags: $(YOSYS_ECP5_FLAGS)"; fi
-	$(YOSYS) -p "read_verilog $(ROOT_DIR)/src/synth/ghdl_gates.v $<; hierarchy -check -top $(TOP); tribuf -logic; proc; opt -nodffe; synth_ecp5 -top $(TOP) $(YOSYS_ECP5_FLAGS) -json $@" 2>&1 | tee $(SYNTH_REPORT)
+	$(YOSYS) -p "read_verilog -lib +/ecp5/cells_bb.v; read_verilog $(ROOT_DIR)/src/synth/ghdl_gates.v $(EXTRA_V_SRCS) $<; hierarchy -check -top $(TOP); tribuf -logic; proc; opt -nodffe; synth_ecp5 -top $(TOP) $(YOSYS_ECP5_FLAGS) -json $@" 2>&1 | tee $(SYNTH_REPORT)
 	@echo ""
 	@grep -E "Number of cells|LUT|DFF|CARRY" $(SYNTH_REPORT) || true
 
