@@ -71,7 +71,6 @@ architecture rtl of debug_clock_control is
     signal phi2_falling : std_logic;
 
     -- Reset control
-    signal reset_pending : std_logic := '0';
     signal reset_active : std_logic := '0';
     signal reset_counter : integer range 0 to 1023 := 0;
 
@@ -122,7 +121,6 @@ begin
             clk_enable <= '0';  -- Start stopped
             stepping_phi <= '0';
             stepping_sync <= '0';
-            reset_pending <= '0';
             reset_active <= '0';
             reset_counter <= 0;
             btn_run_stop_prev <= '0';
