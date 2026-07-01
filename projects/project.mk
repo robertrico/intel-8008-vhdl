@@ -16,6 +16,10 @@
 # Provides targets: help, assemble, build, synth, pnr, bit, prog, prog-flash, clean
 # ============================================================================
 
+# Fail recipes when any pipeline stage fails (yosys | tee must not mask errors)
+SHELL := /bin/bash
+.SHELLFLAGS := -o pipefail -c
+
 # Tools (inherit from environment or use defaults)
 OSS_CAD_SUITE ?= $(HOME)/oss-cad-suite/bin
 GHDL     ?= $(OSS_CAD_SUITE)/ghdl
@@ -243,7 +247,7 @@ $(CONFIG): $(JSON) | create-reports-dir
 	@echo "=== Place & Route with nextpnr-ecp5 ==="
 	$(NEXTPNR) --$(DEVICE) --package $(PACKAGE) --speed $(SPEED) \
 		--json $(JSON) --lpf $(LPF) --textcfg $@ \
-		--timing-allow-fail 2>&1 | tee $(PNR_REPORT)
+		2>&1 | tee $(PNR_REPORT)
 	@grep -A 50 "Critical path report" $(PNR_REPORT) > $(TIMING_REPORT) 2>/dev/null || true
 	@grep -E "Max frequency|Max delay|Slack" $(PNR_REPORT) >> $(TIMING_REPORT) 2>/dev/null || true
 	@grep -B 2 -A 30 "Device utilisation" $(PNR_REPORT) > $(UTIL_REPORT) 2>/dev/null || true
