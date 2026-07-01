@@ -30,6 +30,8 @@ sim/output.txt
 *.config
 *.v
 !src/synth/**/*.v
+# Hand-maintained primitive wrappers are sources, not build products
+!src/components/pll_25mhz.v
 
 # JSON synthesis files (but keep isa.json)
 *.json
