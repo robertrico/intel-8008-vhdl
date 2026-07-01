@@ -291,7 +291,7 @@ prog-flash:
 		exit 1; \
 	fi
 	@echo "=== Programming SPI Flash ==="
-	$(LOADER) -b versa_ecp5 $(BIT)
+	$(LOADER) -c ft2232 -f $(BIT)
 
 # ============================================================================
 # SIMULATE
