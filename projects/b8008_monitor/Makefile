@@ -22,7 +22,45 @@ include ../project.mk
 # Override ALL_SRCS to add USART peripherals
 # project.mk's PROJECT_SRCS only picks up ./src/*.vhdl, so we need to add usart components
 # Note: b8008_usart wraps usart with 8008-specific handshaking
-ALL_SRCS := $(B8008_SRCS) $(COMP_DIR)/usart.vhdl $(COMP_DIR)/b8008_usart.vhdl $(COMP_DIR)/debouncer.vhdl $(SRC_DIR)/debug_clock_control.vhdl ./src/rom_4kx8.vhdl ./src/b8008_monitor_top.vhdl
+ALL_SRCS := $(B8008_SRCS) $(COMP_DIR)/usart.vhdl $(COMP_DIR)/b8008_usart.vhdl $(COMP_DIR)/debouncer.vhdl $(SRC_DIR)/debug_clock_control.vhdl ./src/rom_4kx8_bram.vhdl ./src/b8008_monitor_top.vhdl
+
+# ============================================================================
+# Internal-ROM firmware patching (ecpbram flow)
+# ============================================================================
+# The on-chip ROM (rom_4kx8_bram) is block RAM, so its contents can be swapped
+# in the post-PnR config without resynthesis:
+#
+#   make rom-freeze  - regenerate src/rom_4kx8_bram.vhdl + src/rom_baked.mem
+#                      from the current firmware (random bytes in unused space
+#                      give ecpbram a unique match pattern). Requires a full
+#                      'make build' afterwards. Only needed when you WANT the
+#                      simulation sources refreshed; otherwise never.
+#   make rom-update  - patch the current firmware (.mem) into the existing
+#                      config with ecpbram and re-pack the bitstream. Seconds.
+#                      Falls back to a full build automatically if the RTL
+#                      changed (config dependency). Then 'make prog-flash'.
+# ============================================================================
+ECPBRAM ?= $(OSS_CAD_SUITE)/ecpbram
+ROM_SEED := 32008
+ROM_BAKED := src/rom_baked.mem
+
+rom-freeze: assemble
+	python3 $(ROOT_DIR)/hex_to_vhdl_rom.py $(basename $(ASM)).hex src/rom_4kx8_bram.vhdl \
+	    --compat --sync --entity rom_4kx8_bram --random-fill $(ROM_SEED) --mem-out $(ROM_BAKED)
+	@echo ""
+	@echo "ROM frozen from $(ASM). Run 'make build' to bake it into a new config."
+
+rom-update: $(CONFIG) $(MEM_FILE)
+	python3 -c "fw=[l.strip() for l in open('$(MEM_FILE)') if l.strip()]; \
+	baked=[l.strip() for l in open('$(ROM_BAKED)') if l.strip()]; \
+	assert len(fw)<=len(baked), 'firmware larger than ROM'; \
+	open('build/rom_new.mem','w').write('\n'.join(fw+baked[len(fw):])+'\n')"
+	$(ECPBRAM) -i $(CONFIG) -o build/rom_patched.config -f $(ROM_BAKED) -t build/rom_new.mem
+	$(ECPPACK) --input build/rom_patched.config --bit $(BIT) --svf $(SVF)
+	@echo ""
+	@echo "ROM patched into $(BIT) ($(ASM)) - run 'make prog-flash'"
+
+.PHONY: rom-freeze rom-update
 
 # ECP5 PLL primitive wrapper — read by Yosys, not GHDL.
 # GHDL sees only the component declaration in b8008_monitor_top.vhdl and emits

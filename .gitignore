@@ -4,6 +4,8 @@ TODO_*.txt
 *.lst
 *.hex
 *.mem
+# ecpbram reference image: source, not build product (see monitor rom-freeze)
+!rom_baked.mem
 *.p
 # FPGA Build Artifacts
 build/

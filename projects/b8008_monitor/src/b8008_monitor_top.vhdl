@@ -141,13 +141,18 @@ architecture rtl of b8008_monitor_top is
     end component;
 
     --------------------------------------------------------------------------------
-    -- Component: rom_4kx8 (on-chip LUT ROM, contents baked at synthesis)
+    -- Component: rom_4kx8_bram (on-chip block-RAM ROM, synchronous read)
     --------------------------------------------------------------------------------
-    component rom_4kx8 is
+    -- Contents baked at synthesis; updated WITHOUT resynthesis via the ecpbram
+    -- patch flow (make rom-update). One clock of read latency - invisible to
+    -- the 8008, which needs data microseconds after the address settles.
+    --------------------------------------------------------------------------------
+    component rom_4kx8_bram is
         generic (
             ROM_FILE : string := ""
         );
         port (
+            CLK      : in  std_logic;
             ADDR     : in  std_logic_vector(11 downto 0);
             DATA_OUT : out std_logic_vector(7 downto 0);
             CS_N     : in  std_logic
@@ -601,8 +606,9 @@ begin
     rom_a <= rom_a_int;
 
     gen_internal_rom : if USE_INTERNAL_ROM generate
-        u_rom : rom_4kx8
+        u_rom : rom_4kx8_bram
             port map (
+                CLK      => clk_sys,
                 ADDR     => rom_a_int(11 downto 0),
                 DATA_OUT => rom_d_internal,
                 CS_N     => '0'
