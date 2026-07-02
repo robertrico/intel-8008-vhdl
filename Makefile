@@ -63,7 +63,7 @@ B8008_SRCS = \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl
 
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
 
 all: help
 
@@ -392,6 +392,13 @@ test-condition-flags: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/condition_flags_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) condition_flags_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) condition_flags_tb --stop-time=10us
+
+test-int-button: $(BUILD_DIR)
+	@echo "Testing front-panel interrupt button..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/int_button.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/int_button_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) int_button_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) int_button_tb --stop-time=20ms
 
 test-interrupt-ready: $(BUILD_DIR)
 	@echo "Testing interrupt and ready flip-flops..."
