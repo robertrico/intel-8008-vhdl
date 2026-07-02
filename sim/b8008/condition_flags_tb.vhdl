@@ -28,6 +28,7 @@ architecture test of condition_flags_tb is
             flag_sign_in     : in  std_logic;
             flag_parity_in   : in  std_logic;
             update_flags     : in  std_logic;
+            carry_only       : in  std_logic;
             condition_code   : in  std_logic_vector(1 downto 0);
             test_true        : in  std_logic;
             eval_condition   : in  std_logic;
@@ -54,6 +55,7 @@ architecture test of condition_flags_tb is
     signal flag_sign_in   : std_logic := '0';
     signal flag_parity_in : std_logic := '0';
     signal update_flags   : std_logic := '0';
+    signal carry_only     : std_logic := '0';
     signal condition_code : std_logic_vector(1 downto 0) := (others => '0');
     signal test_true      : std_logic := '0';
     signal eval_condition : std_logic := '0';
@@ -95,6 +97,7 @@ begin
             flag_sign_in     => flag_sign_in,
             flag_parity_in   => flag_parity_in,
             update_flags     => update_flags,
+            carry_only       => carry_only,
             condition_code   => condition_code,
             test_true        => test_true,
             eval_condition   => eval_condition,
@@ -296,6 +299,43 @@ begin
             errors := errors + 1;
         else
             report "  PASS: Flag updated and JTc condition met";
+        end if;
+
+        -- Test 11: carry_only update (rotate fidelity) - carry written, Z/S/P held
+        report "";
+        report "Test 11: carry_only=1 writes carry, preserves Z/S/P";
+
+        eval_condition <= '0';
+        -- Preload known flags: C=0 Z=1 S=0 P=1
+        flag_carry_in  <= '0';
+        flag_zero_in   <= '1';
+        flag_sign_in   <= '0';
+        flag_parity_in <= '1';
+        update_flags   <= '1';
+        wait until rising_edge(clk);
+        wait for 10 ns;
+        update_flags <= '0';
+
+        -- Rotate-style update: new carry=1; ALU presents Z=0 S=1 P=0 which must be ignored
+        flag_carry_in  <= '1';
+        flag_zero_in   <= '0';
+        flag_sign_in   <= '1';
+        flag_parity_in <= '0';
+        carry_only     <= '1';
+        update_flags   <= '1';
+        wait until rising_edge(clk);
+        wait for 10 ns;
+        update_flags <= '0';
+        carry_only   <= '0';
+
+        if flag_carry /= '1' then
+            report "  ERROR: carry_only - carry not updated" severity error;
+            errors := errors + 1;
+        elsif flag_zero /= '1' or flag_sign /= '0' or flag_parity /= '1' then
+            report "  ERROR: carry_only - Z/S/P clobbered" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: carry updated, Z/S/P preserved";
         end if;
 
         -- Summary

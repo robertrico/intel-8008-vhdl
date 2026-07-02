@@ -532,6 +532,7 @@ architecture structural of b8008 is
             flag_sign_in     : in std_logic;
             flag_parity_in   : in std_logic;
             update_flags     : in std_logic;
+            carry_only       : in std_logic;
             condition_code   : in std_logic_vector(1 downto 0);
             test_true        : in std_logic;
             eval_condition   : in std_logic;
@@ -1314,6 +1315,7 @@ begin
             flag_sign_in     => alu_flag_sign,
             flag_parity_in   => alu_flag_parity,
             update_flags     => update_flags,
+            carry_only       => instr_is_rotate,     -- 8008 rotates write carry only
             condition_code   => condition_code,
             test_true        => test_true,
             eval_condition   => eval_condition,

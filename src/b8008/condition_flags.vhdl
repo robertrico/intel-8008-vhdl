@@ -44,6 +44,10 @@ entity condition_flags is
         -- Update enable from Register and ALU Control
         update_flags : in std_logic;
 
+        -- When '1' with update_flags: write carry only, hold Z/S/P
+        -- (8008 rotates affect carry alone - control tells us, we stay dumb)
+        carry_only : in std_logic;
+
         -- Condition code from instruction (CC field, bits 4:3, 2 bits)
         condition_code : in std_logic_vector(1 downto 0);
 
@@ -98,14 +102,17 @@ begin
             parity_ff <= '0';
         elsif rising_edge(clk) then
             if phi2_rising = '1' and update_flags = '1' then
-                carry_ff  <= flag_carry_in;
-                zero_ff   <= flag_zero_in;
-                sign_ff   <= flag_sign_in;
-                parity_ff <= flag_parity_in;
+                carry_ff <= flag_carry_in;
+                if carry_only = '0' then
+                    zero_ff   <= flag_zero_in;
+                    sign_ff   <= flag_sign_in;
+                    parity_ff <= flag_parity_in;
+                end if;
                 report "COND_FLAGS: Updating flags - C=" & std_logic'image(flag_carry_in) &
                        " Z=" & std_logic'image(flag_zero_in) &
                        " S=" & std_logic'image(flag_sign_in) &
-                       " P=" & std_logic'image(flag_parity_in);
+                       " P=" & std_logic'image(flag_parity_in) &
+                       " carry_only=" & std_logic'image(carry_only);
             end if;
         end if;
     end process;
