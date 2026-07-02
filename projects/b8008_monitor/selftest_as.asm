@@ -462,6 +462,59 @@ t41r:   mov a,m
 t42p:   call report_pass
 
 ; ================================================================================
+; Group J: Rotate flag preservation + carry across INR/DCR
+; (regressions for the two silent ALU-fidelity bug classes found via
+;  period software: rotates must write carry ONLY, INR/DCR must not
+;  touch carry at all)
+; ================================================================================
+
+        ; T43: RLC preserves Z (set via XRA), updates C
+        xra a                   ; Z=1 C=0
+        mvi a,80h
+        rlc                     ; A=01h C=1; Z must stay 1
+        mvi a,00h
+        jnz t43d                ; Z clobbered -> fail (A stays 0)
+        jnc t43d                ; C not set -> fail
+        mvi a,55h
+t43d:   mvi e,55h
+        call check_a
+
+        ; T44: RAR preserves Z=1 and S=0 from prior ADD carry-out
+        mvi a,0FFh
+        adi 01h                 ; A=0: Z=1 S=0 C=1
+        mvi a,01h
+        rar                     ; A=80h C=1; Z/S must hold
+        mvi a,00h
+        jnz t44d
+        jm  t44d
+        mvi a,55h
+t44d:   mvi e,55h
+        call check_a
+
+        ; T45: carry survives INR (SCELBAL ADC/INR interleave idiom)
+        mvi a,0FFh
+        adi 01h                 ; C=1
+        mvi l,10h
+        inr l                   ; must NOT touch C
+        mvi a,00h
+        jnc t45d
+        mvi a,55h
+t45d:   mvi e,55h
+        call check_a
+
+        ; T46: carry survives DCR (RAL/DCR rotate-loop idiom)
+        xra a                   ; C=0
+        mvi a,80h
+        ral                     ; C=1
+        mvi b,05h
+        dcr b                   ; must NOT touch C
+        mvi a,00h
+        jnc t46d
+        mvi a,55h
+t46d:   mvi e,55h
+        call check_a
+
+; ================================================================================
 ; Summary: "DN P=xx F=yy"
 ; ================================================================================
 done:
