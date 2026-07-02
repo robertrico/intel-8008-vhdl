@@ -5,14 +5,13 @@
 --
 -- Memory Map:
 --   0x0000 - 0x1FFF (8KB): External ROM (directly active through rom_a/rom_d/rom_ce_n/rom_oe_n)
---   0x2000 - 0x23FF (1KB): RAM (data storage)
---   0x2400 - 0x3FFF:       Unmapped (returns 0x00)
+--   0x2000 - 0x3FFF (8KB): RAM (data storage / loaded programs)
 --
 -- This module connects:
 --   - b8008 CPU core
 --   - External ROM interface (directly directly via rom_a/rom_d/rom_ce_n/rom_oe_n)
---   - ram_1kx8 (1KB RAM for data storage)
---   - Address decode logic
+--   - ram_sync (8KB RAM for data storage)
+--   - address_decoder (configurable ROM/RAM ranges)
 --------------------------------------------------------------------------------
 
 library ieee;
@@ -151,11 +150,31 @@ architecture structural of b8008_top is
         );
     end component;
 
-    -- Component: 1KB RAM (synchronous read -> block RAM)
-    component ram_1kx8_sync is
+    -- Component: configurable address decoder (defaults = this memory map)
+    component address_decoder is
+        generic (
+            ROM_BASE : integer := 16#0000#;
+            ROM_LAST : integer := 16#1FFF#;
+            RAM_BASE : integer := 16#2000#;
+            RAM_LAST : integer := 16#23FF#
+        );
+        port (
+            address  : in  std_logic_vector(13 downto 0);
+            rom_sel  : out std_logic;
+            ram_sel  : out std_logic;
+            rom_cs_n : out std_logic;
+            ram_cs_n : out std_logic
+        );
+    end component;
+
+    -- Component: parameterized synchronous RAM (block RAM)
+    component ram_sync is
+        generic (
+            ADDR_BITS : integer := 10
+        );
         port (
             CLK      : in  std_logic;
-            ADDR     : in  std_logic_vector(9 downto 0);
+            ADDR     : in  std_logic_vector(ADDR_BITS-1 downto 0);
             DATA_IN  : in  std_logic_vector(7 downto 0);
             DATA_OUT : out std_logic_vector(7 downto 0);
             RW_N     : in  std_logic;
@@ -363,15 +382,18 @@ begin
     -- MEMORY INSTANCES
     -- ========================================================================
 
-    -- RAM: 1KB at 0x2000-0x23FF (was 0x1000-0x13FF before commit c2d0753)
+    -- RAM: 8KB at 0x2000-0x3FFF (grown from 1KB for RAM-loaded programs)
     -- Uses LATCHED address (stable during T3 data transfer)
     -- Clocked on clk_in now (was phi1); CS_N + RW_N already gate writes
     -- to PCW/T3 windows, so multiple clk edges during that window just
     -- rewrite the same value.
-    u_ram : ram_1kx8_sync
+    u_ram : ram_sync
+        generic map (
+            ADDR_BITS => 13
+        )
         port map (
             CLK      => clk_in,
-            ADDR     => latched_address(9 downto 0),
+            ADDR     => latched_address(12 downto 0),
             DATA_IN  => ram_data_in,
             DATA_OUT => ram_data_out,
             RW_N     => ram_rw_n,
@@ -386,7 +408,7 @@ begin
             if reset = '1' then
                 ram_byte_0 <= (others => '0');
             elsif ram_cs_n = '0' and ram_rw_n = '0' and
-                  latched_address(9 downto 0) = "0000000000" then
+                  latched_address(12 downto 0) = "0000000000000" then
                 ram_byte_0 <= ram_data_in;
             end if;
         end if;
@@ -396,17 +418,19 @@ begin
     -- ADDRESS DECODE LOGIC
     -- ========================================================================
 
-    -- ROM selected: address 0x0000-0x1FFF (8KB, top bit = 0)
-    -- Use LATCHED address for decode
-    rom_selected <= '1' when latched_address(13) = '0' else '0';
-
-    -- RAM selected: address 0x2000-0x23FF (1KB at start of upper 8KB)
-    -- Use LATCHED address for decode
-    ram_selected <= '1' when latched_address(13 downto 10) = "1000" else '0';
-
-    -- Chip selects (active low)
-    rom_cs_n_int <= not rom_selected;
-    ram_cs_n <= not ram_selected;
+    -- Decode the LATCHED address (stable during T3 data transfer).
+    -- ROM range comes from the decoder's generic defaults; RAM grown to 8KB.
+    u_decode : address_decoder
+        generic map (
+            RAM_LAST => 16#3FFF#
+        )
+        port map (
+            address  => latched_address,
+            rom_sel  => rom_selected,
+            ram_sel  => ram_selected,
+            rom_cs_n => rom_cs_n_int,
+            ram_cs_n => ram_cs_n
+        );
 
     -- External ROM interface
     rom_a    <= latched_address(12 downto 0);  -- 13-bit address for 8KB ROM

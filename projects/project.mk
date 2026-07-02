@@ -91,15 +91,21 @@ B8008_SRCS := \
 	$(SRC_DIR)/register_alu_control.vhdl \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl \
-	$(SRC_DIR)/ram_1kx8_sync.vhdl \
+	$(SRC_DIR)/ram_sync.vhdl \
+	$(SRC_DIR)/address_decoder.vhdl \
 	$(SRC_DIR)/b8008_top.vhdl
 
 # Project sources (top-level wrapper)
 # Use ?= so individual projects can override before include
 PROJECT_SRCS ?= $(wildcard ./src/*.vhdl)
 
-# All sources
-ALL_SRCS := $(B8008_SRCS) $(PROJECT_SRCS)
+# All sources. Projects add peripherals via EXTRA_PROJECT_SRCS, set BEFORE
+# the include (use literal ../../src/... paths - COMP_DIR/SRC_DIR are not
+# defined yet at that point). Do NOT override ALL_SRCS after the include:
+# make expands rule prerequisites at parse time, so a post-include override
+# never reaches the build rules - edits to the extra files then silently
+# skip resynthesis and the bitstream goes stale.
+ALL_SRCS := $(B8008_SRCS) $(PROJECT_SRCS) $(EXTRA_PROJECT_SRCS)
 
 # Testbench sources
 TB_SRCS := $(wildcard ./sim/*.vhdl)
@@ -124,8 +130,16 @@ BIT := $(BUILD_DIR)/$(PROJECT).bit
 SVF := $(BUILD_DIR)/$(PROJECT).svf
 
 # Waveform files
+# WAVE=0 disables waveform dumping. Needed for long interactive sims: GHDL's
+# GHW writer fails (exit 255, no message) once the file crosses 2 GiB.
+WAVE ?= 1
 WAVE_FILE := ./sim/$(ACTIVE_TB).ghw
 GTKW_FILE := ./sim/$(ACTIVE_TB).gtkw
+ifeq ($(WAVE),0)
+GHDL_WAVE_OPT :=
+else
+GHDL_WAVE_OPT := --wave=$(WAVE_FILE)
+endif
 
 # Report files
 SYNTH_REPORT := $(REPORTS_DIR)/synthesis.txt
@@ -312,7 +326,7 @@ sim: assemble | create-build-dir create-reports-dir
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(ACTIVE_TB)
 	@set -o pipefail; $(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(ACTIVE_TB) \
 		--stop-time=$(SIM_TIME) \
-		--wave=$(WAVE_FILE) \
+		$(GHDL_WAVE_OPT) \
 		--assert-level=error \
 		--ieee-asserts=disable-at-0 \
 		2>&1 | tee -a $(SIM_REPORT); \
@@ -323,7 +337,7 @@ sim: assemble | create-build-dir create-reports-dir
 		echo "SIMULATION FAILED" | tee -a $(SIM_REPORT); \
 		exit $$SIM_EXIT; \
 	fi
-	@echo "Waveform saved to: $(WAVE_FILE)"
+	@if [ "$(WAVE)" != "0" ]; then echo "Waveform saved to: $(WAVE_FILE)"; fi
 
 list-tests:
 	@echo "Available testbenches:"

@@ -179,7 +179,8 @@ test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/io_buffer.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/b8008/ram_1kx8_sync.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/b8008/ram_sync.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/address_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_8kx8.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_top_tb.vhdl
@@ -292,11 +293,26 @@ test-interrupt: $(BUILD_DIR) $(PROG_DIR)/interrupt_test_as.mem
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/io_buffer.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_4kx8.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/b8008/ram_1kx8_sync.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/b8008/ram_sync.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/address_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/interrupt_test_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_test_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_test_tb --stop-time=10ms
+
+test-address-decoder: $(BUILD_DIR)
+	@echo "Testing address decoder..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/address_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/address_decoder_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) address_decoder_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) address_decoder_tb --stop-time=1us
+
+test-ram-sync: $(BUILD_DIR)
+	@echo "Testing parameterized synchronous RAM..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ram_sync.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/ram_sync_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ram_sync_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ram_sync_tb --stop-time=10us
 
 test-pc: $(BUILD_DIR)
 	@echo "Testing program counter..."
@@ -519,7 +535,7 @@ assemble:
 #        make assemble-sample PROG=stars
 #
 # These programs use bitbanged serial I/O and may require ASL include files
-ASL_INCLUDE = ~/Development/as_assembler/include
+ASL_INCLUDE = ~/Development/asl-current/include
 SAMPLE_DIR = $(PROG_DIR)/samples
 
 assemble-sample:
@@ -537,7 +553,7 @@ assemble-sample:
 	echo "========================================="; \
 	cd $(SAMPLE_DIR) && \
 	$(ASL) -cpu 8008new -i $(ASL_INCLUDE) -L $$BASENAME.asm && \
-	$(P2HEX) $$BASENAME.p $$BASENAME.hex -r 0-4095 && \
+	$(P2HEX) $$BASENAME.p $$BASENAME.hex -r 0-16383 && \
 	python3 ../../$(HEX2MEM) $$BASENAME.hex $$BASENAME.mem && \
 	echo "" && \
 	echo "Output files created:" && \

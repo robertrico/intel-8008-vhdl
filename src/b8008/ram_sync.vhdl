@@ -1,11 +1,11 @@
 --------------------------------------------------------------------------------
--- ram_1kx8_sync.vhdl - 1K x 8 RAM, synchronous read and write
+-- ram_sync.vhdl - Parameterized synchronous RAM (2^ADDR_BITS x 8)
 --------------------------------------------------------------------------------
--- Replaces the legacy async-read ram_1kx8 (distributed LUTRAM with tristate
--- outputs). Synchronous read makes Yosys infer block RAM (DP16KD) and removes
--- the deep asynchronous read mux and the 'Z' bus. The one-clock read latency
--- is invisible to the 8008: the address is latched at T1/T2 and data is not
--- consumed until well into T3, microseconds later.
+-- Generalizes the old ram_1kx8_sync (fixed 1K) to any power-of-two size via
+-- the ADDR_BITS generic. Synchronous read and write so Yosys infers block
+-- RAM (DP16KD). The one-clock read latency is invisible to the 8008: the
+-- address is latched at T1/T2 and data is not consumed until well into T3,
+-- microseconds later.
 --
 -- No chip-select gating on the read port: DATA_OUT always carries the
 -- registered read of ADDR. The data-bus multiplexer in b8008_top only
@@ -18,19 +18,22 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity ram_1kx8_sync is
+entity ram_sync is
+    generic (
+        ADDR_BITS : integer := 10
+    );
     port (
         CLK      : in  std_logic;
-        ADDR     : in  std_logic_vector(9 downto 0);
+        ADDR     : in  std_logic_vector(ADDR_BITS-1 downto 0);
         DATA_IN  : in  std_logic_vector(7 downto 0);
         DATA_OUT : out std_logic_vector(7 downto 0);
         RW_N     : in  std_logic;   -- 0 = write, 1 = read
         CS_N     : in  std_logic    -- 0 = selected
     );
-end entity ram_1kx8_sync;
+end entity ram_sync;
 
-architecture rtl of ram_1kx8_sync is
-    type ram_array is array (0 to 1023) of std_logic_vector(7 downto 0);
+architecture rtl of ram_sync is
+    type ram_array is array (0 to 2**ADDR_BITS - 1) of std_logic_vector(7 downto 0);
     signal ram : ram_array := (others => x"00");
 begin
 
