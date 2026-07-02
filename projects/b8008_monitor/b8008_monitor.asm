@@ -820,7 +820,7 @@ hex_lower:
 ; Destroys: A, B
 ;
 send_hex_byte:
-        mov b,a                 ; Save byte in B
+        mov c,a                 ; Save byte in C (char_delay destroys B!)
 
         ; Send high nibble
         rlc
@@ -831,7 +831,7 @@ send_hex_byte:
         call send_hex_nibble
 
         ; Send low nibble
-        mov a,b
+        mov a,c
         ani 0Fh
         call send_hex_nibble
 

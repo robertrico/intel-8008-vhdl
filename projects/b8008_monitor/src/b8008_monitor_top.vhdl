@@ -73,6 +73,16 @@ end entity b8008_monitor_top;
 architecture rtl of b8008_monitor_top is
 
     --------------------------------------------------------------------------------
+    -- ROM source select
+    --------------------------------------------------------------------------------
+    -- true  = on-chip LUT ROM (rom_4kx8, contents baked in at synthesis).
+    --         External ROM pins still driven but rom_d is ignored. Use this to
+    --         run with the EEPROM/level-shifter chain disconnected.
+    -- false = external EEPROM via rom_a/rom_d (normal configuration).
+    --------------------------------------------------------------------------------
+    constant USE_INTERNAL_ROM : boolean := true;
+
+    --------------------------------------------------------------------------------
     -- Component: b8008_top (CPU with external ROM and internal RAM)
     --------------------------------------------------------------------------------
     component b8008_top is
@@ -127,6 +137,20 @@ architecture rtl of b8008_monitor_top is
             rom_d               : in  std_logic_vector(7 downto 0);
             rom_ce_n            : out std_logic;
             rom_oe_n            : out std_logic
+        );
+    end component;
+
+    --------------------------------------------------------------------------------
+    -- Component: rom_4kx8 (on-chip LUT ROM, contents baked at synthesis)
+    --------------------------------------------------------------------------------
+    component rom_4kx8 is
+        generic (
+            ROM_FILE : string := ""
+        );
+        port (
+            ADDR     : in  std_logic_vector(11 downto 0);
+            DATA_OUT : out std_logic_vector(7 downto 0);
+            CS_N     : in  std_logic
         );
     end component;
 
@@ -237,6 +261,24 @@ architecture rtl of b8008_monitor_top is
     signal bootstrap_int     : std_logic := '0';
     signal bootstrap_done    : std_logic := '0';
     signal bootstrap_counter : unsigned(7 downto 0) := (others => '0');
+    signal bs_phi2_prev      : std_logic := '0';
+
+    -- Auto-start: synthetic run/stop press ~2 ms after POR/reset release
+    signal auto_start_cnt   : unsigned(16 downto 0) := (others => '0');
+    signal auto_start_done  : std_logic := '0';
+    signal auto_start_pulse : std_logic := '0';
+
+    -- ROM source mux (internal LUT ROM vs external EEPROM)
+    signal rom_a_int      : std_logic_vector(12 downto 0);
+    signal rom_d_cpu      : std_logic_vector(7 downto 0);
+    signal rom_d_internal : std_logic_vector(7 downto 0);
+
+    -- Rolling fetch capture: latch data + address at the end of every T3.
+    -- When the CPU freezes these hold the last fetch it performed, readable
+    -- on the LEDs via sw(2) (data), sw(3) (addr low), sw(4) (addr high).
+    signal last_fetch      : std_logic_vector(7 downto 0)  := (others => '0');
+    signal last_fetch_addr : std_logic_vector(13 downto 0) := (others => '0');
+    signal fetch_seen      : std_logic := '0';
 
     -- I/O port signals
     signal io_port_8    : std_logic_vector(7 downto 0);
@@ -381,6 +423,62 @@ begin
         );
 
     --------------------------------------------------------------------------------
+    -- Auto-start
+    --------------------------------------------------------------------------------
+    -- Fires one synthetic run/stop press 2 ms after POR (or the reset switch)
+    -- releases, so the CPU boots without a physical button press. Re-arms on
+    -- the reset switch, so flipping sw(0) restarts the system. The debug
+    -- button still works normally afterwards (stop/resume/step).
+    --------------------------------------------------------------------------------
+    process(clk_sys)
+    begin
+        if rising_edge(clk_sys) then
+            auto_start_pulse <= '0';
+            if por_active = '1' or reset_sw = '1' then
+                auto_start_cnt  <= (others => '0');
+                auto_start_done <= '0';
+            elsif auto_start_done = '0' then
+                auto_start_cnt <= auto_start_cnt + 1;
+                if auto_start_cnt = 50000 then    -- 2 ms at 25 MHz
+                    auto_start_pulse <= '1';
+                    auto_start_done  <= '1';
+                end if;
+            end if;
+        end if;
+    end process;
+
+    --------------------------------------------------------------------------------
+    -- Rolling Fetch Capture
+    --------------------------------------------------------------------------------
+    -- Latches the data bus and full address at the end of every T3 (phi2
+    -- falling). While the CPU runs this updates continuously; the moment it
+    -- freezes (HLT, STOPPED, wait) no further T3 occurs, so the registers
+    -- hold the last fetch: the instruction that killed it and where it came
+    -- from. Read on LEDs (bit set = LED ON):
+    --   sw(2)='1' -> led = last data byte
+    --   sw(3)='1' -> led = last address bits 7:0
+    --   sw(4)='1' -> led = "00" & last address bits 13:8
+    --   led_L18 lit = at least one fetch since reset
+    -- On a dead boot expect address 0x0000, data 0x44 (JMP) if the first
+    -- fetch ever happened at all.
+    --------------------------------------------------------------------------------
+    process(clk_sys)
+    begin
+        if rising_edge(clk_sys) then
+            if reset_int = '1' then
+                fetch_seen      <= '0';
+                last_fetch      <= (others => '0');
+                last_fetch_addr <= (others => '0');
+            elsif phi2 = '0' and bs_phi2_prev = '1' and
+                  s2_sig = '0' and s1_sig = '0' and s0_sig = '1' then  -- end of T3
+                last_fetch      <= data_sig;
+                last_fetch_addr <= address_sig;
+                fetch_seen      <= '1';
+            end if;
+        end if;
+    end process;
+
+    --------------------------------------------------------------------------------
     -- Debug Clock Control
     --------------------------------------------------------------------------------
     -- Gates the master clock to the CPU. UART stays on ungated clock for accurate
@@ -390,7 +488,7 @@ begin
         port map (
             clk_in          => clk_sys,
             reset           => por_active or reset_sw,  -- Don't include dbg_reset_request (feedback loop)
-            btn_run_stop    => run_stop_pressed,
+            btn_run_stop    => run_stop_pressed or auto_start_pulse,
             btn_step_cycle  => step_cycle_pressed,
             btn_step_sync   => step_sync_pressed,
             phi1_in         => phi1,
@@ -408,26 +506,34 @@ begin
     --------------------------------------------------------------------------------
     -- Bootstrap Interrupt Control
     --------------------------------------------------------------------------------
-    -- Use async reset from clk domain directly. The reset signal is stable
-    -- (held for many phi2 cycles) so metastability risk is minimal, and
-    -- async reset ensures clean startup regardless of clock phase.
+    -- Runs entirely in the clk_sys domain, advancing on a phi2 rising-edge
+    -- enable pulse. phi2, s0/s1/s2, sync, and reset_int are all clk_sys-domain
+    -- signals, so there is no clock-domain crossing anywhere in this FSM.
+    -- (The previous version clocked this on the derived phi2 signal with an
+    -- async reset, which left every path into it unconstrained and caused
+    -- spontaneous re-jam of RST 0: bootstrap_done would glitch back to 0,
+    -- restarting the CPU mid-program or freezing it via the hardware break.)
     --------------------------------------------------------------------------------
-    process(phi2, reset_int)
+    process(clk_sys)
     begin
-        if reset_int = '1' then
-            bootstrap_int     <= '0';
-            bootstrap_done    <= '0';
-            bootstrap_counter <= (others => '0');
-        elsif rising_edge(phi2) then
-            if bootstrap_done = '0' then
-                bootstrap_int <= '1';
-                bootstrap_counter <= bootstrap_counter + 1;
-                -- Wait for counter to allow CPU to reach T1I, then check for T1I state
-                -- Need enough cycles for CPU to exit STOPPED and enter T1I
-                if bootstrap_counter >= 16 then
-                    if s2_sig = '1' and s1_sig = '1' and s0_sig = '0' and sync_sig = '1' then
-                        bootstrap_int  <= '0';
-                        bootstrap_done <= '1';
+        if rising_edge(clk_sys) then
+            bs_phi2_prev <= phi2;
+
+            if reset_int = '1' then
+                bootstrap_int     <= '0';
+                bootstrap_done    <= '0';
+                bootstrap_counter <= (others => '0');
+            elsif phi2 = '1' and bs_phi2_prev = '0' then
+                if bootstrap_done = '0' then
+                    bootstrap_int <= '1';
+                    bootstrap_counter <= bootstrap_counter + 1;
+                    -- Wait for counter to allow CPU to reach T1I, then check for T1I state
+                    -- Need enough cycles for CPU to exit STOPPED and enter T1I
+                    if bootstrap_counter >= 16 then
+                        if s2_sig = '1' and s1_sig = '1' and s0_sig = '0' and sync_sig = '1' then
+                            bootstrap_int  <= '0';
+                            bootstrap_done <= '1';
+                        end if;
                     end if;
                 end if;
             end if;
@@ -484,12 +590,29 @@ begin
             io_port_num_out     => io_port_num,
             io_port_write       => io_port_write,
             io_port_read        => io_port_read,
-            -- External ROM interface (directly to physical ROM pins)
-            rom_a               => rom_a,
-            rom_d               => rom_d,
+            -- ROM interface (muxed: internal LUT ROM or external EEPROM pins)
+            rom_a               => rom_a_int,
+            rom_d               => rom_d_cpu,
             rom_ce_n            => rom_ce_n,
             rom_oe_n            => rom_oe_n
         );
+
+    -- External ROM address pins always driven (harmless when internal ROM active)
+    rom_a <= rom_a_int;
+
+    gen_internal_rom : if USE_INTERNAL_ROM generate
+        u_rom : rom_4kx8
+            port map (
+                ADDR     => rom_a_int(11 downto 0),
+                DATA_OUT => rom_d_internal,
+                CS_N     => '0'
+            );
+        rom_d_cpu <= rom_d_internal;
+    end generate;
+
+    gen_external_rom : if not USE_INTERNAL_ROM generate
+        rom_d_cpu <= rom_d;
+    end generate;
 
     --------------------------------------------------------------------------------
     -- B8008_USART Instance (115200 baud, with 8008 handshaking)
@@ -526,17 +649,20 @@ begin
     --------------------------------------------------------------------------------
     -- LEDs 0-3: Debug status (directly active low: '0' = ON)
     -- LEDs 4-7: CPU I/O port 8 output (directly active, accent active low)
-    led(0) <= not dbg_is_running;     -- ON when running (active-low LED, '0'=ON)
-    led(1) <= not dbg_next_is_phi2;   -- ON when phi2 is next phase
-    led(2) <= not sync_sig;           -- ON during SYNC
-    led(3) <= not dbg_triggered;      -- ON when breakpoint triggered (reserved)
-    led(7 downto 4) <= io_port_8(7 downto 4);  -- Upper 4 bits from CPU I/O
+    -- Normal mode: status + I/O port. Debug capture modes via sw(2)/sw(3)/sw(4)
+    -- show the rolling fetch capture (LED ON = bit set).
+    led <= not last_fetch                        when sw(2) = '1' else
+           not last_fetch_addr(7 downto 0)       when sw(3) = '1' else
+           not ("00" & last_fetch_addr(13 downto 8)) when sw(4) = '1' else
+           io_port_8(7 downto 4) & (not dbg_triggered) & (not sync_sig) &
+           (not dbg_next_is_phi2) & (not dbg_is_running);
 
     -- M20: TX busy indicator (ON = UART transmitting)
     led_M20 <= not uart_tx_busy;
 
     -- L18: Running indicator (ON when running, active-low LED)
-    led_L18 <= not dbg_is_running;
+    led_L18 <= not fetch_seen when (sw(2) = '1' or sw(3) = '1' or sw(4) = '1')
+               else not dbg_is_running;
 
     --------------------------------------------------------------------------------
     -- CPU Debug Outputs (directly connected for logic analyzer)
