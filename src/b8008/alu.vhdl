@@ -218,8 +218,15 @@ begin
     internal_bus_oe  <= output_result;
 
     -- Generate flags from result
-    -- Carry flag: bit 8 of result
-    flag_carry <= result_internal(8) when enable = '1' else '0';
+    -- Carry flag: bit 8 of result.
+    -- INR/DCR exception (8008 datasheet): increment/decrement affect
+    -- Z/S/P only - carry passes through unchanged, so the flag writeback
+    -- rewrites the current value. Without this, SCELBAL-style multi-byte
+    -- adds ("ADC M / INR L / ADC M") and rotate loops ("RAL / DCR B")
+    -- corrupt on every pointer/counter step.
+    flag_carry <= carry_in          when (enable = '1' and is_inr_dcr = '1') else
+                  result_internal(8) when enable = '1' else
+                  '0';
 
     -- Zero flag: all bits of result are zero
     flag_zero <= '1' when (enable = '1' and result_internal(7 downto 0) = x"00") else '0';

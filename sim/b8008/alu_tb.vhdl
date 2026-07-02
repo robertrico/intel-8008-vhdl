@@ -317,9 +317,79 @@ begin
             report "  PASS: CMP result correct (flags set)";
         end if;
 
-        -- Test 12: Disabled ALU
+        -- Test 12: INR must NOT touch carry (8008: INR/DCR affect Z/S/P only).
+        -- SCELBAL-style multi-byte adds do "ADC M / INR L / ADC M" chains -
+        -- if INR emits the adder's carry, every chained add corrupts.
         report "";
-        report "Test 12: Enable = 0 (ALU disabled)";
+        report "Test 12: INR 0x57 with carry=1 (carry must survive)";
+
+        reg_b_in <= x"57";
+        opcode <= OP_ADD;          -- INR = ADD in is_inr_dcr mode
+        is_inr_dcr <= '1';
+        carry_in <= '1';
+        strobe_enable;
+
+        if result(7 downto 0) /= x"58" then
+            report "  ERROR: INR result should be 0x58, got 0x" & to_hstring(result(7 downto 0)) severity error;
+            errors := errors + 1;
+        end if;
+        if flag_carry /= '1' then
+            report "  ERROR: INR clobbered carry (should stay 1)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: INR preserved carry=1";
+        end if;
+
+        -- Test 13: INR with wrap (0xFF -> 0x00) and carry=0: the internal
+        -- add DOES produce a carry, but the flag must stay 0.
+        report "";
+        report "Test 13: INR 0xFF wrap with carry=0 (carry must stay 0)";
+
+        reg_b_in <= x"FF";
+        opcode <= OP_ADD;
+        is_inr_dcr <= '1';
+        carry_in <= '0';
+        strobe_enable;
+
+        if result(7 downto 0) /= x"00" then
+            report "  ERROR: INR result should be 0x00, got 0x" & to_hstring(result(7 downto 0)) severity error;
+            errors := errors + 1;
+        end if;
+        if flag_carry /= '0' then
+            report "  ERROR: INR wrap leaked carry (should stay 0)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: INR wrap kept carry=0";
+        end if;
+
+        -- Test 14: DCR with borrow (0x00 -> 0xFF) and carry=1: internal
+        -- subtract borrows, but the flag must stay 1.
+        report "";
+        report "Test 14: DCR 0x00 borrow with carry=1 (carry must stay 1)";
+
+        reg_b_in <= x"00";
+        opcode <= OP_SUB;          -- DCR = SUB in is_inr_dcr mode
+        is_inr_dcr <= '1';
+        carry_in <= '1';
+        strobe_enable;
+
+        if result(7 downto 0) /= x"FF" then
+            report "  ERROR: DCR result should be 0xFF, got 0x" & to_hstring(result(7 downto 0)) severity error;
+            errors := errors + 1;
+        end if;
+        if flag_carry /= '1' then
+            report "  ERROR: DCR borrow clobbered carry (should stay 1)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: DCR borrow preserved carry=1";
+        end if;
+
+        is_inr_dcr <= '0';
+        carry_in <= '0';
+
+        -- Test 15: Disabled ALU
+        report "";
+        report "Test 15: Enable = 0 (ALU disabled)";
 
         accumulator_in <= x"FF";
         reg_b_in <= x"FF";
