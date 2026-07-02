@@ -95,6 +95,7 @@ architecture rtl of b8008_monitor_top is
             run_enable  : in std_logic;
             interrupt   : in std_logic;
             int_vector  : in std_logic_vector(2 downto 0);
+            ready_in    : in std_logic := '1';
             phi1_out    : out std_logic;
             phi2_out    : out std_logic;
             sync_out    : out std_logic;
@@ -253,6 +254,7 @@ architecture rtl of b8008_monitor_top is
     signal reset_sync   : std_logic_vector(2 downto 0) := (others => '1');
     signal reset_sw     : std_logic;
     signal reset_int    : std_logic;
+    signal ready_sync   : std_logic_vector(1 downto 0) := "00";  -- rest = run
 
     -- CPU signals
     signal phi1         : std_logic;
@@ -378,6 +380,16 @@ begin
     end process;
 
     reset_sw <= reset_sync(2);
+
+    -- sw(6) = READY hold. DIP resting level is '0' (same as sw(1)'s
+    -- resting state), so resting = run; flip sw(6) to '1' to park the
+    -- CPU in the WAIT state, flip back to resume exactly where it stopped.
+    ready_hold : process(clk_sys)
+    begin
+        if rising_edge(clk_sys) then
+            ready_sync <= ready_sync(0) & sw(6);
+        end if;
+    end process;
     -- Debug controller only sees POR and switch, not its own reset request
     -- This prevents reset feedback loop
     reset_int <= por_active or reset_sw or dbg_reset_request;
@@ -558,6 +570,7 @@ begin
             run_enable  => dbg_run_enable,    -- Debug hold: '0' freezes phi state machine
             interrupt   => bootstrap_int,
             int_vector  => "000",  -- RST 0 for bootstrap
+            ready_in    => not ready_sync(1),  -- sw(6) flipped to '1' = WAIT
             phi1_out    => phi1,
             phi2_out    => phi2,
             sync_out    => sync_sig,
