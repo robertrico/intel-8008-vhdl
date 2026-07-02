@@ -45,6 +45,19 @@ Validation:
 
 ## Gap 3 — 8-level address-stack wraparound (software only)
 
+**FINDING (2026-07-02, during implementation):** b8008 does NOT match the
+8008 here. Real silicon keeps the PC inside the 8 address-stack registers
+(7 usable return slots; the 8th nested CALL wraps onto the oldest context).
+b8008 has a separate `program_counter` block plus 8 return-only stack slots,
+so all 8 nested CALLs unwind cleanly — one level deeper than a real 8008,
+different wrap semantics. Proven by `stackwrap_test_as` (RTL sim) against
+the emulator's faithful PC-in-stack model. The tests below were converted
+to CHARACTERIZERS: they assert b8008's current behavior (regression green)
+and document the real-8008 signature, flipping expectations is a one-line
+change if a PC-in-stack re-architecture is ever approved. **That
+re-architecture is a user decision — it restructures the CPU core (Intel's
+own block diagram has PC inside the address stack).**
+
 `stackwrap_ram.asm`: nest CALLs 9 deep. The 8-slot stack (PC + 7 return
 slots) silently overwrites the oldest entry per spec. Unwind with RETs,
 printing a marker at each level; the deepest-out return lands at the

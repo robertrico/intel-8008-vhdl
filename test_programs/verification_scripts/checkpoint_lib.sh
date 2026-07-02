@@ -87,6 +87,26 @@ get_checkpoint() {
 }
 
 # ============================================================================
+# assert_checkpoint_absent - Assert a checkpoint ID never fired
+# ============================================================================
+# Arguments:
+#   $1 - Checkpoint ID that must NOT appear in the log
+assert_checkpoint_absent() {
+    local id="$1"
+    echo "--- Checkpoint $id (must be absent) ---"
+    ((TOTAL_ASSERTIONS++))
+    local cp_line=$(get_checkpoint "$id")
+    if [ -n "$cp_line" ]; then
+        echo -e "  ${RED}[FAIL] Checkpoint $id fired but must not${NC}"
+        ((FAIL_COUNT++))
+        return 1
+    fi
+    echo -e "  ${GREEN}[PASS]${NC} checkpoint $id absent"
+    ((PASS_COUNT++))
+    return 0
+}
+
+# ============================================================================
 # assert_checkpoint - Assert values at a specific checkpoint
 # ============================================================================
 # Arguments:
