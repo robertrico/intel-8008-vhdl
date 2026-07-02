@@ -83,6 +83,26 @@ architecture rtl of b8008_monitor_top is
     constant USE_INTERNAL_ROM : boolean := true;
 
     --------------------------------------------------------------------------------
+    -- Component: int_button (front-panel interrupt from DIP switch)
+    --------------------------------------------------------------------------------
+    component int_button is
+        generic (
+            CLK_FREQ_HZ : integer := 25_000_000;
+            DEBOUNCE_MS : integer := 20
+        );
+        port (
+            clk        : in  std_logic;
+            reset      : in  std_logic;
+            sw_raw     : in  std_logic;
+            vector_sel : in  std_logic;
+            armed      : in  std_logic;
+            t1i_ack    : in  std_logic;
+            int_req    : out std_logic;
+            int_vector : out std_logic_vector(2 downto 0)
+        );
+    end component;
+
+    --------------------------------------------------------------------------------
     -- Component: b8008_top (CPU with external ROM and internal RAM)
     --------------------------------------------------------------------------------
     component b8008_top is
@@ -255,6 +275,12 @@ architecture rtl of b8008_monitor_top is
     signal reset_sw     : std_logic;
     signal reset_int    : std_logic;
     signal ready_sync   : std_logic_vector(1 downto 0) := "00";  -- rest = run
+
+    -- Front-panel interrupt (sw5 flip, sw7 vector)
+    signal t1i_ack_sig  : std_logic;
+    signal btn_int_req  : std_logic;
+    signal btn_int_vec  : std_logic_vector(2 downto 0);
+    signal cpu_int_vec  : std_logic_vector(2 downto 0);
 
     -- CPU signals
     signal phi1         : std_logic;
@@ -558,6 +584,32 @@ begin
     end process;
 
     --------------------------------------------------------------------------------
+    -- Front-panel interrupt: sw(5) flip = one interrupt, sw(7) = vector
+    --------------------------------------------------------------------------------
+    -- Armed only after bootstrap so a flip can never race the RST 0 jam.
+    -- The request latch clears on the CPU's T1I acknowledge (status 110,
+    -- same decode the bootstrap FSM uses).
+    t1i_ack_sig <= '1' when (s2_sig = '1' and s1_sig = '1' and s0_sig = '0') else '0';
+
+    u_int_button : int_button
+        generic map (
+            CLK_FREQ_HZ => 25_000_000,
+            DEBOUNCE_MS => 20
+        )
+        port map (
+            clk        => clk_sys,
+            reset      => reset_int,
+            sw_raw     => sw(5),
+            vector_sel => sw(7),
+            armed      => bootstrap_done,
+            t1i_ack    => t1i_ack_sig,
+            int_req    => btn_int_req,
+            int_vector => btn_int_vec
+        );
+
+    cpu_int_vec <= btn_int_vec when bootstrap_done = '1' else "000";
+
+    --------------------------------------------------------------------------------
     -- b8008 CPU System Instance
     --------------------------------------------------------------------------------
     u_system : b8008_top
@@ -568,8 +620,8 @@ begin
             clk_in      => clk_sys,            -- 25 MHz from on-chip PLL
             reset       => reset_int,
             run_enable  => dbg_run_enable,    -- Debug hold: '0' freezes phi state machine
-            interrupt   => bootstrap_int,
-            int_vector  => "000",  -- RST 0 for bootstrap
+            interrupt   => bootstrap_int or btn_int_req,
+            int_vector  => cpu_int_vec,  -- RST 0 for bootstrap, sw(7) pick after
             ready_in    => not ready_sync(1),  -- sw(6) flipped to '1' = WAIT
             phi1_out    => phi1,
             phi2_out    => phi2,

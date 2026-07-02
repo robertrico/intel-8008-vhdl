@@ -21,7 +21,7 @@ ROM_PATCH_FLOW := 1   # firmware reaches the bitstream via 'make rom-update', no
 # in the build rules' dependency graph (a post-include ALL_SRCS override is
 # parsed too late and edits to these files silently skip resynthesis).
 # ./src/*.vhdl (rom_4kx8_bram, b8008_monitor_top) come in via PROJECT_SRCS.
-EXTRA_PROJECT_SRCS := ../../src/components/usart.vhdl ../../src/components/b8008_usart.vhdl ../../src/components/debouncer.vhdl ../../src/b8008/debug_clock_control.vhdl
+EXTRA_PROJECT_SRCS := ../../src/b8008/int_button.vhdl ../../src/components/usart.vhdl ../../src/components/b8008_usart.vhdl ../../src/components/debouncer.vhdl ../../src/b8008/debug_clock_control.vhdl
 
 # Include common project rules
 include ../project.mk
