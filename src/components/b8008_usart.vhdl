@@ -65,10 +65,16 @@ architecture rtl of b8008_usart is
     signal rx_latch       : std_logic_vector(7 downto 0) := (others => '0');
     signal rx_ready       : std_logic := '0';
 
-    -- Falling edge detection for clearing ready flag
+    -- Rising edge detection for the read strobe
     signal io_port_read_d1   : std_logic := '0';
-    signal io_port_read_d2   : std_logic := '0';
-    signal io_port_num_latch : std_logic_vector(4 downto 0) := (others => '0');
+    -- Registered snapshot handed to the CPU. Captured atomically with the
+    -- flag pop at the read strobe's rising edge, so the value the CPU
+    -- samples cannot change mid-read and the flag state always matches the
+    -- data it describes. Kills both failure modes of the old falling-edge
+    -- clear: a byte arriving during the read can no longer be eaten (it
+    -- re-flags and waits for the next poll) and can no longer be handed
+    -- out twice.
+    signal rx_out_reg        : std_logic_vector(7 downto 0) := (others => '0');
 
 begin
 
@@ -121,44 +127,37 @@ begin
     -- use - the CPU should be polling fast enough to keep up.
     ----------------------------------------------------------------------------
     process(clk, rst)
-        variable clear_flag : std_logic;
     begin
         if rst = '1' then
-            rx_latch         <= (others => '0');
-            rx_ready         <= '0';
-            io_port_read_d1  <= '0';
-            io_port_read_d2  <= '0';
-            io_port_num_latch <= (others => '0');
+            rx_latch        <= (others => '0');
+            rx_ready        <= '0';
+            io_port_read_d1 <= '0';
+            rx_out_reg      <= (others => '0');
         elsif rising_edge(clk) then
-            -- Delay io_port_read to allow CPU to read data before clearing
-            -- The CPU reads during T3; we clear on falling edge (after T3 ends)
             io_port_read_d1 <= io_port_read;
-            io_port_read_d2 <= io_port_read_d1;
 
-            -- Latch port number when io_port_read goes high
-            if io_port_read = '1' and io_port_read_d1 = '0' then
-                io_port_num_latch <= io_port_num;
+            -- Read strobe rising edge for our port: snapshot flag+data for
+            -- the CPU and pop the flag in the same cycle. The strobe rises
+            -- at phi2 of T3; the CPU latches the bus later in T3, so it
+            -- always sees this fresh, frozen snapshot.
+            if io_port_read = '1' and io_port_read_d1 = '0' and
+               io_port_num(2 downto 0) = RX_PORT_NUM then
+                rx_out_reg <= rx_ready & rx_latch(6 downto 0);
+                rx_ready   <= '0';
             end if;
 
-            -- Determine if we should clear the flag this cycle
-            clear_flag := '0';
-            if io_port_read_d1 = '0' and io_port_read_d2 = '1' and
-               io_port_num_latch(2 downto 0) = RX_PORT_NUM then
-                clear_flag := '1';
-            end if;
-
-            -- Handle rx_ready flag updates
-            -- Priority: new byte arriving always sets the flag (even during clear)
+            -- New byte: latch it and set the flag. Deliberately AFTER the
+            -- pop above so a byte arriving in the same cycle as a read is
+            -- kept for the next poll (the snapshot already captured the
+            -- previous state).
             if usart_rx_valid = '1' then
                 rx_latch <= usart_rx_data;
                 rx_ready <= '1';
-            elsif clear_flag = '1' then
-                rx_ready <= '0';
             end if;
         end if;
     end process;
 
-    -- Output: Ready flag in bit 7, data in bits 6:0
-    rx_port_data <= rx_ready & rx_latch(6 downto 0);
+    -- CPU-facing value: the registered snapshot (flag in bit 7, data 6:0)
+    rx_port_data <= rx_out_reg;
 
 end architecture rtl;
