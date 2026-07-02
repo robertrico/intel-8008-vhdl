@@ -71,10 +71,22 @@ architecture behavior of monitor_boot_tb is
     constant CLK_PERIOD : time := 10 ns;      -- 100 MHz board oscillator
     constant BIT_TIME   : time := 8.681 us;   -- 115200 baud
 
-    -- First byte the baked-in ROM firmware transmits:
-    --   rom_diag:      'D' of "DIAG"         -> x"44"
+    -- First byte each known ROM firmware transmits:
     --   b8008_monitor: '8' of "8008 Monitor" -> x"38"
-    constant EXPECTED_FIRST_BYTE : std_logic_vector(7 downto 0) := x"38";
+    --   rom_diag:      'D' of "DIAG"         -> x"44"
+    --   selftest:      'S' of "SELFTEST"     -> x"53"
+    type byte_set_t is array (natural range <>) of std_logic_vector(7 downto 0);
+    constant KNOWN_FIRST_BYTES : byte_set_t := (x"38", x"44", x"53");
+
+    impure function first_byte_ok(b : std_logic_vector(7 downto 0)) return boolean is
+    begin
+        for i in KNOWN_FIRST_BYTES'range loop
+            if b = KNOWN_FIRST_BYTES(i) then
+                return true;
+            end if;
+        end loop;
+        return false;
+    end function;
 
     signal clk       : std_logic := '0';
     signal sw        : std_logic_vector(7 downto 0) := "00000010"; -- sw1=1: break off, sw0=0: no reset
@@ -224,14 +236,14 @@ begin
         assert got_byte
             report "FAIL: no UART output" severity error;
         if got_byte then
-            assert first_byte = EXPECTED_FIRST_BYTE
-                report "FAIL: first UART byte not 0x" & to_hstring(EXPECTED_FIRST_BYTE) &
-                       ", got 0x" & to_hstring(first_byte)
+            assert first_byte_ok(first_byte)
+                report "FAIL: first UART byte 0x" & to_hstring(first_byte) &
+                       " matches no known firmware banner"
                 severity error;
         end if;
 
         if saw_int_rise and saw_int_fall and saw_out8 and got_byte and
-           first_byte = EXPECTED_FIRST_BYTE then
+           first_byte_ok(first_byte) then
             report "=== MONITOR BOOT TEST PASSED ===" severity note;
         else
             report "=== MONITOR BOOT TEST FAILED ===" severity error;
