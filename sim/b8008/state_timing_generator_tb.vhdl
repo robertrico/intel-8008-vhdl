@@ -317,6 +317,55 @@ begin
 
         interrupt_pending <= '0';
 
+        -- Test 6: READY=0 parks the FSM in WAIT (status 000) between T2 and T3
+        report "";
+        report "Test 6: READY=0 -> WAIT after T2, resume to T3 on READY=1";
+
+        -- Currently in T1I; advance to T2
+        wait for T_CY * 2;
+        if state_t2 /= '1' then
+            report "  ERROR: Should be in T2 before READY test" severity error;
+            errors := errors + 1;
+        end if;
+
+        -- Drop READY while in T2: next transition must be WAIT, not T3
+        ready <= '0';
+        wait for T_CY * 2;
+
+        if state_t3 = '1' then
+            report "  ERROR: Entered T3 despite READY=0" severity error;
+            errors := errors + 1;
+        elsif (status_s2 /= '0' or status_s1 /= '0' or status_s0 /= '0') then
+            report "  ERROR: WAIT status should be 000, got " &
+                   std_logic'image(status_s2) & std_logic'image(status_s1) & std_logic'image(status_s0)
+                severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Parked in WAIT (status 000)";
+        end if;
+
+        -- Hold READY low: must stay in WAIT
+        wait for T_CY * 6;
+        if (status_s2 /= '0' or status_s1 /= '0' or status_s0 /= '0') then
+            report "  ERROR: Left WAIT while READY still low" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Held in WAIT while READY low";
+        end if;
+
+        -- Release READY: must resume to T3
+        ready <= '1';
+        wait for T_CY * 2;
+        if state_t3 /= '1' then
+            report "  ERROR: Should resume to T3 after READY=1" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Resumed to T3 after READY released";
+        end if;
+
+        -- Drain the rest of the machine cycle so nothing dangles
+        wait for T_CY * 8;
+
         -- Summary
         report "";
         report "========================================";

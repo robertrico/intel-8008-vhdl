@@ -56,7 +56,7 @@ end entity state_timing_generator;
 architecture rtl of state_timing_generator is
 
     -- State type
-    type state_t is (S_STOPPED, S_T1, S_T2, S_T3, S_T4, S_T5, S_T1I);
+    type state_t is (S_STOPPED, S_T1, S_T2, S_WAIT, S_T3, S_T4, S_T5, S_T1I);
     signal current_state : state_t := S_STOPPED;
     signal next_state : state_t;
 
@@ -85,13 +85,14 @@ begin
     -- T4:      S2=1, S1=1, S0=1 (binary 111 = 7)
     -- T5:      S2=1, S1=0, S0=1 (binary 101 = 5)
     -- T1I:     S2=1, S1=1, S0=0 (binary 110 = 6)
-    -- WAIT:    S2=0, S1=0, S0=0 (binary 000 = 0) - not a state, just default
+    -- WAIT:    S2=0, S1=0, S0=0 (binary 000 = 0) - S_WAIT is in none of the
+    --          three terms below, so the encoding falls out naturally
     status_s0 <= '1' when (current_state = S_STOPPED or current_state = S_T3 or current_state = S_T4 or current_state = S_T5) else '0';
     status_s1 <= '1' when (current_state = S_STOPPED or current_state = S_T1 or current_state = S_T4 or current_state = S_T1I) else '0';
     status_s2 <= '1' when (current_state = S_T2 or current_state = S_T4 or current_state = S_T5 or current_state = S_T1I) else '0';
 
     -- State advancement logic (combinational)
-    process(current_state, advance_state, interrupt_pending, instr_is_hlt_flag, transition_to_stopped, cycle_count)
+    process(current_state, advance_state, interrupt_pending, instr_is_hlt_flag, transition_to_stopped, cycle_count, ready)
     begin
         -- Default: stay in current state
         next_state <= current_state;
@@ -118,8 +119,20 @@ begin
                 end if;
 
             when S_T2 =>
-                -- T2 always goes to T3 (after 2 cycles)
+                -- T2 goes to T3, or parks in WAIT while READY is low
+                -- (real 8008: READY sampled at end of T2, WAIT stretches
+                -- the memory access until the slow device catches up)
                 if cycle_count = '1' then
+                    if ready = '0' then
+                        next_state <= S_WAIT;
+                    else
+                        next_state <= S_T3;
+                    end if;
+                end if;
+
+            when S_WAIT =>
+                -- Park until READY returns; status lines read 000 (WAIT)
+                if cycle_count = '1' and ready = '1' then
                     next_state <= S_T3;
                 end if;
 
@@ -183,19 +196,17 @@ begin
             current_state <= S_STOPPED;
             cycle_count <= '0';
         elsif rising_edge(clk) and phi2_falling = '1' then
-            -- Only advance if READY is high
-            if ready = '1' then
-                if cycle_count = '0' then
-                    -- First cycle of state, move to second cycle
-                    cycle_count <= '1';
-                else
-                    -- Second cycle of state, advance to next state and reset counter
-                    cycle_count <= '0';
-                    current_state <= next_state;
-                    report "STATE: " & state_t'image(current_state) & " -> " & state_t'image(next_state);
-                end if;
+            -- READY handling lives in the T2/WAIT arms of the next-state
+            -- logic (proper WAIT state, status 000), not as a global freeze
+            if cycle_count = '0' then
+                -- First cycle of state, move to second cycle
+                cycle_count <= '1';
+            else
+                -- Second cycle of state, advance to next state and reset counter
+                cycle_count <= '0';
+                current_state <= next_state;
+                report "STATE: " & state_t'image(current_state) & " -> " & state_t'image(next_state);
             end if;
-            -- If READY is low, we wait (stretch the current state)
         end if;
     end process;
 

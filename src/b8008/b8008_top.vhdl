@@ -38,6 +38,7 @@ entity b8008_top is
         run_enable  : in std_logic := '1';
         interrupt   : in std_logic;  -- Bootstrap interrupt (tie high after reset)
         int_vector  : in std_logic_vector(2 downto 0) := "000";  -- RST vector (0-7) to jam during T1I
+        ready_in    : in std_logic := '1';  -- READY: '0' parks the CPU in WAIT after T2
 
         -- Debug outputs
         phi1_out    : out std_logic;
@@ -356,7 +357,7 @@ begin
             s0_out      => s0_int,
             s1_out      => s1_int,
             s2_out      => s2_int,
-            ready_in            => '1',      -- Always ready (no wait states)
+            ready_in            => ready_in,
             interrupt           => interrupt,
             debug_reg_a         => debug_reg_a,
             debug_reg_b         => debug_reg_b,

@@ -29,6 +29,7 @@ architecture testbench of b8008_top_tb is
             reset       : in  std_logic;
             interrupt   : in  std_logic;
             int_vector  : in  std_logic_vector(2 downto 0) := "000";
+            ready_in    : in  std_logic := '1';
             phi1_out    : out std_logic;
             phi2_out    : out std_logic;
             sync_out    : out std_logic;
@@ -91,6 +92,8 @@ architecture testbench of b8008_top_tb is
     signal clk_in      : std_logic := '0';
     signal reset       : std_logic := '1';
     signal interrupt   : std_logic := '0';
+    signal ready_in    : std_logic := '1';
+    signal saw_wait_status : boolean := false;
     signal int_vector  : std_logic_vector(2 downto 0) := "000";
     signal phi1_out    : std_logic;
     signal phi2_out    : std_logic;
@@ -157,6 +160,7 @@ begin
             clk_in      => clk_in,
             reset       => reset,
             interrupt   => interrupt,
+            ready_in    => ready_in,
             int_vector  => int_vector,
             phi1_out    => phi1_out,
             phi2_out    => phi2_out,
@@ -275,6 +279,24 @@ begin
         -- Monitor for much longer to let program complete
         for i in 1 to 200000 loop
             wait for 100 ns;
+
+            -- READY/WAIT exercise: drop ready mid-run for 10 us. The CPU
+            -- must park in WAIT (status 000) and the program must still
+            -- finish with correct results (verification scripts check).
+            if i = 5000 then
+                ready_in <= '0';
+                report "READY dropped - CPU should park in WAIT";
+            elsif i = 5500 then
+                assert saw_wait_status
+                    report "ERROR: never saw WAIT status (000) while READY low"
+                    severity error;
+                ready_in <= '1';
+                report "READY restored - CPU should resume";
+            elsif i > 5000 and i < 5500 then
+                if s2_out = '0' and s1_out = '0' and s0_out = '0' then
+                    saw_wait_status <= true;
+                end if;
+            end if;
 
             -- Report state periodically with debug info in clear format
             if i mod 100 = 0 then

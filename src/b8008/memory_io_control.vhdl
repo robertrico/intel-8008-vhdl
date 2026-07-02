@@ -326,8 +326,12 @@ begin
         -- PC Control Logic (Two-stage increment per 1972 datasheet)
         -- T1: Increment lower byte after address bits sent out
         -- T2: If carry occurred, increment upper byte
-        -- Hold PC if ready signal is low or interrupt pending
-        if ready_status = '0' or interrupt_pending = '1' then
+        -- Hold PC if interrupt pending (RST jam must not advance PC).
+        -- READY no longer gates the PC: the state machine parks in a real
+        -- WAIT state between T2 and T3, so no fetch state is active while
+        -- not-ready. The old ready_status hold was a relic of the global
+        -- freeze design and caused a double-fetch once WAIT was added.
+        if interrupt_pending = '1' then
             pc_hold <= '1';
         else
             -- T1 FIRST half: Increment lower byte BEFORE sending address
