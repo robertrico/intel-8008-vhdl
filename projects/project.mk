@@ -221,7 +221,10 @@ endif
 # SYNTHESIZE - GHDL to Verilog, Yosys to JSON
 # ============================================================================
 # Verilog depends on VHDL sources AND the .mem file (ROM contents baked in)
-ifdef ASM
+# Projects using the ecpbram patch flow (ROM_PATCH_FLOW=1) do not bake the
+# .mem into synthesis - firmware reaches the bitstream via 'make rom-update',
+# so a firmware change must NOT trigger resynthesis.
+ifeq ($(if $(ASM),$(if $(ROM_PATCH_FLOW),,asm)),asm)
 $(VERILOG): $(ALL_SRCS) $(MEM_FILE) | create-build-dir
 else
 $(VERILOG): $(ALL_SRCS) | create-build-dir

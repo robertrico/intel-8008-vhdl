@@ -15,6 +15,7 @@ PROJECT := b8008_monitor_top
 TOP := b8008_monitor_top
 LPF := constraints/b8008_monitor.lpf
 ASM := b8008_monitor.asm
+ROM_PATCH_FLOW := 1   # firmware reaches the bitstream via 'make rom-update', not synthesis
 
 # Include common project rules
 include ../project.mk

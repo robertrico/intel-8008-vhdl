@@ -389,6 +389,71 @@ send_help:
         out 9
         call char_delay
 
+        ; "  W addr,val: Write" + CR/LF
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,'W'
+        out 9
+        call char_delay
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,'a'
+        out 9
+        call char_delay
+        mvi a,'d'
+        out 9
+        call char_delay
+        mvi a,'d'
+        out 9
+        call char_delay
+        mvi a,'r'
+        out 9
+        call char_delay
+        mvi a,','
+        out 9
+        call char_delay
+        mvi a,'v'
+        out 9
+        call char_delay
+        mvi a,'a'
+        out 9
+        call char_delay
+        mvi a,'l'
+        out 9
+        call char_delay
+        mvi a,':'
+        out 9
+        call char_delay
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,'W'
+        out 9
+        call char_delay
+        mvi a,'r'
+        out 9
+        call char_delay
+        mvi a,'i'
+        out 9
+        call char_delay
+        mvi a,'t'
+        out 9
+        call char_delay
+        mvi a,'e'
+        out 9
+        call char_delay
+        mvi a,CR
+        out 9
+        call char_delay
+        mvi a,LF
+        out 9
+        call char_delay
+
         ret
 
 ; ================================================================================
@@ -448,6 +513,8 @@ buffer_full:
 ;
 ; Commands:
 ;   H or h - Show help menu
+;   D addr[,n] - Dump memory
+;   W addr,val - Write byte to memory (readback-verified)
 ;
 ; Destroys: A, H, L
 ;
@@ -472,6 +539,14 @@ parse_command:
         ; Check for 'd'
         cpi 'd'
         jz cmd_dump
+
+        ; Check for 'W'
+        cpi 'W'
+        jz cmd_write
+
+        ; Check for 'w'
+        cpi 'w'
+        jz cmd_write
 
         ; Unknown command - just return
         ret
@@ -559,6 +634,36 @@ dump_no_carry:
 
 dump_done:
         ret
+
+; ================================================================================
+; CMD_WRITE - Write a byte to memory
+; ================================================================================
+; Format: W addr,val   (both hex, e.g. "W 2030,AA")
+;
+; Reuses parse_dump_args: address lands in DUMP_ADDR_H/L, value in DUMP_COUNT.
+; After storing, tail-jumps into the dump printer with count=1 so the response
+; line ("ADDR - VV") is a genuine readback of the written location.
+;
+cmd_write:
+        call parse_dump_args    ; DUMP_ADDR_H/L = target, DUMP_COUNT = value
+
+        ; Fetch value then target, store (no calls in between - B stays live)
+        mvi h,20h
+        mvi l,22h               ; DUMP_COUNT holds the value byte
+        mov b,m
+        mvi l,20h               ; DUMP_ADDR_H
+        mov d,m
+        inr l                   ; DUMP_ADDR_L
+        mov e,m
+        mov h,d
+        mov l,e
+        mov m,b                 ; Write the byte
+
+        ; Readback verify: print "ADDR - VV" via the dump path
+        mvi h,20h
+        mvi l,22h
+        mvi m,1                 ; DUMP_COUNT = 1
+        jmp dump_loop_start
 
 ; ================================================================================
 ; PARSE_DUMP_ARGS - Parse address and optional count from command buffer
