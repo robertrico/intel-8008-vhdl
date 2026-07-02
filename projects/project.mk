@@ -91,7 +91,7 @@ B8008_SRCS := \
 	$(SRC_DIR)/register_alu_control.vhdl \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl \
-	$(COMP_DIR)/legacy/ram_1kx8.vhdl \
+	$(SRC_DIR)/ram_1kx8_sync.vhdl \
 	$(SRC_DIR)/b8008_top.vhdl
 
 # Project sources (top-level wrapper)

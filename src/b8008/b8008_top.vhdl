@@ -151,16 +151,15 @@ architecture structural of b8008_top is
         );
     end component;
 
-    -- Component: 1KB RAM
-    component ram_1kx8 is
+    -- Component: 1KB RAM (synchronous read -> block RAM)
+    component ram_1kx8_sync is
         port (
-            CLK          : in  std_logic;
-            ADDR         : in  std_logic_vector(9 downto 0);
-            DATA_IN      : in  std_logic_vector(7 downto 0);
-            DATA_OUT     : out std_logic_vector(7 downto 0);
-            RW_N         : in  std_logic;
-            CS_N         : in  std_logic;
-            DEBUG_BYTE_0 : out std_logic_vector(7 downto 0)
+            CLK      : in  std_logic;
+            ADDR     : in  std_logic_vector(9 downto 0);
+            DATA_IN  : in  std_logic_vector(7 downto 0);
+            DATA_OUT : out std_logic_vector(7 downto 0);
+            RW_N     : in  std_logic;
+            CS_N     : in  std_logic
         );
     end component;
 
@@ -369,16 +368,29 @@ begin
     -- Clocked on clk_in now (was phi1); CS_N + RW_N already gate writes
     -- to PCW/T3 windows, so multiple clk edges during that window just
     -- rewrite the same value.
-    u_ram : ram_1kx8
+    u_ram : ram_1kx8_sync
         port map (
-            CLK          => clk_in,
-            ADDR         => latched_address(9 downto 0),
-            DATA_IN      => ram_data_in,
-            DATA_OUT     => ram_data_out,
-            RW_N         => ram_rw_n,
-            CS_N         => ram_cs_n,
-            DEBUG_BYTE_0 => ram_byte_0
+            CLK      => clk_in,
+            ADDR     => latched_address(9 downto 0),
+            DATA_IN  => ram_data_in,
+            DATA_OUT => ram_data_out,
+            RW_N     => ram_rw_n,
+            CS_N     => ram_cs_n
         );
+
+    -- Shadow of RAM location 0 for the ram_byte_0 debug output (the block RAM
+    -- has no second read port; testbenches assert on this signal)
+    process(clk_in)
+    begin
+        if rising_edge(clk_in) then
+            if reset = '1' then
+                ram_byte_0 <= (others => '0');
+            elsif ram_cs_n = '0' and ram_rw_n = '0' and
+                  latched_address(9 downto 0) = "0000000000" then
+                ram_byte_0 <= ram_data_in;
+            end if;
+        end if;
+    end process;
 
     -- ========================================================================
     -- ADDRESS DECODE LOGIC

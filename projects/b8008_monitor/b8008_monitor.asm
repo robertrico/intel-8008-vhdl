@@ -94,6 +94,16 @@ command_loop:
         cpi LF
         jz handle_enter
 
+        ; Backspace (Ctrl-H) or DEL: remove last buffered character
+        cpi 08h
+        jz handle_backspace
+        cpi 7Fh
+        jz handle_backspace
+
+        ; Ignore all other control characters (< 0x20)
+        cpi 20h
+        jc command_loop
+
         ; Regular character - add to buffer
         call add_to_buffer      ; C = char
 
@@ -102,6 +112,34 @@ command_loop:
 
         ; Echo the character back
         mov a,c
+        out 9
+        call char_delay
+
+        jmp command_loop
+
+; ================================================================================
+; HANDLE_BACKSPACE - Remove last character from buffer, erase it on terminal
+; ================================================================================
+handle_backspace:
+        ; Ignore if the buffer is empty
+        mvi h,20h
+        mvi l,00h               ; CMD_LEN
+        mov a,m
+        ora a
+        jz command_loop
+
+        ; Decrement buffer length
+        sui 1
+        mov m,a
+
+        ; Erase on terminal: BS, space, BS
+        mvi a,08h
+        out 9
+        call char_delay
+        mvi a,' '
+        out 9
+        call char_delay
+        mvi a,08h
         out 9
         call char_delay
 
@@ -519,8 +557,14 @@ buffer_full:
 ; Destroys: A, H, L
 ;
 parse_command:
-        ; Point HL to first character in buffer (CMD_BUF = 0x1001)
+        ; Empty buffer: nothing to parse (avoids dispatching on stale bytes)
         mvi h,20h
+        mvi l,00h               ; CMD_LEN
+        mov a,m
+        ora a
+        rz
+
+        ; Point HL to first character in buffer (CMD_BUF = 0x2001)
         mvi l,01h
         mov a,m                 ; Load first character
 
