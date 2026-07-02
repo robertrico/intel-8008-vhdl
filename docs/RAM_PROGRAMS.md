@@ -129,3 +129,25 @@ prints the monitor's `.` per record and the OK/ERR verdict, and refuses to
 proceed if any record failed - just rerun it (records are
 absolute-addressed, reloading is idempotent). `D addr,n` dumps memory to
 spot-check the load; `W addr,val` patches single bytes.
+
+## Front-panel switches (SW3 DIP bank)
+
+DIP resting level is '0'; "flip" means toggling the switch to the other
+position (the interrupt trigger fires on ANY debounced change).
+
+| Switch | Function |
+|---|---|
+| sw(5) | Interrupt trigger: any flip = one debounced interrupt (armed after bootstrap) |
+| sw(6) | READY hold: flip to '1' = CPU parked in the WAIT state, back to '0' = resume |
+| sw(7) | Interrupt vector: '0' = RST 5, '1' = RST 7 (sampled when the flip is accepted) |
+
+Interrupt test programs (install their own RST 5/7 slot handlers):
+
+- `hltwake_ram` - `G 2100`, prints `SLEEP`, HLTs; flip sw(5) ->
+  `W5RESUM` (or `W7RESUM` with sw(7) on) and back to the monitor.
+- `intstorm_ram` - `G 2100`, streams a hex counter; each sw(5) flip
+  interleaves a `!` with the counter sequence unbroken. Any typed
+  character exits to the monitor.
+- `stackwrap_ram` - `G 2100`, no switches: prints which address-stack
+  architecture the CPU has (`STK 12345678 WRAP OK` = real-8008 wrap,
+  `STK 123456788RET` = b8008's current split-PC design).

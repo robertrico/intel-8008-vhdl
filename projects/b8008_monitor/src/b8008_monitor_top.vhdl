@@ -10,6 +10,13 @@
 --   OUT 8:  LED bank (directly active, accent active low)
 --   OUT 9:  UART TX - sends byte immediately at 115200 baud
 --
+-- Front-panel switches (DIP resting level '0'):
+--   sw(0):  reset          sw(1): '1' = post-bootstrap breakpoint off
+--   sw(2..4): LED debug capture modes (data / addr low / addr high)
+--   sw(5):  interrupt trigger - any debounced flip = one interrupt
+--   sw(6):  READY hold - '1' parks the CPU in WAIT, '0' resumes
+--   sw(7):  interrupt vector select - '0' = RST 5, '1' = RST 7
+--
 -- UART Settings:
 --   Baud Rate: 115200
 --   Format: 8N1 (8 data bits, no parity, 1 stop bit)
