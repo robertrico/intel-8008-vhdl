@@ -17,13 +17,14 @@ LPF := constraints/b8008_monitor.lpf
 ASM := b8008_monitor.asm
 ROM_PATCH_FLOW := 1   # firmware reaches the bitstream via 'make rom-update', not synthesis
 
+# USART peripherals + debug controller. Set BEFORE the include so they land
+# in the build rules' dependency graph (a post-include ALL_SRCS override is
+# parsed too late and edits to these files silently skip resynthesis).
+# ./src/*.vhdl (rom_4kx8_bram, b8008_monitor_top) come in via PROJECT_SRCS.
+EXTRA_PROJECT_SRCS := ../../src/components/usart.vhdl ../../src/components/b8008_usart.vhdl ../../src/components/debouncer.vhdl ../../src/b8008/debug_clock_control.vhdl
+
 # Include common project rules
 include ../project.mk
-
-# Override ALL_SRCS to add USART peripherals
-# project.mk's PROJECT_SRCS only picks up ./src/*.vhdl, so we need to add usart components
-# Note: b8008_usart wraps usart with 8008-specific handshaking
-ALL_SRCS := $(B8008_SRCS) $(COMP_DIR)/usart.vhdl $(COMP_DIR)/b8008_usart.vhdl $(COMP_DIR)/debouncer.vhdl $(SRC_DIR)/debug_clock_control.vhdl ./src/rom_4kx8_bram.vhdl ./src/b8008_monitor_top.vhdl
 
 # ============================================================================
 # Internal-ROM firmware patching (ecpbram flow)

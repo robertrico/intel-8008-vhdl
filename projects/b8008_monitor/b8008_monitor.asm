@@ -15,16 +15,43 @@
 ;
 ; Connect FTDI USB-to-serial adapter and open terminal at 115200 baud.
 ; Local echo should be OFF in terminal (the 8008 will echo characters).
+;
+; Commands:
+;   H          - help menu
+;   D addr[,n] - dump memory
+;   W addr,val - write byte to memory (readback-verified)
+;   L          - load Intel HEX into RAM (paced sender required; ESC ends)
+;   G addr     - run from addr (via JMP trampoline in RAM)
+;
+; Memory map: ROM 0x0000-0x1FFF, RAM 0x2000-0x3FFF (8KB).
+; Loaded programs use 0x2000-0x3EFF; the monitor owns page 0x3F00-0x3FFF.
 ; ================================================================================
 
         cpu 8008new
         org 0000h
 
 ; ================================================================================
-; RST 0 VECTOR - REQUIRED Entry Point
+; RST VECTORS
 ; ================================================================================
+; RST 0 boots the monitor. RST 1-7 forward into RAM slots so programs
+; loaded with L can use RST instructions (see RSTVEC_BASE below).
 rst0_vector:
         jmp main                ; Jump to main program
+
+        org 0008h
+        jmp 3FC8h               ; RST 1 -> RAM slot
+        org 0010h
+        jmp 3FD0h               ; RST 2 -> RAM slot
+        org 0018h
+        jmp 3FD8h               ; RST 3 -> RAM slot
+        org 0020h
+        jmp 3FE0h               ; RST 4 -> RAM slot
+        org 0028h
+        jmp 3FE8h               ; RST 5 -> RAM slot
+        org 0030h
+        jmp 3FF0h               ; RST 6 -> RAM slot
+        org 0038h
+        jmp 3FF8h               ; RST 7 -> RAM slot
 
 ; ================================================================================
 ; CONSTANTS
@@ -33,15 +60,37 @@ CR      equ     0Dh             ; Carriage return
 LF      equ     0Ah             ; Line feed
 RX_READY equ    80h             ; Bit 7 mask for RX ready flag
 
-; Command buffer (in RAM, which starts at 0x1000)
-CMD_LEN equ     2000h           ; Buffer length storage (1 byte)
-CMD_BUF equ     2001h           ; Command buffer start address (16 bytes: 0x2001-0x2010)
+; Monitor variables live in the TOP page of the 8KB RAM (0x3F00-0x3FFF) so
+; that programs loaded with L can use 0x2000-0x3EFF freely.
+CMD_LEN equ     3F00h           ; Buffer length storage (1 byte)
+CMD_BUF equ     3F01h           ; Command buffer start address (16 bytes: 0x3F01-0x3F10)
 CMD_MAX equ     16              ; Maximum command length
 
 ; Dump command variables (RAM)
-DUMP_ADDR_H equ 2020h           ; Dump address high byte
-DUMP_ADDR_L equ 2021h           ; Dump address low byte
-DUMP_COUNT  equ 2022h           ; Dump byte count (1-255, 0 means 1)
+DUMP_ADDR_H equ 3F20h           ; Dump address high byte
+DUMP_ADDR_L equ 3F21h           ; Dump address low byte
+DUMP_COUNT  equ 3F22h           ; Dump byte count (1-255, 0 means 1)
+
+; Intel HEX loader variables (RAM)
+HEX_CNT     equ 3F30h           ; Remaining data bytes in current record
+HEX_ADDR_H  equ 3F31h           ; Load address high byte
+HEX_ADDR_L  equ 3F32h           ; Load address low byte
+HEX_TYPE    equ 3F33h           ; Record type (00=data, 01=EOF)
+HEX_SUM     equ 3F34h           ; Running checksum (must be 0 after cksum byte)
+HEX_ERRS    equ 3F35h           ; Error count for the whole transfer
+
+; G command trampoline: "JMP addr" is built here then executed
+; (the 8008 has no indirect jump)
+TRAMP       equ 3F80h
+
+; RST vector forwarding: RST n calls ROM address n*8, which the monitor
+; owns. Each ROM vector holds "jmp RSTVEC_BASE + n*8" so loaded programs
+; can install their own handlers in RAM (8-byte slots, mirroring the real
+; 8008 vector spacing). Uninstalled slots read as 0x00 = HLT: a stray RST
+; freezes the CPU instead of running wild.
+RSTVEC_BASE equ 3FC0h           ; slot for RST n at RSTVEC_BASE + n*8
+                                ; RST1=3FC8 RST2=3FD0 RST3=3FD8 RST4=3FE0
+                                ; RST5=3FE8 RST6=3FF0 RST7=3FF8
 
 ; ================================================================================
 ; MAIN PROGRAM
@@ -122,8 +171,8 @@ command_loop:
 ; ================================================================================
 handle_backspace:
         ; Ignore if the buffer is empty
-        mvi h,20h
-        mvi l,00h               ; CMD_LEN
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,CMD_LEN&0FFh               ; CMD_LEN
         mov a,m
         ora a
         jz command_loop
@@ -492,6 +541,11 @@ send_help:
         out 9
         call char_delay
 
+        ; "  L: Load HEX" / "  G addr: Go" lines (new commands use strings)
+        mvi h,(msg_help_lg>>8)&0FFh
+        mvi l,msg_help_lg&0FFh
+        call send_string
+
         ret
 
 ; ================================================================================
@@ -500,8 +554,8 @@ send_help:
 ; Destroys: A, H, L
 ;
 clear_buffer:
-        mvi h,20h               ; CMD_LEN high byte
-        mvi l,00h               ; CMD_LEN low byte
+        mvi h,(CMD_LEN>>8)&0FFh               ; CMD_LEN high byte
+        mvi l,CMD_LEN&0FFh               ; CMD_LEN low byte
         mvi m,0                 ; Store 0 to buffer length
         ret
 
@@ -514,8 +568,8 @@ clear_buffer:
 ;
 add_to_buffer:
         ; Load current buffer length
-        mvi h,20h
-        mvi l,00h               ; Point to CMD_LEN (0x1000)
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,CMD_LEN&0FFh               ; Point to CMD_LEN (0x1000)
         mov a,m                 ; A = current length
 
         ; Check if buffer is full
@@ -531,7 +585,7 @@ add_to_buffer:
         mov m,c                 ; Store character at buffer[length]
 
         ; Increment and save new length
-        mvi l,00h               ; Point back to CMD_LEN (0x1000)
+        mvi l,CMD_LEN&0FFh               ; Point back to CMD_LEN (0x1000)
         mov a,d                 ; Get saved length
         adi 1                   ; Increment
         mov m,a                 ; Store new length
@@ -558,14 +612,14 @@ buffer_full:
 ;
 parse_command:
         ; Empty buffer: nothing to parse (avoids dispatching on stale bytes)
-        mvi h,20h
-        mvi l,00h               ; CMD_LEN
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,CMD_LEN&0FFh               ; CMD_LEN
         mov a,m
         ora a
         rz
 
         ; Point HL to first character in buffer (CMD_BUF = 0x2001)
-        mvi l,01h
+        mvi l,CMD_BUF&0FFh
         mov a,m                 ; Load first character
 
         ; Check for 'H'
@@ -592,6 +646,22 @@ parse_command:
         cpi 'w'
         jz cmd_write
 
+        ; Check for 'L'
+        cpi 'L'
+        jz cmd_load
+
+        ; Check for 'l'
+        cpi 'l'
+        jz cmd_load
+
+        ; Check for 'G'
+        cpi 'G'
+        jz cmd_go
+
+        ; Check for 'g'
+        cpi 'g'
+        jz cmd_go
+
         ; Unknown command - just return
         ret
 
@@ -613,8 +683,8 @@ cmd_dump:
         call parse_dump_args    ; Sets DUMP_ADDR_H/L and DUMP_COUNT
 
         ; Get count (0 means 1)
-        mvi h,20h
-        mvi l,22h               ; DUMP_COUNT
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_COUNT&0FFh               ; DUMP_COUNT
         mov a,m
         ora a                   ; Check if zero
         jnz dump_loop_start
@@ -623,8 +693,8 @@ cmd_dump:
 
 dump_loop_start:
         ; Load address into DE (we'll use HL for memory access)
-        mvi h,20h
-        mvi l,20h               ; DUMP_ADDR_H
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_ADDR_H&0FFh               ; DUMP_ADDR_H
         mov d,m                 ; D = high byte
         inr l
         mov e,m                 ; E = low byte
@@ -656,8 +726,8 @@ dump_loop:
         call send_hex_byte
 
         ; Decrement count
-        mvi h,20h
-        mvi l,22h               ; DUMP_COUNT
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_COUNT&0FFh               ; DUMP_COUNT
         mov a,m
         sui 1                   ; Decrement (8008 has no DCR A)
         mov m,a
@@ -692,10 +762,10 @@ cmd_write:
         call parse_dump_args    ; DUMP_ADDR_H/L = target, DUMP_COUNT = value
 
         ; Fetch value then target, store (no calls in between - B stays live)
-        mvi h,20h
-        mvi l,22h               ; DUMP_COUNT holds the value byte
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_COUNT&0FFh               ; DUMP_COUNT holds the value byte
         mov b,m
-        mvi l,20h               ; DUMP_ADDR_H
+        mvi l,DUMP_ADDR_H&0FFh               ; DUMP_ADDR_H
         mov d,m
         inr l                   ; DUMP_ADDR_L
         mov e,m
@@ -704,10 +774,226 @@ cmd_write:
         mov m,b                 ; Write the byte
 
         ; Readback verify: print "ADDR - VV" via the dump path
-        mvi h,20h
-        mvi l,22h
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_COUNT&0FFh
         mvi m,1                 ; DUMP_COUNT = 1
         jmp dump_loop_start
+
+; ================================================================================
+; CMD_GO - Jump to an address
+; ================================================================================
+; Format: G addr   (hex, e.g. "G 2000")
+;
+; The 8008 has no indirect jump, so build "JMP addr" at TRAMP (0x3F80) in RAM
+; and jump to it. Reuses parse_dump_args: the target lands in DUMP_ADDR_H/L.
+; No return - the loaded program owns the CPU (jmp 0 restarts the monitor).
+;
+cmd_go:
+        call parse_dump_args    ; DUMP_ADDR_H/L = target address
+
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_ADDR_H&0FFh               ; DUMP_ADDR_H
+        mov d,m                 ; D = target high
+        inr l
+        mov e,m                 ; E = target low
+
+        mvi l,TRAMP&0FFh               ; TRAMP (0x3F80)
+        mvi m,44h               ; JMP opcode
+        inr l
+        mov m,e                 ; target low byte
+        inr l
+        mov m,d                 ; target high byte
+
+        jmp TRAMP               ; execute the trampoline
+
+; ================================================================================
+; CMD_LOAD - Load Intel HEX records from the UART into memory
+; ================================================================================
+; Streams records directly from the UART (the 16-byte command buffer is far
+; too small for a HEX line). Characters outside records are ignored, so CR/LF
+; between records is fine. ESC ends the transfer at any point between records.
+;
+; Record: ":llaaaatt<data>cc" - ll count, aaaa address, tt type, cc checksum.
+;   type 00 = data (stored at aaaa), type 01 = EOF, others consumed + ignored.
+; Running sum of all record bytes including cc must be 0 (mod 256); a bad
+; checksum or a bad hex digit counts an error and resyncs at the next ':'.
+; Prints '.' per good data record, '?' per bad record, then OK or ERR n.
+;
+; The sender must pace characters (~2 ms apart): the 8008 polls the USART
+; and cannot take back-to-back characters at 115200 baud. Use send_hex.py.
+;
+; Destroys: A, B, C, D, E, H, L
+;
+cmd_load:
+        ; Clear the error counter
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,HEX_ERRS&0FFh               ; HEX_ERRS
+        mvi m,0
+
+        ; Announce load mode
+        mvi h,(msg_load>>8)&0FFh
+        mvi l,msg_load&0FFh
+        call send_string
+
+hexload_rec:
+        call uart_rx_wait       ; A = next character
+        cpi 1Bh                 ; ESC ends the transfer
+        jz hexload_end
+        cpi ':'
+        jnz hexload_rec         ; ignore everything between records
+
+        ; Start of record: clear the running checksum
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,HEX_SUM&0FFh               ; HEX_SUM
+        mvi m,0
+
+        call get_hex_byte       ; byte count (get_hex_byte leaves H=3Fh)
+        mvi l,HEX_CNT&0FFh               ; HEX_CNT
+        mov m,a
+        call get_hex_byte       ; address high byte
+        mvi l,HEX_ADDR_H&0FFh               ; HEX_ADDR_H
+        mov m,a
+        call get_hex_byte       ; address low byte
+        mvi l,HEX_ADDR_L&0FFh               ; HEX_ADDR_L
+        mov m,a
+        call get_hex_byte       ; record type
+        mvi l,HEX_TYPE&0FFh               ; HEX_TYPE
+        mov m,a
+
+hexload_data:
+        mvi l,HEX_CNT&0FFh               ; HEX_CNT
+        mov a,m
+        ora a
+        jz hexload_cksum        ; all data bytes consumed
+        sui 1
+        mov m,a
+
+        call get_hex_byte       ; data byte in A and C
+
+        ; Only record type 00 stores to memory; others are consumed
+        mvi l,HEX_TYPE&0FFh               ; HEX_TYPE
+        mov a,m
+        ora a
+        jnz hexload_data
+
+        ; Store C at [HEX_ADDR] and increment the address
+        mvi l,HEX_ADDR_H&0FFh               ; HEX_ADDR_H
+        mov d,m
+        inr l
+        mov e,m
+        mov h,d
+        mov l,e
+        mov m,c                 ; write the byte
+        inr e
+        jnz hexload_stadr
+        inr d
+hexload_stadr:
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,HEX_ADDR_H&0FFh               ; HEX_ADDR_H
+        mov m,d
+        inr l
+        mov m,e
+        jmp hexload_data
+
+hexload_cksum:
+        call get_hex_byte       ; checksum byte folds into HEX_SUM
+        mvi l,HEX_SUM&0FFh               ; HEX_SUM (H=3Fh after get_hex_byte)
+        mov a,m
+        ora a
+        jz hexload_ckok
+
+        ; Bad checksum: count it, mark it, resync at next ':'
+        mvi l,HEX_ERRS&0FFh               ; HEX_ERRS
+        mov a,m
+        adi 1
+        mov m,a
+        mvi a,'?'
+        out 9
+        call char_delay
+        jmp hexload_rec
+
+hexload_ckok:
+        mvi l,HEX_TYPE&0FFh               ; HEX_TYPE
+        mov a,m
+        cpi 1
+        jz hexload_end          ; EOF record - done
+
+        mvi a,'.'               ; progress marker per good record
+        out 9
+        call char_delay
+        jmp hexload_rec
+
+hexload_end:
+        ; CR/LF then verdict
+        mvi a,CR
+        out 9
+        call char_delay
+        mvi a,LF
+        out 9
+        call char_delay
+
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,HEX_ERRS&0FFh               ; HEX_ERRS
+        mov a,m
+        ora a
+        jnz hexload_err_report
+
+        mvi h,(msg_ok>>8)&0FFh
+        mvi l,msg_ok&0FFh
+        call send_string
+        ret
+
+hexload_err_report:
+        mvi h,(msg_err>>8)&0FFh
+        mvi l,msg_err&0FFh
+        call send_string
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,HEX_ERRS&0FFh               ; HEX_ERRS
+        mov a,m
+        call send_hex_byte
+        ret
+
+; Invalid hex digit inside a record: count the error and resync at the
+; next ':'. Jumped to from inside get_hex_byte - the abandoned return
+; address is harmless (the 8008 stack is a ring; only relative depth counts).
+hexload_badchar:
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,HEX_ERRS&0FFh               ; HEX_ERRS
+        mov a,m
+        adi 1
+        mov m,a
+        jmp hexload_rec
+
+; ================================================================================
+; GET_HEX_BYTE - Read two hex characters from the UART as one byte
+; ================================================================================
+; Returns: A = C = byte value; byte also added to HEX_SUM; H=3Fh, L=34h
+; Invalid hex digit: abandons the call frame and resyncs (hexload_badchar)
+; Destroys: A, B, C, H, L
+;
+get_hex_byte:
+        call uart_rx_wait       ; A = first character
+        call hex_char_to_nibble
+        jc hexload_badchar
+        rlc
+        rlc
+        rlc
+        rlc
+        ani 0F0h
+        mov c,a                 ; C = high nibble in position
+
+        call uart_rx_wait       ; A = second character
+        call hex_char_to_nibble
+        jc hexload_badchar
+        ora c                   ; A = full byte
+        mov c,a                 ; keep a copy in C
+
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,HEX_SUM&0FFh               ; HEX_SUM
+        add m
+        mov m,a                 ; HEX_SUM += byte
+        mov a,c                 ; return byte in A
+        ret
 
 ; ================================================================================
 ; PARSE_DUMP_ARGS - Parse address and optional count from command buffer
@@ -719,12 +1005,12 @@ cmd_write:
 ;
 parse_dump_args:
         ; Initialize count to 1
-        mvi h,20h
-        mvi l,22h               ; DUMP_COUNT
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_COUNT&0FFh               ; DUMP_COUNT
         mvi m,1
 
         ; Initialize address to 0
-        mvi l,20h               ; DUMP_ADDR_H
+        mvi l,DUMP_ADDR_H&0FFh               ; DUMP_ADDR_H
         mvi m,0
         inr l
         mvi m,0                 ; DUMP_ADDR_L = 0
@@ -735,8 +1021,8 @@ parse_dump_args:
 
 parse_addr_loop:
         ; Check buffer bounds first (compare E with CMD_LEN)
-        mvi h,20h
-        mvi l,00h               ; CMD_LEN at 0x1000
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,CMD_LEN&0FFh               ; CMD_LEN at 0x1000
         mov a,m                 ; A = buffer length
         mov b,a                 ; Save length in B
         mov a,e
@@ -744,8 +1030,8 @@ parse_addr_loop:
         jnc parse_addr_done     ; Index >= length, stop
 
         ; Get character at CMD_BUF + E
-        mvi h,20h
-        mvi l,01h               ; CMD_BUF base
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,CMD_BUF&0FFh               ; CMD_BUF base
         mov a,e
         add l
         mov l,a                 ; HL = CMD_BUF + E
@@ -771,8 +1057,8 @@ parse_addr_loop:
         mov c,a                 ; Save nibble in C
 
         ; Load current address into D (high) and A (low)
-        mvi h,20h
-        mvi l,20h
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_ADDR_H&0FFh
         mov d,m                 ; D = high byte
         inr l
         mov a,m                 ; A = low byte
@@ -812,8 +1098,8 @@ parse_addr_loop:
         mov d,a                 ; D = new high byte
 
         ; Store back
-        mvi h,20h
-        mvi l,20h
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_ADDR_H&0FFh
         mov m,d                 ; Store high byte
         inr l
         mov m,c                 ; Store low byte
@@ -830,15 +1116,15 @@ parse_count_start:
         inr e
 
         ; Initialize count to 0 (we'll build it up)
-        mvi h,20h
-        mvi l,22h
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_COUNT&0FFh
         mvi m,0
 
         ; Skip any spaces after comma
 parse_count_skip_spaces:
         ; Check buffer bounds first (compare E with CMD_LEN)
-        mvi h,20h
-        mvi l,00h               ; CMD_LEN at 0x1000
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,CMD_LEN&0FFh               ; CMD_LEN at 0x1000
         mov a,m                 ; A = buffer length
         mov b,a                 ; Save length in B
         mov a,e
@@ -846,8 +1132,8 @@ parse_count_skip_spaces:
         jnc parse_count_done    ; Index >= length, stop
 
         ; Get character at CMD_BUF + E
-        mvi h,20h
-        mvi l,01h
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,CMD_BUF&0FFh
         mov a,e
         add l
         mov l,a
@@ -861,8 +1147,8 @@ parse_count_skip_spaces:
 
 parse_count_loop:
         ; Check buffer bounds first
-        mvi h,20h
-        mvi l,00h               ; CMD_LEN
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,CMD_LEN&0FFh               ; CMD_LEN
         mov a,m
         mov b,a
         mov a,e
@@ -870,8 +1156,8 @@ parse_count_loop:
         jnc parse_count_done    ; Index >= length, stop
 
         ; Get character at CMD_BUF + E
-        mvi h,20h
-        mvi l,01h
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,CMD_BUF&0FFh
         mov a,e
         add l
         mov l,a
@@ -892,8 +1178,8 @@ parse_count_loop_entry:
         ; count = (count << 4) | nibble
         mov c,a                 ; Save nibble in C
 
-        mvi h,20h
-        mvi l,22h
+        mvi h,(CMD_LEN>>8)&0FFh
+        mvi l,DUMP_COUNT&0FFh
         mov a,m                 ; A = current count
 
         ; Shift left 4
@@ -1006,6 +1292,23 @@ nibble_out:
         ret
 
 ; ================================================================================
+; SEND_STRING - Send a NUL-terminated string from ROM
+; ================================================================================
+; Input:  HL = string address
+; Destroys: A, B, H, L  (B via char_delay)
+;
+send_string:
+        mov a,m
+        ora a
+        rz                      ; NUL terminator - done
+        out 9
+        call char_delay
+        inr l
+        jnz send_string
+        inr h                   ; carry into high byte at page boundary
+        jmp send_string
+
+; ================================================================================
 ; CHAR_DELAY - Small delay between characters
 ; ================================================================================
 ; At 115200 baud, each character takes ~87us to transmit.
@@ -1042,5 +1345,17 @@ delay_short_inner:
         dcr b
         jnz delay_short_outer
         ret
+
+; ================================================================================
+; STRINGS (NUL-terminated, sent with send_string)
+; ================================================================================
+msg_load:
+        db 'SEND HEX (ESC ends)',CR,LF,0
+msg_ok:
+        db 'OK',0
+msg_err:
+        db 'ERR ',0
+msg_help_lg:
+        db '  L: Load HEX',CR,LF,'  G addr: Go',CR,LF,0
 
         end
