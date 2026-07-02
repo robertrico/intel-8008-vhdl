@@ -381,11 +381,11 @@ ENDINP:    mvi l,103             ;Set pointer to mantissa SIGN indicato
            mvi l,154             ;But, if indicator is non-zero, number is negative 
            mvi b,003             ;Set pntr to LSW of storage registers, set precision ent 
            call COMPLM           ;Negate the triple-precision number in holding registers 
-FININP:    mvi l,153             ;Set pointer to input storage LS~V minus one 
-           xra a                 ;Clear the accumulato 
-           mov d,a               ;Clear the LSW minus one location 
-           mov m,a               ;Set register D to floating point working page 
-           mvi e,123             ;Set E to address of FPACC LSW minus one 
+FININP:    mvi l,153             ;Set pointer to input storage LS~V minus one
+           xra a                 ;Clear the accumulato
+           mov m,a               ;Clear the LSW minus one location
+           mov d,h               ;Set register D to floating point working page (was mov d,a: page 0 on original hardware)
+           mvi e,123             ;Set E to address of FPACC LSW minus one
            mvi b,004             ;Set precision counte 
            call MOVEIT           ;Move number from input register to FPACC 
            mvi b,027 
