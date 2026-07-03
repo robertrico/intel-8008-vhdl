@@ -3858,11 +3858,11 @@ UDEFX:     call FPFIX             ; convert the contents of FPACC from floating 
 save:   
 load:      JMP EXEC               ; By default, save and load aren't implemented.
 
-titletxt:   db  "\n\nIntel 8008 Single Board Computer\n"
-            db  "Scelbi BASIC (SCELBAL) Interpreter\n"
-            db  "Assembled on ",DATE," at ",TIME,"\n"
-            db  "Portions copyright 2021 by Jim Loos\n\n"   
-            db  "Type \"SCR\" to clear and initialize program space\n\n",0
+titletxt:   db  "\r\n\r\nIntel 8008 Single Board Computer\r\n"
+            db  "Scelbi BASIC (SCELBAL) Interpreter\r\n"
+            db  "Assembled on ",DATE," at ",TIME,"\r\n"
+            db  "Portions copyright 2021 by Jim Loos\r\n\r\n"
+            db  "b8008 port: G 2000 cold (auto-SCR), G 27B6 warm\r\n\r\n",0
 
 ;this page gets copied from EPROM to RAM at 0000H as OLDPG1 - jsl          
             ORG 3D00H
