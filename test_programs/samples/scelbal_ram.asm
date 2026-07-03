@@ -95,10 +95,10 @@ mv_oldpg27: mvi h,hi(page27)        ; source: OLDPG27 constants in EPROM at page
             inr l                   ; next address
             jnz mv_oldpg27          ; go back if page not complete
             
-            jmp SCRINIT             ; b8008: auto-SCR then fall into the
-                                    ; executive - cold G 2000 = initialized
-                                    ; BASIC (warm re-entry = G exec, keeps
-                                    ; the stored program; address in .lst)
+            jmp exec                ; run the SCELBAL interpreter
+                                    ; (type SCR before entering lines -
+                                    ; period behavior kept deliberately:
+                                    ; un-SCR'd entry corrupts, as in 1976)
             
 ;-----------------------------------------------------------------------------------------       
 ; I/O routines for SCELBAL.
@@ -1230,10 +1230,6 @@ NOLIST:    LLI 342                ;Load L with address of RUN in look up table
            LHI OLDPG1/400         ;** Load H with page of SCR in look up table
            CAL STRCP              ;Call string compare subroutine to see if first word in
            JFZ NOSCR              ;Input buffer is SCR. If not then jump ahead.
-;b8008: cold entry jumps here so G 2000 comes up initialized (no manual
-;SCR needed - entering a line before SCR shredded the interpreter via
-;uninitialized program-space pointers). Falls through to JMP EXEC.
-SCRINIT:
            LHI OLDPG26/400        ;** If found SCR command then load memory pointer
            LLI 364                ;With address of a pointer storage location. Set that
            LMI BGNPGRAM           ;tt Storage location to page of start of USER PRO-  *******
