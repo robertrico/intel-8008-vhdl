@@ -152,6 +152,33 @@ begin
             report "  PASS: sub-debounce chatter ignored";
         end if;
 
+        -- Case 6: pin resting at '1' across reset must NOT fire once armed
+        report "Case 6: reset with pin high - settle, no spurious request";
+        reset <= '1';
+        sw_raw <= '1';               -- board pin rests high
+        armed  <= '1';               -- worst case: armed immediately
+        wait for 10 * CLK_PERIOD;
+        reset <= '0';
+        wait for 3 * DEBOUNCE_TIME;  -- settle window + margin
+        if int_req /= '0' then
+            report "  ERROR: spurious request from resting-high pin" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: resting-high pin adopted silently";
+        end if;
+        -- and a real flip afterwards still fires
+        sw_raw <= '0';
+        wait for DEBOUNCE_TIME + DEBOUNCE_TIME / 2;
+        if int_req /= '1' then
+            report "  ERROR: real flip after settle did not fire" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: real flip after settle fires";
+        end if;
+        t1i_ack <= '1';
+        wait for 4 * CLK_PERIOD;
+        t1i_ack <= '0';
+
         report "";
         report "========================================";
         if errors = 0 then

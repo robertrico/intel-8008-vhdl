@@ -89,7 +89,11 @@ architecture behavior of monitor_boot_tb is
     end function;
 
     signal clk       : std_logic := '0';
-    signal sw        : std_logic_vector(7 downto 0) := "00000010"; -- sw1=1: break off, sw0=0: no reset
+    -- sw1=1: break off, sw0=0: no reset. sw5/6/7 deliberately HIGH: the
+    -- front-panel switches must be position-independent - a pin resting
+    -- at '1' must neither fire an interrupt (int_button settle) nor park
+    -- the CPU in WAIT (sw6 baseline capture).
+    signal sw        : std_logic_vector(7 downto 0) := "11100010";
     signal led       : std_logic_vector(7 downto 0);
     signal led_M20   : std_logic;
     signal led_L18   : std_logic;

@@ -281,7 +281,9 @@ architecture rtl of b8008_monitor_top is
     signal reset_sync   : std_logic_vector(2 downto 0) := (others => '1');
     signal reset_sw     : std_logic;
     signal reset_int    : std_logic;
-    signal ready_sync   : std_logic_vector(1 downto 0) := "00";  -- rest = run
+    signal ready_sync   : std_logic_vector(1 downto 0) := "00";
+    signal sw6_base     : std_logic := '0';   -- reset-time level = "run"
+    signal sw6_base_cnt : integer range 0 to 25000 := 0;
 
     -- Front-panel interrupt (sw5 flip, sw7 vector)
     signal t1i_ack_sig  : std_logic;
@@ -414,13 +416,21 @@ begin
 
     reset_sw <= reset_sync(2);
 
-    -- sw(6) = READY hold. DIP resting level is '0' (same as sw(1)'s
-    -- resting state), so resting = run; flip sw(6) to '1' to park the
-    -- CPU in the WAIT state, flip back to resume exactly where it stopped.
+    -- sw(6) = READY hold, position-independent: the level ~1 ms after
+    -- reset is captured as the baseline; ANY flip away from it parks the
+    -- CPU in WAIT, flipping back resumes. No polarity assumption - the
+    -- switch works from whatever position it rests in (a reset while
+    -- flipped simply re-baselines).
     ready_hold : process(clk_sys)
     begin
         if rising_edge(clk_sys) then
             ready_sync <= ready_sync(0) & sw(6);
+            if reset_int = '1' then
+                sw6_base_cnt <= 0;
+            elsif sw6_base_cnt < 25000 then   -- ~1 ms at 25 MHz
+                sw6_base_cnt <= sw6_base_cnt + 1;
+                sw6_base     <= ready_sync(1);
+            end if;
         end if;
     end process;
     -- Debug controller only sees POR and switch, not its own reset request
@@ -614,7 +624,22 @@ begin
             int_vector => btn_int_vec
         );
 
-    cpu_int_vec <= btn_int_vec when bootstrap_done = '1' else "000";
+    -- Latch the jam vector at REQUEST time. A combinational mux on
+    -- bootstrap_done raced the bootstrap's own T1I: done rises mid-
+    -- acknowledge, the jam byte flipped from RST 0 (0x05) to RST 5
+    -- (0x2D), and the CPU vectored into an uninitialized RAM slot
+    -- (0x00 = HLT) - dead board. The latch only moves while a button
+    -- request is pending, so it is stable through every T1I.
+    vec_latch : process(clk_sys)
+    begin
+        if rising_edge(clk_sys) then
+            if reset_int = '1' or bootstrap_done = '0' then
+                cpu_int_vec <= "000";          -- bootstrap jams RST 0
+            elsif btn_int_req = '1' then
+                cpu_int_vec <= btn_int_vec;    -- freeze the button vector
+            end if;
+        end if;
+    end process;
 
     --------------------------------------------------------------------------------
     -- b8008 CPU System Instance
@@ -629,7 +654,7 @@ begin
             run_enable  => dbg_run_enable,    -- Debug hold: '0' freezes phi state machine
             interrupt   => bootstrap_int or btn_int_req,
             int_vector  => cpu_int_vec,  -- RST 0 for bootstrap, sw(7) pick after
-            ready_in    => not ready_sync(1),  -- sw(6) flipped to '1' = WAIT
+            ready_in    => not (ready_sync(1) xor sw6_base),  -- sw(6) flipped from baseline = WAIT
             phi1_out    => phi1,
             phi2_out    => phi2,
             sync_out    => sync_sig,

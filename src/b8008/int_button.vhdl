@@ -40,6 +40,7 @@ architecture rtl of int_button is
     signal sw_sync   : std_logic_vector(1 downto 0) := "00";
     signal sw_stable : std_logic := '0';
     signal counter   : integer range 0 to DEBOUNCE_CYCLES := 0;
+    signal settle    : integer range 0 to DEBOUNCE_CYCLES := 0;
     signal req_ff    : std_logic := '0';
     signal vec_ff    : std_logic_vector(2 downto 0) := "101";
 
@@ -51,11 +52,20 @@ begin
             sw_sync   <= "00";
             sw_stable <= '0';
             counter   <= 0;
+            settle    <= 0;
             req_ff    <= '0';
         elsif rising_edge(clk) then
             sw_sync <= sw_sync(0) & sw_raw;
 
-            if sw_sync(1) = sw_stable then
+            if settle < DEBOUNCE_CYCLES then
+                -- settle window after reset: adopt whatever level the pin
+                -- actually rests at, fire nothing. Makes the module
+                -- position-independent (a pin resting at '1' must not read
+                -- as a "flip" once armed).
+                settle    <= settle + 1;
+                sw_stable <= sw_sync(1);
+                counter   <= 0;
+            elsif sw_sync(1) = sw_stable then
                 counter <= 0;
             elsif counter < DEBOUNCE_CYCLES then
                 counter <= counter + 1;
