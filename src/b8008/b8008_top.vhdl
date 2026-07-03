@@ -390,11 +390,11 @@ begin
     -- rewrite the same value.
     u_ram : ram_sync
         generic map (
-            ADDR_BITS => 13
+            ADDR_BITS => 14        -- 16K array; decoder exposes 0x1000-0x3FFF
         )
         port map (
             CLK      => clk_in,
-            ADDR     => latched_address(12 downto 0),
+            ADDR     => latched_address(13 downto 0),
             DATA_IN  => ram_data_in,
             DATA_OUT => ram_data_out,
             RW_N     => ram_rw_n,
@@ -409,7 +409,7 @@ begin
             if reset = '1' then
                 ram_byte_0 <= (others => '0');
             elsif ram_cs_n = '0' and ram_rw_n = '0' and
-                  latched_address(12 downto 0) = "0000000000000" then
+                  latched_address(13 downto 0) = "00000000000000" then
                 ram_byte_0 <= ram_data_in;
             end if;
         end if;
@@ -423,6 +423,8 @@ begin
     -- ROM range comes from the decoder's generic defaults; RAM grown to 8KB.
     u_decode : address_decoder
         generic map (
+            ROM_LAST => 16#0FFF#,  -- monitor firmware is 1.5K in the 4K BRAM ROM
+            RAM_BASE => 16#1000#,  -- 12K usable RAM for SCELBAL-class programs
             RAM_LAST => 16#3FFF#
         )
         port map (
