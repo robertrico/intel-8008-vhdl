@@ -66,11 +66,9 @@ COMP_DIR := $(ROOT_DIR)/src/components
 # ROM is external (physical EEPROM) - no synthesized ROM
 B8008_SRCS := \
 	$(SRC_DIR)/b8008_types.vhdl \
-	$(SRC_DIR)/program_counter.vhdl \
 	$(SRC_DIR)/stack_pointer.vhdl \
 	$(SRC_DIR)/stack_memory.vhdl \
 	$(SRC_DIR)/stack_addr_mux.vhdl \
-	$(SRC_DIR)/stack_addr_decoder.vhdl \
 	$(SRC_DIR)/instruction_register.vhdl \
 	$(SRC_DIR)/instruction_decoder.vhdl \
 	$(SRC_DIR)/condition_flags.vhdl \

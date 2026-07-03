@@ -15,10 +15,10 @@
 ;
 ; Serial output (this is a CHARACTERIZER - it reports which stack
 ; architecture the CPU actually has):
-;   real 8008 (PC inside the 8 regs): STK 12345678 WRAP OK
-;   b8008 today (separate PC block + 8 return slots - KNOWN DEVIATION,
-;   see docs/superpowers/specs/2026-07-02-silicon-gaps-design.md):
-;                                     STK 123456788RET
+;   spec 8008 (PC inside the 8 regs, b8008 since the PC-in-stack
+;   re-architecture):                 STK 12345678 WRAP OK
+;   split-PC regression (separate PC + 8 return slots, b8008's old
+;   deviation):                       STK 123456788RET
 ;   anything else: garbage / silence  (corrupted unwind)
 ;
 ;   make assemble-sample PROG=stackwrap_ram

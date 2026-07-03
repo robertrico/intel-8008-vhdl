@@ -174,10 +174,13 @@ begin
                 end if;
 
             when S_T5 =>
-                -- T5 always goes back to T1/T1I (after 2 cycles)
-                -- (T5 is never reached for HLT - it stops at T3)
+                -- T5 goes back to T1, or to T1I when an interrupt is
+                -- pending AND the instruction is complete (advance_state).
+                -- Without the advance_state gate a multi-cycle instruction
+                -- could be hijacked between its own machine cycles - the
+                -- 8008 recognizes interrupts at instruction boundaries only.
                 if cycle_count = '1' then
-                    if interrupt_pending = '1' then
+                    if interrupt_pending = '1' and advance_state = '1' then
                         next_state <= S_T1I;
                     else
                         next_state <= S_T1;

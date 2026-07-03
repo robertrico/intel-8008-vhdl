@@ -106,6 +106,25 @@ LOOP:
         ; SUCCESS: Final checkpoint
         MVI     A,05h
         OUT     CHKPT           ; CP5: Success
+
+        ; =================================================================
+        ; Phase 4: interrupt DURING a tight taken-jump loop
+        ; =================================================================
+        ; The testbench fires RST 7 while this loop spins. Every iteration
+        ; ends in a TAKEN JNZ - the exact spot where the old pre-increment
+        ; convention's pc_was_loaded flag could be consumed by the jam,
+        ; skidding the post-handler resume one byte past the jump target
+        ; (INR C skipped -> infinite loop -> CP6 never fires).
+        MVI     C,00h
+LOOP2:
+        INR     C               ; loop target - the skid victim
+        MVI     A,30h           ; 48 iterations (~8 ms - fits the TB window)
+        CMP     C
+        JNZ     LOOP2           ; taken 99 times
+
+        ; CHECKPOINT 6: loop survived mid-flight interrupts
+        MVI     A,06h
+        OUT     CHKPT           ; CP6: C=0x30, D=0xAA
         MVI     A,00h           ; A = 0 (success)
         JMP     DONE
 

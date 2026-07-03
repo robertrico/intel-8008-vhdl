@@ -165,11 +165,14 @@ NEXBYT:     inr l                ;POINT TO THE GALAXY MASK;
             mov c,a              ;SAVE CENTER OF UNIVERSE 
             jmp CNTSHOT          ;GO DISPLAY A NEW UNIVERSE 
  
-INVAL:      cpi DEL              ;WAS INVALID SHOT A 'DELETE'? 
-            jnz NOTVAL           ;IF NOT THEN RECYCLE BAD STAR; 
-            mvi l,MESS6&377      ;OTHER POINT TO GIVING UP 
-            mvi l,MESS6/400      ;   MESSAGE; 
-            jmp PRNTIT           ;DISPLAY THEN TEST FOR RESTART 
+INVAL:      cpi DEL              ;WAS INVALID SHOT A 'DELETE'?
+            jz GIVEUP            ;IF SO THEN PLAYER GIVES UP;
+            cpi 010              ;BACKSPACE? (terminals differ on what
+            jnz NOTVAL           ;   the DEL key sends - accept both,
+                                 ;   same as the monitor firmware)
+GIVEUP:     mvi l,MESS6&377      ;POINT TO GIVING UP
+            mvi h,MESS6/400      ;   MESSAGE; (upstream typo: was mvi l)
+            jmp PRNTIT           ;DISPLAY THEN TEST FOR RESTART
  
 NOTVAL:     mvi l,MESS2&377      ;POINT TO INVALID STAR 
             mvi h,MESS2/400      ;   NUMBER MESSAGE 
@@ -327,30 +330,67 @@ PAGE3:      DB      "THE GAME STARTS",LF
             DB      "READY TO PLAY. TYPE ANY KEY TO START",LF 
             DB      "THE GAME. GOOD LUCK!",EM 
  
-;----------------------------------------------------------------------------------------- 
-; wait for a character from the serial port. do not echo. return the character in A. 
-; uses A and D. 
-;----------------------------------------------------------------------------------------- 
+;-----------------------------------------------------------------------------------------
+; wait for a character from the serial port. do not echo. return the character in A.
+; uses only A: the game keeps its shot counter in D across rst 7, so the
+; ready flag is tested with rlc/rrc instead of parking the byte in D.
+;-----------------------------------------------------------------------------------------
 INCHAR:     in 1                 ; USART RX: bit 7 = ready flag
-            mov d,a              ; save flag + data
-            ani 80h              ; ready?
-            jz INCHAR            ; no, keep polling
-            mov a,d
+            rlc                  ; ready bit into carry
+            jnc INCHAR           ; not ready - discard and keep polling
+            rrc                  ; ready: undo the rotate, byte intact
             ani 7fh              ; plain 7-bit ASCII (game compares 'N' etc.)
             ret
 
 ;------------------------------------------------------------------------
-; sends the character in A through the monitor USART (OUT 9).
-; the pacing loop covers one 115200-baud frame. uses A and D;
-; returns the 7-bit character in A.
+; sends the character in A through the monitor USART (OUT 9), expanding
+; CR or LF into CR+LF so a stock terminal renders the game's bare-CR
+; grid rows and bare-LF message lines. uses only A (shot counter lives
+; in D across rst 6); returns the original 7-bit character in A.
+; pacing is straight-line: one 115200 frame is ~87 us, one instruction
+; ~45 us, so six mov a,a cover three frames between OUTs.
 ;------------------------------------------------------------------------
 OUTCHAR:    ani 7fh              ; mask off MSB
-            out 09h              ; USART sends immediately
-            mov d,a              ; keep the character
-            mvi a,24             ; (octal 24 = 20) ~40 instructions/frame
-outdly:     sui 1
-            jnz outdly
-            mov a,d              ; return the character in A
-            ret 
+            cpi CR
+            jz OUTCR
+            cpi LF
+            jz OUTLF
+OUTRAW:     out 09h              ; USART sends immediately
+            mov a,a              ; pacing
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            ret
+
+OUTCR:      out 09h              ; send the CR itself
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mvi a,LF             ; append an LF
+            out 09h
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mvi a,CR             ; return the original character
+            ret
+
+OUTLF:      mvi a,CR             ; newline: CR first
+            out 09h
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mov a,a
+            mvi a,LF             ; then send the LF and return A=LF
+            jmp OUTRAW
              
             end 2000H

@@ -28,20 +28,25 @@ b8008 follows the Intel 8008 block diagram architecture:
            │ control signals
            ↓
 ┌──────────────────┐  ┌─────────────────┐
-│  Program Counter │  │ Instruction Reg │
-│  - increment     │  │ & Decoder       │
-│  - load          │  └─────────────────┘
-│  - hold          │
-└──────────────────┘  ┌─────────────────┐
-                      │  Register File  │
-┌──────────────────┐  │  (A,B,C,D,E,H,L)│
-│   Address Stack  │  └─────────────────┘
-│   (8 x 14-bit)   │
-└──────────────────┘  ┌─────────────────┐
-                      │      ALU        │
-                      │  (i8008_alu)    │
+│  Address Stack   │  │ Instruction Reg │
+│  (8 x 14-bit)    │  │ & Decoder       │
+│  slot[SP] = PC   │  └─────────────────┘
+│  - increment     │
+│  - load          │  ┌─────────────────┐
+│  - hold          │  │  Register File  │
+└──────────────────┘  │  (A,B,C,D,E,H,L)│
+                      └─────────────────┘
+┌──────────────────┐
+│  Stack Pointer   │  ┌─────────────────┐
+│  (3-bit, wraps)  │  │      ALU        │
+└──────────────────┘  │  (i8008_alu)    │
                       └─────────────────┘
 ```
+
+Note: per the real Intel block diagram the PC is one of the 8
+address-stack registers (`stack_memory.vhdl`, selected by SP). CALL is
+just SP moving on (the old slot keeps the return address); RET is SP
+moving back. 7 nested returns; the 8th CALL wraps onto the oldest.
 
 **Key Principles:**
 1. **Each module is simple** - Does ONE job, ~50-100 lines
@@ -49,12 +54,11 @@ b8008 follows the Intel 8008 block diagram architecture:
 3. **Modules are dumb** - No knowledge of instructions or other modules
 4. **Test each module in isolation** - Every module has its own testbench
 
-### Example: Program Counter Module
+### Example: Stack Pointer Module
 
-The program counter is 66 lines and does exactly three things:
-- **Increment**: When `control.increment = '1'`, PC increments
-- **Load**: When `control.load = '1'`, PC loads from `data_in`
-- **Hold**: When `control.hold = '1'`, PC holds current value
+The stack pointer is 69 lines and does exactly two things:
+- **Push**: When `stack_push = '1'`, SP increments (wraps 7 -> 0)
+- **Pop**: When `stack_pop = '1'`, SP decrements (wraps 0 -> 7)
 
 It has NO knowledge of:
 - Instructions (JMP, CALL, RST, etc.)
@@ -79,7 +83,7 @@ ghdl -r some_tb --stop-time=1ms
 
 # ✅ CORRECT - Always use make targets
 make test-b8008-top
-make test-pc
+make test-stack-memory
 make assemble PROG=my_test.asm
 ```
 
@@ -93,7 +97,7 @@ make test-b8008-top
 make test-b8008-top PROG=search_as
 
 # Test individual modules
-make test-pc              # Program counter
+make test-stack-memory    # Address stack (PC-in-stack)
 make test-alu             # ALU
 make test-instr-decoder   # Instruction decoder
 
@@ -161,13 +165,11 @@ intel-8008-vhdl/
 │   │   ├── machine_cycle_control.vhdl
 │   │   ├── mem_mux_refresh.vhdl
 │   │   ├── memory_io_control.vhdl
-│   │   ├── program_counter.vhdl
 │   │   ├── register_alu_control.vhdl
 │   │   ├── register_file.vhdl
 │   │   ├── scratchpad_addr_mux.vhdl
 │   │   ├── scratchpad_decoder.vhdl
 │   │   ├── sss_ddd_selector.vhdl
-│   │   ├── stack_addr_decoder.vhdl
 │   │   ├── stack_addr_mux.vhdl
 │   │   ├── stack_memory.vhdl
 │   │   ├── stack_pointer.vhdl
@@ -191,7 +193,6 @@ intel-8008-vhdl/
 │       └── v8008.vhdl               # (IGNORE - overly complex design)
 ├── sim/
 │   ├── b8008/                       # ✅ CURRENT: Tests for b8008 modules
-│   │   └── program_counter_tb.vhdl
 │   └── units/                       # Unit tests for external peripheral components
 ├── build/
 │   └── b8008/                       # Build artifacts for b8008
@@ -262,6 +263,6 @@ If a test fails:
 ## Questions?
 
 If you're unsure about the approach:
-1. Look at `program_counter.vhdl` as the reference example
+1. Look at `stack_pointer.vhdl` as the reference example
 2. Keep it simple - really simple
 3. When in doubt, ask the user

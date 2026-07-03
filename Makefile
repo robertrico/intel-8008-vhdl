@@ -37,11 +37,9 @@ SVF  := $(SYNTH_DIR)/b8008.svf
 # All b8008 VHDL source files (order matters for GHDL)
 B8008_SRCS = \
 	$(SRC_DIR)/b8008_types.vhdl \
-	$(SRC_DIR)/program_counter.vhdl \
 	$(SRC_DIR)/stack_pointer.vhdl \
 	$(SRC_DIR)/stack_memory.vhdl \
 	$(SRC_DIR)/stack_addr_mux.vhdl \
-	$(SRC_DIR)/stack_addr_decoder.vhdl \
 	$(SRC_DIR)/instruction_register.vhdl \
 	$(SRC_DIR)/instruction_decoder.vhdl \
 	$(SRC_DIR)/condition_flags.vhdl \
@@ -63,7 +61,7 @@ B8008_SRCS = \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl
 
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-pc test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-addr-decoder test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
 
 all: help
 
@@ -94,7 +92,7 @@ help:
 	@echo "  make test-serial PROG=x   - Test serial I/O programs (bitbang UART capture)"
 	@echo ""
 	@echo "Module Tests:"
-	@echo "  make test-pc              - Test program counter"
+	@echo "  make              - Test program counter"
 	@echo "  make test-phase-clocks    - Test phase clocks with SYNC"
 	@echo "  make test-state-timing    - Test state timing generator"
 	@echo "  make test-machine-cycle   - Test machine cycle control"
@@ -113,7 +111,7 @@ help:
 	@echo "  make test-register-file   - Test register file"
 	@echo "  make test-sss-ddd-selector - Test SSS/DDD register selector"
 	@echo "  make test-stack-pointer   - Test stack pointer"
-	@echo "  make test-stack-addr-decoder - Test stack address decoder"
+	@echo "  make - Test stack address decoder"
 	@echo "  make test-stack-memory    - Test stack memory"
 	@echo "  make test-debug-clock-control - Test debug clock control"
 	@echo "  make clean                - Remove build files"
@@ -164,11 +162,9 @@ test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/program_counter.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/mem_mux_refresh.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_addr_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
@@ -234,11 +230,9 @@ test-serial: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/program_counter.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/mem_mux_refresh.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_addr_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
@@ -277,11 +271,9 @@ test-interrupt: $(BUILD_DIR) $(PROG_DIR)/interrupt_test_as.mem
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/program_counter.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/mem_mux_refresh.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_addr_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
@@ -298,7 +290,7 @@ test-interrupt: $(BUILD_DIR) $(PROG_DIR)/interrupt_test_as.mem
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/interrupt_test_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_test_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_test_tb --stop-time=10ms
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_test_tb --stop-time=25ms
 
 test-address-decoder: $(BUILD_DIR)
 	@echo "Testing address decoder..."
@@ -313,14 +305,6 @@ test-ram-sync: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/ram_sync_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ram_sync_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ram_sync_tb --stop-time=10us
-
-test-pc: $(BUILD_DIR)
-	@echo "Testing program counter..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/program_counter.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/program_counter_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) program_counter_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) program_counter_tb --stop-time=1us
 
 test-phase-clocks: $(BUILD_DIR)
 	@echo "Testing phase clocks with SYNC..."
@@ -463,14 +447,6 @@ test-stack-pointer: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/stack_pointer_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_pointer_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_pointer_tb --stop-time=20us
-
-test-stack-addr-decoder: $(BUILD_DIR)
-	@echo "Testing stack address decoder..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_addr_decoder.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/stack_addr_decoder_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_addr_decoder_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_addr_decoder_tb --stop-time=10us
 
 test-stack-memory: $(BUILD_DIR)
 	@echo "Testing stack memory..."

@@ -248,8 +248,11 @@ begin
         wait for T_CY * 2;  -- T4
         wait for T_CY * 2;  -- T5
 
-        -- Set interrupt pending before T5 ends
+        -- Set interrupt pending before T5 ends. Per Figure 2 of the 8008
+        -- User's Manual the INTERRUPTED? decision is only reached when
+        -- INSTR. EXECUTION COMPLETE = YES, so advance_state must be high.
         interrupt_pending <= '1';
+        advance_state     <= '1';
         wait for T_CY * 2;
 
         if state_t1i /= '1' then
@@ -259,6 +262,23 @@ begin
             report "  PASS: Entered T1I state";
         end if;
 
+        interrupt_pending <= '0';
+        advance_state     <= '0';
+
+        -- Counter-case: interrupt pending at T5 of an UNFINISHED
+        -- instruction (advance_state=0) must go to T1, not T1I
+        wait for T_CY * 2;   -- T1I -> T2 (from the acknowledge above)
+        wait for T_CY * 2;   -- T2 -> T3
+        wait for T_CY * 2;   -- T3 -> T4
+        wait for T_CY * 2;   -- T4 -> T5
+        interrupt_pending <= '1';
+        wait for T_CY * 2;   -- T5 -> ? with advance_state=0
+        if state_t1 /= '1' then
+            report "  ERROR: Mid-instruction T5 must go to T1 despite interrupt" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Mid-instruction T5 ignored the interrupt (Figure 2)";
+        end if;
         interrupt_pending <= '0';
 
         -- T1I should proceed to T2

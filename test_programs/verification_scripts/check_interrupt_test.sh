@@ -41,7 +41,8 @@ check_checkpoint() {
     fi
 
     # Extract the register value
-    local actual=$(echo "$cp_line" | grep -o "${reg}=0x[0-9A-Fa-f]*" | head -1 | cut -d= -f2)
+    # Space-anchored so "C=" cannot match inside "PC=0x...."
+    local actual=$(echo "$cp_line" | grep -o " ${reg}=0x[0-9A-Fa-f]*" | head -1 | cut -d= -f2)
 
     if [ "$actual" = "$expected" ]; then
         echo "PASS: CP$cp_id $reg=$expected - $desc"
@@ -104,6 +105,12 @@ check_checkpoint 4 "D" "0xAA" "After RET, D still 0xAA"
 # CP5: Success - final state
 check_checkpoint 5 "A" "0x05" "Success checkpoint reached"
 check_checkpoint 5 "D" "0xAA" "D preserved after verification"
+
+# CP6: taken-jump loop survived mid-flight interrupts (post-increment
+# convention: no pc_was_loaded state for the jam to consume; a skid past
+# the JNZ target would skip INR C and hang the loop -> CP6 never fires)
+check_checkpoint 6 "C" "0x30" "LOOP2 completed exactly despite interrupts"
+check_checkpoint 6 "D" "0xAA" "Handler ran during the loop"
 
 echo ""
 echo "========================================="

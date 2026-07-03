@@ -163,7 +163,6 @@ architecture rtl of memory_io_control is
     signal state_t5_edge : std_logic;
 
     -- Track when PC was loaded (JMP/CALL/RET/RST) to prevent increment at next T1
-    signal pc_was_loaded : std_logic := '0';
 
     -- Track when entering a cycle that uses H:L address (to suppress PC increment at next T1)
     -- This flag is SET at T5 of the PREVIOUS cycle and CLEARED at T2 of the current cycle.
@@ -191,7 +190,6 @@ begin
             prev_state_t3 <= '0';
             prev_state_t4 <= '0';
             prev_state_t5 <= '0';
-            pc_was_loaded <= '0';
             suppress_pc_inc_next_cycle <= '0';
             ir_loaded_from_interrupt <= '0';
         elsif rising_edge(clk) and phi1_rising = '1' then
@@ -246,38 +244,11 @@ begin
                 report "MEM_IO: Clearing suppress_pc_inc_next_cycle";
             end if;
 
-            -- Use prev_state_t3 to detect T3 from the PREVIOUS phi1 cycle
-            if prev_state_t3 = '1' then
-                -- Set pc_was_loaded flag at T3 of cycle 3 when PC will be loaded at T5
-                -- This is set EARLY to avoid race conditions with T1 increment
-                -- Only for JMP/CALL (instr_needs_address='1' AND NOT LMI)
-                -- LMI has instr_needs_address='1' but is a write operation - PC is not loaded
-                if current_cycle = 2 and instr_needs_address = '1' and instr_is_write = '0' then
-                    if eval_condition = '0' or condition_met = '1' then
-                        pc_was_loaded <= '1';
-                        report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 3 (PC will be loaded at T5)";
-                    end if;
-                end if;
-                -- Set pc_was_loaded for RET/RST at T3 of cycle 1
-                -- For conditional RET (RZ, RNZ, etc.), only set if condition is met
-                if current_cycle = 0 and instr_is_rst = '1' then
-                    -- RST is unconditional
-                    pc_was_loaded <= '1';
-                    report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 1 for RST";
-                elsif current_cycle = 0 and instr_is_ret = '1' and (eval_condition = '0' or condition_met = '1') then
-                    -- RET: only set if unconditional or condition met
-                    pc_was_loaded <= '1';
-                    report "MEM_IO: Setting pc_was_loaded flag at T3 cycle 1 for RET (condition met)";
-                end if;
-            end if;
-            -- Use prev_state_t2 to detect T2 from the PREVIOUS phi1 cycle
-            if prev_state_t2 = '1' then
-                -- Clear flags at T2 (after T1 increment was suppressed)
-                if pc_was_loaded = '1' then
-                    pc_was_loaded <= '0';
-                    report "MEM_IO: Clearing pc_was_loaded flag (T2 - after T1 increment suppressed)";
-                end if;
-            end if;
+            -- pc_was_loaded is GONE. Under the post-increment convention a
+            -- loaded target is simply the next address to fetch - the fetch
+            -- sends it out and increments past it like any other. The old
+            -- flag was one-shot state that an interrupt jam could consume,
+            -- skidding the post-handler resume one byte past a jump target.
         end if;
     end process;
 
@@ -289,7 +260,7 @@ begin
             instr_needs_immediate, instr_needs_address,
             instr_sss_field, instr_ddd_field, instr_is_alu, ir_loaded_from_interrupt,
             instr_is_call, instr_is_ret, instr_is_rst,
-            instr_writes_reg, instr_reads_reg, pc_was_loaded, suppress_pc_inc_next_cycle,
+            instr_writes_reg, instr_reads_reg, suppress_pc_inc_next_cycle,
             pc_lower_byte, pc_carry_in)
     begin
         -- Defaults: all outputs inactive
@@ -326,25 +297,17 @@ begin
         -- PC Control Logic (Two-stage increment per 1972 datasheet)
         -- T1: Increment lower byte after address bits sent out
         -- T2: If carry occurred, increment upper byte
-        -- Hold PC if interrupt pending (RST jam must not advance PC).
-        -- READY no longer gates the PC: the state machine parks in a real
-        -- WAIT state between T2 and T3, so no fetch state is active while
-        -- not-ready. The old ready_status hold was a relic of the global
-        -- freeze design and caused a double-fetch once WAIT was added.
-        if interrupt_pending = '1' then
-            pc_hold <= '1';
-        else
-            -- T1 FIRST half: Increment lower byte BEFORE sending address
-            -- CRITICAL FIX: PC must increment BEFORE T1 outputs the address, so that
-            -- the address latched by external logic is PC (the next instruction to fetch).
-            -- Original code incremented at T1 second half, causing fetch from PC-1.
-            -- BUT NOT during T1I - PC is not advanced during interrupt acknowledge
-            -- ALSO NOT during cycle 2 of memory-indirect instructions (PC stays at next instruction)
-            --   - Use registered flag in_mem_indirect_cycle2 to avoid race condition with current_cycle
-            -- For address instructions (JMP/CALL), PC increments in cycles 2 and 3 to fetch address bytes
-            -- For immediate instructions (LrI, ALU I, LMI), PC increments in cycle 2 to fetch data byte
-            -- ALSO NOT when PC was just loaded by JMP/CALL/RET/RST (pc_was_loaded flag set)
-            -- PC increment logic
+        -- Interrupt pending does NOT gate the fetch increments: the real
+        -- 8008 completes the in-flight instruction fully (including its PC
+        -- advance) and the jam only replaces the NEXT fetch (T1I instead of
+        -- T1 - and T1I never increments). The old interrupt_pending hold
+        -- robbed the interrupted instruction of its own advance, so the
+        -- post-handler resume re-fetched that instruction's last byte and
+        -- executed operands as opcodes.
+        -- READY no longer gates the PC either: the state machine parks in
+        -- a real WAIT state between T2 and T3.
+
+        -- PC increment logic
             -- PC increments when fetching from external memory (via PC address)
             -- PC does NOT increment when using H:L address for memory operations
             -- PC does NOT increment during I/O cycle 2 (PCC cycle uses I/O address, not PC)
@@ -358,46 +321,30 @@ begin
             -- - Cycle 2: Unless suppress_pc_inc_next_cycle (LrM/LMr uses H:L, or I/O)
             -- - Cycle 3: Unless suppress_pc_inc_next_cycle (LMI uses H:L)
             --
-            if state_t1 = '1' and state_half = '0' and state_t1i = '0' and
-               pc_was_loaded = '0' and suppress_pc_inc_next_cycle = '0' then
+            -- POST-increment convention (matches the real 8008): the slot
+            -- always holds the NEXT address to fetch. T1 first half sends
+            -- the address out; T1 SECOND half increments past it. Loads
+            -- (JMP/CALL/RST vectors) store the exact target and the next
+            -- fetch uses it as-is - no pc_was_loaded suppression flag, so
+            -- there is nothing for an interrupt jam to race.
+            if state_t1 = '1' and state_half = '1' and state_t1i = '0' and
+               suppress_pc_inc_next_cycle = '0' then
                 pc_increment_lower <= '1';
             end if;
 
-            -- T2 first half: Increment upper byte if carry occurred
-            -- Per datasheet: "Increment program counter if there has been a carry from T1"
-            if state_t2 = '1' and state_half = '0' and pc_carry_in = '1' then
+            -- T2 second half: carry into the upper byte AFTER the upper
+            -- address bits went out (first half latches the pre-carry value)
+            if state_t2 = '1' and state_half = '1' and pc_carry_in = '1' then
                 pc_increment_upper <= '1';
             end if;
 
-            -- CALL: Increment PC one more time at cycle 3 T3 first half (before stack push at T4 second half)
-            -- At cycle 3 T1, PC points to address high byte (e.g. 0x0104 for CALL at 0x0102)
-            -- We need PC to point to the NEXT instruction (0x0105) before pushing to stack
-            -- IMPORTANT: Also handle carry from lower byte (e.g., 0x00FF -> 0x0100)
-            -- Use two-phase increment like T1/T2: lower at T3 first half, upper at T4 first half if carry
-            -- NOTE: state_half = '0' ensures we only increment ONCE during T3 (first half only)
-            -- NOTE: Only increment if unconditional OR condition is met
-            if state_t3 = '1' and state_half = '0' and current_cycle = 2 and instr_is_call = '1' and
-               (eval_condition = '0' or condition_met = '1') then
-                pc_increment_lower <= '1';
-                report "MEM_IO: Incrementing PC lower at T3 first half cycle 3 for CALL (to compute return address)";
-            end if;
-            -- CALL: Increment upper byte at T4 first half if carry occurred from T3 lower increment
-            -- NOTE: Only increment if unconditional OR condition is met
-            if state_t4 = '1' and state_half = '0' and current_cycle = 2 and instr_is_call = '1' and pc_carry_in = '1' and
-               (eval_condition = '0' or condition_met = '1') then
-                pc_increment_upper <= '1';
-                report "MEM_IO: Incrementing PC upper at T4 cycle 3 for CALL (carry from lower)";
-            end if;
-
-            -- RST: Increment PC at cycle 1 T4 first half (before stack push at T4 second half)
-            -- At T1, PC incremented TO the opcode address. We need it to point to the
-            -- NEXT instruction (PC+1) before pushing to stack as return address.
-            -- Note: We check at T4 (not T3) because at T3 rising edge, the IR is still
-            -- being loaded. By T4, the IR has the RST opcode and instr_is_rst is stable.
-            if state_t4 = '1' and state_half = '0' and current_cycle = 0 and instr_is_rst = '1' then
-                pc_increment_lower <= '1';
-                report "MEM_IO: Incrementing PC at T4 cycle 1 for RST (to compute return address)";
-            end if;
+            -- PC-in-stack: NO "compute return address" increments for CALL or
+            -- RST. The caller's slot holds the last-fetched address; a RET
+            -- pops back to it and the next fetch's normal T1 pre-increment
+            -- lands on the following instruction. One convention everywhere -
+            -- the old pre-adjusted-push + suppressed-fetch pairing broke at
+            -- the stack wrap (the wrapped slot was never call-frozen, so the
+            -- suppressed fetch re-executed the RET forever).
 
             -- Load PC during T4/T5 for various instructions
             -- JMP/CALL: T5 of cycle 3 (only if unconditional OR condition met)
@@ -415,18 +362,15 @@ begin
                             report "MEM_IO: Setting pc_load at T5 cycle 3 for JMP";
                         end if;
                     end if;
-                elsif instr_is_ret = '1' and (eval_condition = '0' or condition_met = '1') then
-                    -- RET: Load PC from stack during T5 of cycle 1
-                    -- T4 reads from stack, T5 loads PC to avoid timing issues
-                    -- Only load if unconditional OR condition is met
-                    pc_load <= '1';
-                    report "MEM_IO: Setting pc_load at T5 cycle 1 for RET";
+                -- RET: NO pc_load. The PC lives in stack_memory[SP]; the T4
+                -- stack_pop already moved SP back, and the return address is
+                -- simply sitting in the now-live slot. Loading here would
+                -- corrupt it.
                 elsif instr_is_rst = '1' then
                     -- RST: Load PC from RST vector during T5
                     pc_load <= '1';
                 end if;
             end if;
-        end if;
 
         -- State-based control
         if state_t1 = '1' then
@@ -601,25 +545,20 @@ begin
                     scratchpad_read   <= '1';
                     regfile_to_bus    <= '1';
                 elsif instr_is_ret = '1' and (eval_condition = '0' or condition_met = '1') then
-                    -- RET/RFc/RTc: Pop stack during T4 (only if condition met for conditional returns)
-                    -- For conditional returns (RZ, RNZ, etc.), only execute if condition is met
-                    -- IMPORTANT: Pop in first half, read in second half to get correct stack level
-                    -- The Intel 8008 stack semantics: decrement SP FIRST, then read from new level
+                    -- RET/RFc/RTc: the PC lives in stack_memory[SP], so a
+                    -- return is ONLY the pop - SP moves back and the return
+                    -- address is already in the now-live slot. No read, no
+                    -- load, no data movement.
                     if state_half = '0' then
                         stack_pop           <= '1';  -- Decrement SP in first half
-                        report "MEM_IO: T4 cycle 1 RET - popping from stack (first half)";
-                    else
-                        stack_read          <= '1';  -- Read from stack in second half (after SP decremented)
-                        report "MEM_IO: T4 cycle 1 RET - reading from stack (second half)";
+                        report "MEM_IO: T4 cycle 1 RET - pop (slot IS the PC)";
                     end if;
-                    pc_load_from_stack  <= '1';  -- Load PC from stack (both halves)
-                    select_stack        <= '1';  -- Use stack for address (both halves)
                 elsif instr_is_rst = '1' then
-                    -- RST: Push current PC to stack during T4, load RST vector during T5
-                    -- IMPORTANT: Only push/write during first half of T4 to avoid double-push
+                    -- RST: push = SP moves on; the old slot keeps the return
+                    -- address it already holds. RST vector loads the NEW
+                    -- slot during T5.
                     if state_half = '0' then
                         stack_push         <= '1';
-                        stack_write        <= '1';  -- Write PC to stack
                     end if;
                 elsif instr_writes_reg = '1' and instr_reads_reg = '1' and instr_is_alu = '0' and instr_needs_immediate = '0' then
                     -- MOV register-to-register: Read source register (SSS) to internal bus
@@ -652,11 +591,13 @@ begin
                 -- This ensures the correct return address is pushed to the stack.
                 -- NOTE: Only push if unconditional OR condition is met
                 if instr_is_call = '1' and (eval_condition = '0' or condition_met = '1') then
-                    -- Push during second half of T4 (after PC upper increment if any)
+                    -- Push during second half of T4 (after PC upper increment
+                    -- if any). The push is ONLY the SP move - the caller's
+                    -- slot keeps the return address it already contains; the
+                    -- target loads into the new slot at T5.
                     if state_half = '1' then
                         stack_push         <= '1';
-                        stack_write        <= '1';  -- Write PC to stack
-                        report "MEM_IO: T4 cycle 3 CALL - pushing return address to stack (second half)";
+                        report "MEM_IO: T4 cycle 3 CALL - push (SP moves, slot keeps return addr)";
                     end if;
                 end if;
                 -- JMP loads PC during T5, handled below
@@ -720,13 +661,8 @@ begin
                 end if;
             end if;
 
-            -- RET: Keep pc_load_from_stack set during T5 (was set during T4)
-            -- Only if unconditional OR condition is met
-            if instr_is_ret = '1' and (eval_condition = '0' or condition_met = '1') then
-                pc_load_from_stack <= '1';  -- Load PC from stack
-                select_stack       <= '1';  -- Use stack for address
-                stack_read         <= '1';  -- Keep stack output valid for PC load
-            end if;
+            -- RET does nothing at T5: SP already moved back at T4 and the
+            -- live slot IS the return address (PC-in-stack).
 
             -- RST: Load PC from RST vector during T5 (stack push happened in T4)
             -- RET is handled in T4, not T5

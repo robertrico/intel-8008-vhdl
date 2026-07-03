@@ -280,9 +280,28 @@ begin
         interrupt_count <= interrupt_count + 1;
         wait for 100 ns;
 
-        -- Phase 3: Let the interrupt handler run and program complete
-        report "Letting interrupt handler and program complete...";
-        wait for 5 ms;
+        -- Phase 3: Let the handler run; program enters the LOOP2
+        -- taken-jump spin (~9 ms of JNZ iterations)
+        report "Letting interrupt handler run; program enters LOOP2...";
+        wait for 2 ms;
+
+        -- Phase 4: fire interrupts INTO the running jump loop. Each jam
+        -- lands near a taken JNZ; the post-handler resume must hit the
+        -- exact jump target or the loop derails (CP6 never fires).
+        for i in 1 to 3 loop
+            int_vector <= "111";
+            report "Phase 4: RST 7 into the running loop (" & integer'image(i) & ")";
+            interrupt <= '1';
+            wait for 1 ns;
+            wait until (s2_out = '1' and s1_out = '1' and s0_out = '0');
+            wait for 50 ns;
+            interrupt <= '0';
+            interrupt_count <= interrupt_count + 1;
+            wait for 1500 us;
+        end loop;
+
+        -- Let the loop finish and CP6 fire
+        wait for 8 ms;
 
         report "========================================";
         report "INTERRUPT TEST COMPLETE";

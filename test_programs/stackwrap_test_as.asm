@@ -1,26 +1,23 @@
-; Intel 8008 Address-Stack Depth Characterization Program
+; Intel 8008 Address-Stack Wraparound Test Program
 ; For AS Macro Assembler
 ;
-; KNOWN FIDELITY DEVIATION (pending PC-in-stack re-architecture decision;
-; see docs/superpowers/specs/2026-07-02-silicon-gaps-design.md):
+; The PC lives inside the 8 address-stack registers (PC-in-stack) -> 7
+; nested return contexts. The 8th nested CALL wraps SP onto the oldest
+; context, and the unwind's final RET lands on the WRAP pad past L8's
+; RET (that stack register froze as L8's live PC) - CP2 fires.
 ;
-;   Real 8008: PC lives inside the 8 address-stack registers -> only 7
-;   return slots. The 8th nested CALL wraps SP 7->0 onto the oldest
-;   context, and the unwind's final RET lands on the WRAP pad past L8's
-;   RET (that stack register froze as L8's live PC) - CP2 fires.
-;
-;   b8008 today: separate program_counter block + 8 return-only slots ->
-;   all 8 nested CALLs unwind cleanly back to MAIN - CP3 fires.
+; CP3 firing (a clean return to MAIN) means the stack held all 8
+; returns - the old split-PC deviation; that is now a regression.
 ;
 ; Uses OUT 31 checkpoints for assertion-based verification.
 ;
-; Checkpoint Results (current b8008 architecture):
+; Checkpoint Results:
 ;   CP1: descent complete (inside L8, before its RET), B=0x08
-;   CP2: real-8008 wrap pad - does NOT fire on b8008 today
-;   CP3: fires - 8 returns unwound to MAIN
+;   CP2: WRAP pad reached via the wrapped final RET
+;   CP3: never (split-PC regression signature)
 ;
-; Final Register State (current b8008 architecture):
-;   A: 0xFF (MAIN reached)  B: 0x08 (descent counter reached 8)
+; Final Register State:
+;   A: 0x00 (WRAP reached)  B: 0x08 (descent counter reached 8)
 
         cpu     8008new
         page    0

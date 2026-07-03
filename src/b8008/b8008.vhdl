@@ -310,17 +310,8 @@ architecture structural of b8008 is
     -- PHASE 4: PROGRAM COUNTER AND ADDRESSING
     -- ------------------------------------------------------------------------
 
-    component program_counter is
-        port (
-            clk         : in  std_logic;
-            phi1_rising : in  std_logic;
-            reset       : in  std_logic;
-            control     : in  pc_control_t;
-            data_in     : in  address_t;
-            pc_out      : out address_t;
-            carry_out   : out std_logic
-        );
-    end component;
+    -- (program_counter is gone: the PC lives in stack_memory[SP], per the
+    -- Intel block diagram. See stack_memory below.)
 
     component ahl_pointer is
         port (
@@ -370,41 +361,16 @@ architecture structural of b8008 is
         );
     end component;
 
-    component stack_addr_decoder is
-        port (
-            sp_in          : in std_logic_vector(2 downto 0);
-            stack_read     : in std_logic;
-            stack_write    : in std_logic;
-            enable_level_0 : out std_logic;
-            enable_level_1 : out std_logic;
-            enable_level_2 : out std_logic;
-            enable_level_3 : out std_logic;
-            enable_level_4 : out std_logic;
-            enable_level_5 : out std_logic;
-            enable_level_6 : out std_logic;
-            enable_level_7 : out std_logic;
-            read_out       : out std_logic;
-            write_out      : out std_logic
-        );
-    end component;
-
     component stack_memory is
         port (
-            clk            : in std_logic;
-            phi1_rising    : in std_logic;
-            reset          : in std_logic;
-            addr_in        : in address_t;
-            enable_level_0 : in std_logic;
-            enable_level_1 : in std_logic;
-            enable_level_2 : in std_logic;
-            enable_level_3 : in std_logic;
-            enable_level_4 : in std_logic;
-            enable_level_5 : in std_logic;
-            enable_level_6 : in std_logic;
-            enable_level_7 : in std_logic;
-            stack_read     : in std_logic;
-            stack_write    : in std_logic;
-            addr_out       : out address_t
+            clk         : in std_logic;
+            phi1_rising : in std_logic;
+            reset       : in std_logic;
+            sp_in       : in std_logic_vector(2 downto 0);
+            control     : in pc_control_t;
+            data_in     : in address_t;
+            addr_out    : out address_t;
+            carry_out   : out std_logic
         );
     end component;
 
@@ -722,17 +688,7 @@ architecture structural of b8008 is
     signal alu_flag_parity : std_logic;
 
     -- Stack signals
-    signal sp                  : std_logic_vector(2 downto 0);  -- Stack pointer value
-    signal stack_enable_0      : std_logic;
-    signal stack_enable_1      : std_logic;
-    signal stack_enable_2      : std_logic;
-    signal stack_enable_3      : std_logic;
-    signal stack_enable_4      : std_logic;
-    signal stack_enable_5      : std_logic;
-    signal stack_enable_6      : std_logic;
-    signal stack_enable_7      : std_logic;
-    signal stack_read_control  : std_logic;
-    signal stack_write_control : std_logic;
+    signal sp                  : std_logic_vector(2 downto 0);  -- Stack pointer value (selects the live PC slot)
 
     -- ========================================================================
     -- CONTROL SIGNALS (from memory_io_control)
@@ -1091,16 +1047,9 @@ begin
     -- PHASE 4: PROGRAM COUNTER AND ADDRESSING (Medium Risk)
     -- ------------------------------------------------------------------------
 
-    u_program_counter : program_counter
-        port map (
-            clk         => clk_in,
-            phi1_rising => phi1_rising,
-            reset       => reset,
-            control     => pc_control,
-            data_in     => pc_data_in,
-            pc_out      => pc_addr,
-            carry_out   => pc_carry
-        );
+    -- The PC is stack_memory[sp] - see the stack system below. pc_addr is
+    -- driven from the stack's addr_out; the old program_counter register
+    -- is gone (Intel block diagram: PC is one of the 8 address-stack regs).
 
     u_ahl_pointer : ahl_pointer
         port map (
@@ -1151,41 +1100,21 @@ begin
             sp_out      => sp
         );
 
-    u_stack_addr_decoder : stack_addr_decoder
-        port map (
-            sp_in          => sp,
-            stack_read     => stack_read,
-            stack_write    => stack_write,
-            enable_level_0 => stack_enable_0,
-            enable_level_1 => stack_enable_1,
-            enable_level_2 => stack_enable_2,
-            enable_level_3 => stack_enable_3,
-            enable_level_4 => stack_enable_4,
-            enable_level_5 => stack_enable_5,
-            enable_level_6 => stack_enable_6,
-            enable_level_7 => stack_enable_7,
-            read_out       => stack_read_control,
-            write_out      => stack_write_control
-        );
-
     u_stack_memory : stack_memory
         port map (
-            clk            => clk_in,
-            phi1_rising    => phi1_rising,
-            reset          => reset,
-            addr_in        => pc_addr,  -- PC address to store during CALL/RST
-            enable_level_0 => stack_enable_0,
-            enable_level_1 => stack_enable_1,
-            enable_level_2 => stack_enable_2,
-            enable_level_3 => stack_enable_3,
-            enable_level_4 => stack_enable_4,
-            enable_level_5 => stack_enable_5,
-            enable_level_6 => stack_enable_6,
-            enable_level_7 => stack_enable_7,
-            stack_read     => stack_read_control,
-            stack_write    => stack_write_control,
-            addr_out       => stack_addr
+            clk         => clk_in,
+            phi1_rising => phi1_rising,
+            reset       => reset,
+            sp_in       => sp,
+            control     => pc_control,
+            data_in     => pc_data_in,
+            addr_out    => pc_addr,     -- the live PC = slot[sp]
+            carry_out   => pc_carry
         );
+
+    -- Legacy alias: some consumers still take a "stack_addr" - it is the
+    -- same live slot now (RET pops SP and the address is simply there).
+    stack_addr <= pc_addr;
 
     -- ------------------------------------------------------------------------
     -- PHASE 6: REGISTER FILE SYSTEM (Low Risk)
