@@ -20,7 +20,10 @@
 ;
 ;   make assemble-sample PROG=scelbal_ram
 ;   ./send_hex.py test_programs/samples/scelbal_ram.hex   (minicom closed)
-;   then in minicom:  G 2000
+;   then in minicom:  G 2000   (cold: auto-SCR, fresh initialized BASIC)
+;                     G 27B6   (warm: re-enter keeping the stored program
+;                               - survives sw0 CPU resets; the board's SW2
+;                               reconfigures the FPGA and wipes ALL RAM)
 ;===========================================================================
 
             PAGE 0             ; suppress page headings in AS listing file
@@ -92,7 +95,10 @@ mv_oldpg27: mvi h,hi(page27)        ; source: OLDPG27 constants in EPROM at page
             inr l                   ; next address
             jnz mv_oldpg27          ; go back if page not complete
             
-            jmp exec                ; run the SCELBAL interpreter
+            jmp SCRINIT             ; b8008: auto-SCR then fall into the
+                                    ; executive - cold G 2000 = initialized
+                                    ; BASIC (warm re-entry = G exec, keeps
+                                    ; the stored program; address in .lst)
             
 ;-----------------------------------------------------------------------------------------       
 ; I/O routines for SCELBAL.
@@ -1224,6 +1230,10 @@ NOLIST:    LLI 342                ;Load L with address of RUN in look up table
            LHI OLDPG1/400         ;** Load H with page of SCR in look up table
            CAL STRCP              ;Call string compare subroutine to see if first word in
            JFZ NOSCR              ;Input buffer is SCR. If not then jump ahead.
+;b8008: cold entry jumps here so G 2000 comes up initialized (no manual
+;SCR needed - entering a line before SCR shredded the interpreter via
+;uninitialized program-space pointers). Falls through to JMP EXEC.
+SCRINIT:
            LHI OLDPG26/400        ;** If found SCR command then load memory pointer
            LLI 364                ;With address of a pointer storage location. Set that
            LMI BGNPGRAM           ;tt Storage location to page of start of USER PRO-  *******
