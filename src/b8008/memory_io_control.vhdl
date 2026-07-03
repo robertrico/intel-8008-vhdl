@@ -210,9 +210,21 @@ begin
             prev_state_t4 <= state_t4;
             prev_state_t5 <= state_t5;
 
-            -- Set suppress_pc_inc_next_cycle at T5 when entering a cycle that doesn't use PC
-            -- This flag is checked at the NEXT T1 to suppress PC increment
-            if prev_state_t5 = '1' and advance_state = '0' then
+            -- Set suppress_pc_inc_next_cycle at the END of the current cycle
+            -- when the NEXT cycle doesn't use the PC. Cycles now end at T3
+            -- (fetch/middle, empty T4/T5), T4 (LMr fetch), or T5 (tails), so
+            -- the trigger fires at whichever end-state the cycle actually
+            -- has. The flag is checked at the NEXT T1.
+            if (prev_state_t5 = '1' and advance_state = '0') or
+               (prev_state_t3 = '1' and advance_state = '0' and current_cycle = 0 and
+                (instr_needs_immediate = '1' or instr_needs_address = '1') and
+                not (instr_is_mem_indirect = '1' and instr_is_write = '1' and
+                     instr_needs_address = '0' and instr_is_io = '0')) or
+               (prev_state_t3 = '1' and advance_state = '0' and current_cycle = 1 and
+                instr_needs_address = '1') or
+               (prev_state_t4 = '1' and advance_state = '0' and current_cycle = 0 and
+                instr_is_mem_indirect = '1' and instr_is_write = '1' and
+                instr_needs_address = '0' and instr_is_io = '0') then
                 report "MEM_IO: At T5 edge, current_cycle=" & integer'image(current_cycle) &
                        " instr_is_mem_indirect=" & std_logic'image(instr_is_mem_indirect) &
                        " instr_needs_address=" & std_logic'image(instr_needs_address) &

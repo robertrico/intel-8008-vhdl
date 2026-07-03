@@ -142,6 +142,7 @@ architecture structural of b8008 is
             phi2_falling          : in std_logic;
             reset                 : in std_logic;
             advance_state         : in std_logic;
+            cycle_done            : in std_logic;
             interrupt_pending     : in std_logic;
             ready                 : in std_logic;
             instr_is_hlt_flag     : in std_logic;
@@ -175,15 +176,18 @@ architecture structural of b8008 is
             state_t4              : in std_logic;
             state_t5              : in std_logic;
             state_t1i             : in std_logic;
+            state_half            : in std_logic;
             instr_needs_immediate : in std_logic;
             instr_needs_address   : in std_logic;
             instr_is_io           : in std_logic;
             instr_is_write        : in std_logic;
             instr_is_hlt          : in std_logic;
             instr_needs_t4t5      : in std_logic;
+            instr_is_mem_indirect : in std_logic;
             eval_condition        : in std_logic;
             condition_met         : in std_logic;
             advance_state         : out std_logic;
+            cycle_done            : out std_logic;
             instr_is_hlt_flag     : out std_logic;
             cycle_type            : out std_logic_vector(1 downto 0);
             current_cycle         : out integer range 0 to 3;
@@ -597,6 +601,7 @@ architecture structural of b8008 is
     signal current_cycle    : integer range 0 to 3;
     signal next_cycle       : integer range 0 to 3;  -- Predicted next cycle (valid at T1 start)
     signal advance_state    : std_logic;
+    signal cycle_done       : std_logic;
     signal instr_is_hlt_flag : std_logic;  -- Latched HLT flag from machine_cycle_control
 
     -- Instruction decoder outputs
@@ -883,6 +888,7 @@ begin
             phi2_falling          => phi2_falling,
             reset                 => reset,
             advance_state         => advance_state,
+            cycle_done            => cycle_done,
             interrupt_pending     => interrupt_pending,
             ready                 => ready_status,
             instr_is_hlt_flag     => instr_is_hlt_flag,
@@ -927,15 +933,18 @@ begin
             state_t4              => state_t4,
             state_t5              => state_t5,
             state_t1i             => state_t1i,
+            state_half            => state_half,
             instr_needs_immediate => instr_needs_immediate,
             instr_needs_address   => instr_needs_address,
             instr_is_io           => instr_is_io,
             instr_is_write        => instr_is_write,
             instr_is_hlt          => instr_is_hlt,
             instr_needs_t4t5      => instr_needs_t4t5,
+            instr_is_mem_indirect => instr_is_mem_indirect,
             eval_condition        => eval_condition,
             condition_met         => condition_met,
             advance_state         => advance_state,
+            cycle_done            => cycle_done,
             instr_is_hlt_flag     => instr_is_hlt_flag,
             cycle_type            => cycle_type,
             current_cycle         => current_cycle,

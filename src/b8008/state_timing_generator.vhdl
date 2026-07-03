@@ -28,7 +28,8 @@ entity state_timing_generator is
         reset : in std_logic;
 
         -- Control inputs
-        advance_state         : in std_logic;  -- Advance to next state
+        advance_state         : in std_logic;  -- Instruction complete: next T1 fetches
+        cycle_done            : in std_logic;  -- Machine cycle over mid-instruction: next T1 continues it
         interrupt_pending     : in std_logic;  -- Interrupt waiting to be serviced
         ready                 : in std_logic;  -- Ready signal (1=ready, 0=wait)
         instr_is_hlt_flag     : in std_logic;  -- Latched HLT flag (for interrupt wake)
@@ -92,7 +93,7 @@ begin
     status_s2 <= '1' when (current_state = S_T2 or current_state = S_T4 or current_state = S_T5 or current_state = S_T1I) else '0';
 
     -- State advancement logic (combinational)
-    process(current_state, advance_state, interrupt_pending, instr_is_hlt_flag, transition_to_stopped, cycle_count, ready)
+    process(current_state, advance_state, cycle_done, interrupt_pending, instr_is_hlt_flag, transition_to_stopped, cycle_count, ready)
     begin
         -- Default: stay in current state
         next_state <= current_state;
@@ -144,15 +145,19 @@ begin
                         next_state <= S_STOPPED;
                     -- Priority 2: Instruction complete at T3
                     elsif advance_state = '1' then
-                        -- Short 1-cycle instruction complete
+                        -- Short instruction complete (e.g. not-taken RFc: 3 states)
                         if interrupt_pending = '1' then
                             next_state <= S_T1I;
                         else
                             next_state <= S_T1;
                         end if;
-                    -- Priority 3: Continue to T4
+                    -- Priority 3: machine cycle over, instruction continues
+                    -- (fetch/middle cycles with empty T4/T5 per the ISA table;
+                    -- NO interrupt check - mid-instruction per Figure 2)
+                    elsif cycle_done = '1' then
+                        next_state <= S_T1;
+                    -- Priority 4: Continue to T4
                     else
-                        -- Continue to T4 (needs T4/T5 or multi-cycle)
                         next_state <= S_T4;
                     end if;
                 end if;
@@ -167,6 +172,10 @@ begin
                         else
                             next_state <= S_T1;
                         end if;
+                    elsif cycle_done = '1' then
+                        -- Cycle used T4 but not T5 (LMr fetch cycle);
+                        -- instruction continues - no interrupt check
+                        next_state <= S_T1;
                     else
                         -- Continue to T5
                         next_state <= S_T5;

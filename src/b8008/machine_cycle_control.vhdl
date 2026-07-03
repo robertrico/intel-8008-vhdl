@@ -27,12 +27,13 @@ entity machine_cycle_control is
         reset       : in std_logic;
 
         -- State inputs from State Timing Generator
-        state_t1  : in std_logic;
-        state_t2  : in std_logic;
-        state_t3  : in std_logic;
-        state_t4  : in std_logic;
-        state_t5  : in std_logic;
-        state_t1i : in std_logic;
+        state_t1   : in std_logic;
+        state_t2   : in std_logic;
+        state_t3   : in std_logic;
+        state_t4   : in std_logic;
+        state_t5   : in std_logic;
+        state_t1i  : in std_logic;
+        state_half : in std_logic;  -- which half of the 2-edge state
 
         -- Instruction decoder inputs
         instr_needs_immediate : in std_logic;  -- Instruction needs 2nd byte
@@ -41,11 +42,13 @@ entity machine_cycle_control is
         instr_is_write        : in std_logic;  -- Memory write operation
         instr_is_hlt          : in std_logic;  -- HLT (halt) instruction
         instr_needs_t4t5      : in std_logic;  -- Instruction needs T4/T5 extended states
+        instr_is_mem_indirect : in std_logic;  -- Uses H:L addressing (M operand)
         eval_condition        : in std_logic;  -- Conditional instruction (JZ, JNZ, CALL, RET, etc.)
         condition_met         : in std_logic;  -- Condition result (1=met, 0=not met)
 
         -- Outputs to State Timing Generator
         advance_state     : out std_logic;  -- Signal to skip to next instruction
+        cycle_done        : out std_logic;  -- Machine cycle over mid-instruction (skip empty T4/T5)
         instr_is_hlt_flag : out std_logic;  -- Latched HLT flag for state machine
 
         -- Outputs to Memory & I/O Control (cycle type)
@@ -72,6 +75,13 @@ architecture rtl of machine_cycle_control is
 
     -- Latched advance signal
     signal advance_latch : std_logic := '0';
+
+    -- Latched mid-instruction cycle-end signal
+    signal cycle_done_latch : std_logic := '0';
+
+    -- LMr (MOV M,r): the only instruction whose FETCH cycle uses T4
+    -- (SSS TO REG.b) but not T5 - fetch ends after T4, not T3
+    signal is_lmr : std_logic;
 
     -- Latched cycle type signal
     signal cycle_type_latch : std_logic_vector(1 downto 0) := "00";
@@ -123,9 +133,14 @@ begin
                                       (condition_met = '1' or eval_condition = '0')) else
                              '0';
 
+    -- LMr = memory write through H:L with no address/immediate operand
+    is_lmr <= instr_is_mem_indirect and instr_is_write and
+              (not instr_needs_address) and (not instr_is_io);
+
     -- Output latched values
     cycle_type <= cycle_type_latch;
     advance_state <= advance_latch;
+    cycle_done <= cycle_done_latch;
     instr_is_hlt_flag <= instr_is_hlt_latch;
 
     -- Edge detection (combinational)
@@ -178,19 +193,21 @@ begin
                 end if;
             end if;
 
-            -- Advance state logic
+            -- Advance / cycle-end logic (T-state counts per docs/isa.json)
             if t1i_rising = '1' then
                 -- Clear when entering interrupt acknowledge
                 advance_latch <= '0';
+                cycle_done_latch <= '0';
                 instr_is_hlt_latch <= '0';
 
             elsif t1_rising = '1' then
                 -- Clear at start of new cycle
                 advance_latch <= '0';
+                cycle_done_latch <= '0';
                 instr_is_hlt_latch <= '0';
 
             elsif t3_rising = '1' then
-                -- Short cycle complete check
+                -- Instruction complete at T3
                 if needs_t4t5_this_cycle = '0' and
                    ((cycle_count = 1 and needs_cycle_3 = '0') or
                     (cycle_count = 2)) then
@@ -200,14 +217,40 @@ begin
                     advance_latch <= '1';
                     instr_is_hlt_latch <= '1';
                     report "MCycle: Setting advance_latch at T3 for HLT";
+                elsif cycle_count = 1 and needs_cycle_3 = '1' then
+                    -- Middle cycle of a 3-cycle instruction: T4/T5 skip
+                    -- (IR has been stable since cycle 1 - safe at T3 entry)
+                    cycle_done_latch <= '1';
+                    report "MCycle: cycle_done at T3 (middle cycle, T4/T5 skip)";
+                end if;
+
+            elsif state_t3 = '1' and state_half = '1' then
+                -- T3 SECOND half: the IR loaded the new opcode during the
+                -- first half, so decoder flags are now valid for the
+                -- FETCH-cycle decisions (at T3 entry they still describe
+                -- the previous instruction)
+                if cycle_count = 0 and needs_cycle_2 = '0' and
+                   needs_t4t5_this_cycle = '0' and instr_is_hlt = '0' then
+                    -- Single-cycle instruction with no T4/T5 work: 3 states
+                    -- (not-taken conditional RET per the ISA table)
+                    advance_latch <= '1';
+                    report "MCycle: Setting advance_latch at T3 half2 (3-state instruction)";
+                elsif cycle_count = 0 and needs_cycle_2 = '1' and is_lmr = '0' then
+                    -- Fetch cycle of a multi-cycle instruction: T4/T5 skip
+                    cycle_done_latch <= '1';
+                    report "MCycle: cycle_done at T3 half2 (fetch cycle, T4/T5 skip)";
                 end if;
 
             elsif t4_rising = '1' then
-                -- Single-cycle short instruction complete
                 if instr_is_hlt = '0' and cycle_count = 0 and
                    needs_t4t5_this_cycle = '0' and needs_cycle_2 = '0' then
+                    -- (legacy path; 3-state instructions now end at T3)
                     advance_latch <= '1';
                     report "MCycle: Setting advance_latch at T4 (short single-cycle complete)";
+                elsif cycle_count = 0 and is_lmr = '1' then
+                    -- LMr fetch cycle: T4 does SSS TO REG.b, T5 is skipped
+                    cycle_done_latch <= '1';
+                    report "MCycle: cycle_done at T4 (LMr fetch, T5 skip)";
                 end if;
 
             elsif t5_rising = '1' then
