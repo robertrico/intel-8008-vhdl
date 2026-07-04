@@ -70,7 +70,7 @@ architecture testbench of interrupt_test_tb is
             io_port_num_out     : out std_logic_vector(4 downto 0);
             io_port_write       : out std_logic;
             io_port_read        : out std_logic;
-            rom_a               : out std_logic_vector(12 downto 0);
+            rom_a               : out std_logic_vector(13 downto 0);
             rom_d               : in  std_logic_vector(7 downto 0);
             rom_ce_n            : out std_logic;
             rom_oe_n            : out std_logic
@@ -135,7 +135,7 @@ architecture testbench of interrupt_test_tb is
     signal io_port_read        : std_logic;
 
     -- External ROM bus
-    signal rom_a               : std_logic_vector(12 downto 0);
+    signal rom_a               : std_logic_vector(13 downto 0);
     signal rom_d               : std_logic_vector(7 downto 0);
     signal rom_ce_n            : std_logic;
     signal rom_oe_n            : std_logic;
@@ -207,7 +207,7 @@ begin
             ROM_FILE => ROM_FILE
         )
         port map (
-            ADDR     => rom_a,
+            ADDR     => rom_a(12 downto 0),
             DATA_OUT => rom_d,
             CS_N     => rom_ce_n,
             OE_N     => rom_oe_n

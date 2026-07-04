@@ -102,7 +102,7 @@ entity b8008_top is
         io_port_read        : out std_logic;                     -- Strobe: '1' for one phi2 cycle during INP T3
 
         -- External ROM interface
-        rom_a               : out std_logic_vector(12 downto 0); -- ROM address (8KB)
+        rom_a               : out std_logic_vector(13 downto 0); -- ROM address rel. ROM_BASE (up to 16K)
         rom_d               : in  std_logic_vector(7 downto 0);  -- ROM data input
         rom_ce_n            : out std_logic;                     -- ROM chip enable (active low)
         rom_oe_n            : out std_logic                      -- ROM output enable (active low)
@@ -448,7 +448,7 @@ begin
 
     -- External ROM interface: address relative to ROM_BASE so a high-ROM
     -- personality (b8008_basic: ROM at 0x1000-0x3FFF) indexes from zero
-    rom_a    <= std_logic_vector(resize(unsigned(latched_address) - ROM_BASE, 14)(12 downto 0));
+    rom_a    <= std_logic_vector(resize(unsigned(latched_address) - ROM_BASE, 14));
     rom_ce_n <= rom_cs_n_int;
     rom_oe_n <= rom_cs_n_int;  -- Active during reads (directly active directly tied to CE for simplicity)
 

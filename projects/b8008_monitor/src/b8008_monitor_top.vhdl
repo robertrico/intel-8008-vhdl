@@ -165,7 +165,7 @@ architecture rtl of b8008_monitor_top is
             io_port_write       : out std_logic;
             io_port_read        : out std_logic;
             -- External ROM interface
-            rom_a               : out std_logic_vector(12 downto 0);
+            rom_a               : out std_logic_vector(13 downto 0);
             rom_d               : in  std_logic_vector(7 downto 0);
             rom_ce_n            : out std_logic;
             rom_oe_n            : out std_logic
@@ -315,7 +315,7 @@ architecture rtl of b8008_monitor_top is
     signal auto_start_pulse : std_logic := '0';
 
     -- ROM source mux (internal LUT ROM vs external EEPROM)
-    signal rom_a_int      : std_logic_vector(12 downto 0);
+    signal rom_a_int      : std_logic_vector(13 downto 0);
     signal rom_d_cpu      : std_logic_vector(7 downto 0);
     signal rom_d_internal : std_logic_vector(7 downto 0);
 
@@ -705,7 +705,7 @@ begin
         );
 
     -- External ROM address pins always driven (harmless when internal ROM active)
-    rom_a <= rom_a_int;
+    rom_a <= rom_a_int(12 downto 0);
 
     gen_internal_rom : if USE_INTERNAL_ROM generate
         u_rom : rom_4kx8_bram
