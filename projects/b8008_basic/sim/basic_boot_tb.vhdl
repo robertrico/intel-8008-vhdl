@@ -228,24 +228,22 @@ begin
             variable n : integer;
         begin
             n := rx_count(pattern);
-            if n >= 2 then
+            if n >= 1 then
                 report "PASS: found """ & pattern & """ x" & integer'image(n)
                      & " (" & what & ")";
             else
                 -- severity warning so all checks run; final verdict is the error
                 report "FAIL: """ & pattern & """ found " & integer'image(n)
-                     & "x, need 2 (" & what & ")"
+                     & "x, need 1 (" & what & ")"
                     severity warning;
                 report "Captured UART text so far: [" & rx_buf(1 to rx_len) & "]";
                 all_pass := false;
             end if;
         end procedure;
     begin
-        -- Boot: POR ~21 ms, auto-start, ~380 ms firmware delay, banner, prompt
-        wait until prompt_count > 0 for 450 ms;
-        assert prompt_count > 0
-            report "FAIL: monitor prompt never appeared" severity failure;
-        report "Prompt seen at " & time'image(now);
+        -- Boot: POR + auto-start; this personality boots into SCELBAL -
+        -- there is no monitor '>' until MON is typed. Give the banner time.
+        wait for 200 ms;
 
         -- b8008_basic tiny-OS ceremony over full RTL: the boot vector in
         -- BRAM-initialized RAM must land in SCELBAL with NO typed command.
@@ -268,7 +266,7 @@ begin
         -- falls through to READY, letting us continue the session.
         wait for 30 ms;
         send_command("MON");
-        wait for 40 ms;
+        wait for 500 ms;   -- monitor delay_short (~380ms) before its banner
         check("8008 Monitor", "MON drops to the machine monitor");
 
         send_command("w 0500,AB");

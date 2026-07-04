@@ -190,7 +190,7 @@ architecture rtl of b8008_basic_top is
         );
         port (
             CLK      : in  std_logic;
-            ADDR     : in  std_logic_vector(11 downto 0);
+            ADDR     : in  std_logic_vector(13 downto 0);
             DATA_OUT : out std_logic_vector(7 downto 0);
             CS_N     : in  std_logic
         );
@@ -321,6 +321,10 @@ architecture rtl of b8008_basic_top is
 
     -- ROM source mux (internal LUT ROM vs external EEPROM)
     signal rom_a_int      : std_logic_vector(13 downto 0);
+    -- ROM index guard: rom_a is (addr - ROM_BASE) mod 16K, so RAM accesses
+    -- underflow past the 12K array. Silicon ignores it (CS-gated); the sim
+    -- array read must be clamped.
+    signal rom_a_safe     : std_logic_vector(13 downto 0);
     signal rom_d_cpu      : std_logic_vector(7 downto 0);
     signal rom_d_internal : std_logic_vector(7 downto 0);
 
@@ -716,12 +720,13 @@ begin
 
     -- External ROM address pins always driven (harmless when internal ROM active)
     rom_a <= rom_a_int(12 downto 0);
+    rom_a_safe <= rom_a_int when unsigned(rom_a_int) < 12288 else (others => '0');
 
     gen_internal_rom : if USE_INTERNAL_ROM generate
         u_rom : rom_12kx8_bram
             port map (
                 CLK      => clk_sys,
-                ADDR     => rom_a_int,
+                ADDR     => rom_a_safe,
                 DATA_OUT => rom_d_internal,
                 CS_N     => '0'
             );
