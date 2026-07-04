@@ -281,7 +281,7 @@ conditionals ending early. Every instruction takes the datasheet's
   - `blinky` - LED blink test ✅
   - `logic_blinky` - ALU logical operations (AND, OR, XOR) ✅
   - `ram_blinky` - RAM read/write ✅
-- [x] Project template created (`projects/example/`)
+- [x] Project template created (since removed; copy `projects/blinky` as the baseline)
 
 ### [x] Run Historical 8008 Software - DONE (the whole point, it turned out)
 Mandelbrot, pi, HEXPAWN (1973), SCELBI FP calculator (1974), STARS

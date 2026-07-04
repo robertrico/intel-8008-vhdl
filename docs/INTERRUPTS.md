@@ -17,23 +17,36 @@ The Intel 8008 implements a **single-level, non-vectorized interrupt** with inst
 
 ## The Interrupt Sequence
 
-### 1. Interrupt Recognition (End of PCI Cycle)
+### 1. Interrupt Recognition (Instruction Boundary Only)
 
-The CPU samples the INT line **at the end of each Program Counter Increment (PCI) cycle** during the T3 state:
+Per **Figure 2 of the 8008 User's Manual**, the INTERRUPTED? decision is
+reached only when INSTR. EXECUTION COMPLETE = YES. The CPU samples the
+latched INT line at the final T-state of an instruction — never between
+the machine cycles of a multi-cycle instruction:
 
-- **PCI cycle**: A complete instruction fetch (T1-T2-T3 or T1-T2-T3-T4-T5)
-- **Sampling point**: At T3 completion, when `microcode_state = FETCH`
-- **Decision**: Transition to T1I (interrupt acknowledge) instead of T1 (next instruction)
+- **Sampling point**: the last state of the last machine cycle, whatever
+  that is for the instruction (T3, T4, or T5 under cycle-exact timing)
+- **Decision**: begin the next instruction at T1I (interrupt acknowledge)
+  instead of T1
+- **Mid-instruction cycle transitions** (fetch cycle done, address cycle
+  done) go straight to the next cycle's T1 with NO interrupt check
 
-**Important**: T1 and T1I are **mutually exclusive states**. The CPU never enters T1 before T1I.
+**Important**: T1 and T1I are **mutually exclusive states**. The CPU never
+enters T1 before T1I, and an in-flight instruction is never hijacked
+between its own machine cycles. (b8008's first implementation got this
+wrong — see "Common Implementation Mistakes" below.)
 
 ### 2. Interrupt Acknowledge Cycle (T1I-T2-T3)
 
 When INT is recognized, the CPU performs a special acknowledge cycle:
 
 **T1I State** (State outputs S2 S1 S0 = 110):
-- Lower 8 bits of Program Counter output on data bus
-- **PC is NOT incremented** - preserved for return address
+- Lower 8 bits of the PC (the SP-selected address-stack slot) output on
+  the data bus
+- **The slot is NOT incremented** — under the 8008's post-increment
+  convention the slot already holds the next fetch address, and the T1I
+  increment is suppressed so the interrupted program resumes exactly
+  where it left off
 
 **T2 State**:
 - Upper 6 bits of PC and cycle type code output
@@ -61,9 +74,9 @@ Following the T1I acknowledge cycle, a **normal PCI cycle** occurs:
 
 The injected instruction executes normally through the CPU's decode and execution logic.
 
-**For RST n instruction**:
-1. Current PC is pushed onto the 8-level stack
-2. PC is set to (n × 8) - vector address in page zero
+**For RST n instruction** (PC-in-stack: a "push" is only an SP move):
+1. SP advances; the old slot keeps the return address it already holds
+2. The new slot is loaded with (n × 8) — vector address in page zero
 3. Execution continues from the interrupt handler
 
 **Vector Locations** (RST instruction):
@@ -83,9 +96,14 @@ Each vector has 8 bytes - typically contains a JMP to the actual handler.
 ### 5. Return from Interrupt
 
 The handler terminates with a RET instruction:
-- RET pops the saved PC from the stack
-- Execution resumes at the interrupted instruction
+- RET is only the SP pop — the caller's slot never stopped holding the
+  return address
+- Execution resumes at the interrupted program's next instruction
 - No special "return from interrupt" instruction needed
+
+Note: like real silicon booted via an RST-0 jam, the bootstrap interrupt
+consumes one stack level permanently — programs get 6 safe nested
+returns under the monitor.
 
 ---
 
@@ -160,22 +178,33 @@ when T1 =>
 3. **Possible mid-instruction interrupt**: May sample during non-PCI cycles
 4. **PC increment ambiguity**: PC may increment before interrupt recognized
 
-### Correct: Check at T3 During FETCH
+### Also Incorrect (b8008's own first attempt): Checking at Every Fetch T3
+
+Sampling INT at each fetch-cycle T3 looks right but still permits
+hijacking a multi-cycle instruction between its machine cycles. On
+silicon this produced the interrupt-storm crash: the post-handler resume
+skidded one byte past a taken jump target.
+
+### Correct: Check Only at Instruction Completion (Figure 2)
+
+The state machine distinguishes "this machine cycle is done" from "this
+instruction is done." Only the latter consults the interrupt latch:
 
 ```vhdl
-when T3 =>
-    if microcode_state = FETCH then
-        if is_halt_op = '1' then
-            timing_state <= STOPPED;
-        elsif INT = '1' then
-            timing_state <= T1I;  -- Correct: T1I instead of T1
-        elsif instruction_needs_execute = '1' then
-            timing_state <= T4;
-        else
-            timing_state <= T1;
-        end if;
-    end if;
+-- end of an instruction (advance_state: last T-state of last cycle)
+if int_pending = '1' then
+    next_state <= T1I;    -- interrupt honored at the boundary
+else
+    next_state <= T1;
+end if;
+
+-- end of a machine cycle mid-instruction (cycle_done)
+next_state <= T1;         -- NO interrupt check here, per Figure 2
 ```
+
+See `src/b8008/state_timing_generator.vhdl` and the Phase-4 storm test in
+`sim/b8008/interrupt_test_tb.vhdl`, which fires RST 7s into a spinning
+taken-jump loop and asserts the exact iteration count survives.
 
 ---
 
@@ -200,14 +229,18 @@ when T3 =>
 
 ---
 
-## Testing Checklist
+## Testing Checklist (all covered)
 
-- [ ] Assert INT at various microcode states, verify only PCI interruption
-- [ ] Verify T1I appears immediately after T3 (no intermediate T1)
-- [ ] Confirm PC doesn't increment during T1I cycle
-- [ ] Simulate external controller jamming RST instruction
-- [ ] Verify RET returns to correct PC after handler
-- [ ] Apply asynchronous INT, verify no metastability
+- [x] Assert INT at various states, verify boundary-only recognition
+      (`interrupt_test_tb` + state-timing TB Figure-2 counter-case)
+- [x] Verify T1I appears with no intermediate T1
+- [x] Confirm the PC slot doesn't increment during T1I
+- [x] Simulate external controller jamming RST instructions (all vectors)
+- [x] Verify RET returns to the correct address after the handler
+- [x] Fire interrupts into a running taken-jump loop; exact iteration
+      count survives (Phase-4 storm, 10/10, silicon-validated)
+- [x] Apply asynchronous INT via physical DIP switch (debounced one-shot,
+      selectable vector) — silicon-validated, including HLT wake
 
 ---
 
