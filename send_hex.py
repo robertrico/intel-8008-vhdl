@@ -107,11 +107,14 @@ def main():
         # resyncs at the next ':' and a silent gap lands in RAM. The dot
         # count is the only truth: one '.' per accepted record.
         dots = transcript.count(b"."[0])
-        if dots != len(records) or b"ERR" in transcript or b"?" in transcript:
-            sys.exit(f"\nLOAD INCOMPLETE: {dots}/{len(records)} records "
-                     "acknowledged ('.'). RAM image is NOT trustworthy - "
-                     "reset the board and rerun this load.")
-        print(f"verified: {dots}/{len(records)} records acknowledged",
+        # data records answer '.'; the EOF record (type 01) answers OK
+        expected = sum(1 for r in records if len(r) >= 9 and r[7:9] != "01")
+        if dots != expected or b"OK" not in bytes(transcript) or \
+           b"ERR" in transcript or b"?" in transcript:
+            sys.exit(f"\nLOAD INCOMPLETE: {dots}/{expected} data records "
+                     "acknowledged ('.') plus OK expected. RAM image is NOT "
+                     "trustworthy - reset the board and rerun this load.")
+        print(f"verified: {dots}/{expected} data records acknowledged + OK",
               file=sys.stderr)
 
         if args.go and (b"ERR" in transcript or b"?" in transcript):
