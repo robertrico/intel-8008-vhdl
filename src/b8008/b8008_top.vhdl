@@ -28,7 +28,13 @@ entity b8008_top is
         -- board feeds clk_in at. Default 100 MHz preserves all existing TBs.
         CLK_FREQ_HZ   : integer := 100_000_000;
         -- Simulation-only RAM preload (.mem format); "" = zeros like silicon
-        RAM_INIT_FILE : string  := ""
+        RAM_INIT_FILE : string  := "";
+        -- Memory-map personality (defaults = b8008_monitor: ROM low, RAM high)
+        ROM_BASE      : integer := 16#0000#;
+        ROM_LAST      : integer := 16#0FFF#;
+        RAM_BASE      : integer := 16#1000#;
+        RAM_LAST      : integer := 16#3FFF#;
+        RAM_ADDR_BITS : integer := 14
     );
     port (
         -- External clock and reset
@@ -393,12 +399,12 @@ begin
     -- rewrite the same value.
     u_ram : ram_sync
         generic map (
-            ADDR_BITS => 14,       -- 16K array; decoder exposes 0x1000-0x3FFF
+            ADDR_BITS => RAM_ADDR_BITS,
             INIT_FILE => RAM_INIT_FILE
         )
         port map (
             CLK      => clk_in,
-            ADDR     => latched_address(13 downto 0),
+            ADDR     => latched_address(RAM_ADDR_BITS-1 downto 0),
             DATA_IN  => ram_data_in,
             DATA_OUT => ram_data_out,
             RW_N     => ram_rw_n,
@@ -413,7 +419,7 @@ begin
             if reset = '1' then
                 ram_byte_0 <= (others => '0');
             elsif ram_cs_n = '0' and ram_rw_n = '0' and
-                  latched_address(13 downto 0) = "00000000000000" then
+                  unsigned(latched_address(RAM_ADDR_BITS-1 downto 0)) = 0 then
                 ram_byte_0 <= ram_data_in;
             end if;
         end if;
@@ -427,9 +433,10 @@ begin
     -- ROM range comes from the decoder's generic defaults; RAM grown to 8KB.
     u_decode : address_decoder
         generic map (
-            ROM_LAST => 16#0FFF#,  -- monitor firmware is 1.5K in the 4K BRAM ROM
-            RAM_BASE => 16#1000#,  -- 12K usable RAM for SCELBAL-class programs
-            RAM_LAST => 16#3FFF#
+            ROM_BASE => ROM_BASE,
+            ROM_LAST => ROM_LAST,
+            RAM_BASE => RAM_BASE,
+            RAM_LAST => RAM_LAST
         )
         port map (
             address  => latched_address,
@@ -439,8 +446,9 @@ begin
             ram_cs_n => ram_cs_n
         );
 
-    -- External ROM interface
-    rom_a    <= latched_address(12 downto 0);  -- 13-bit address for 8KB ROM
+    -- External ROM interface: address relative to ROM_BASE so a high-ROM
+    -- personality (b8008_basic: ROM at 0x1000-0x3FFF) indexes from zero
+    rom_a    <= std_logic_vector(resize(unsigned(latched_address) - ROM_BASE, 14)(12 downto 0));
     rom_ce_n <= rom_cs_n_int;
     rom_oe_n <= rom_cs_n_int;  -- Active during reads (directly active directly tied to CE for simplicity)
 
