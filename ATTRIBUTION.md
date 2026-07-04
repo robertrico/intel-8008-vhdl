@@ -196,6 +196,7 @@ When interfacing with vintage Intel 8008 silicon:
 
 - **The VCF community** for:
   - FPGA advice, encouragement, and vintage expertise
+  - Project thread: [Block-based Intel 8008 in VHDL - seeking FPGA advice](https://forum.vcfed.org/index.php?threads/block-based-intel-8008-in-vhdl-seeking-fpga-advice.1255974/)
 
 - **Vintage computing community** for:
   - Preservation and archiving of historical documentation
