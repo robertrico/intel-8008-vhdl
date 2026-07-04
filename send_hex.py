@@ -103,6 +103,17 @@ def main():
         drain(fd)
         print(file=sys.stderr)
 
+        # A dropped record leaves NO checksum error - the loader just
+        # resyncs at the next ':' and a silent gap lands in RAM. The dot
+        # count is the only truth: one '.' per accepted record.
+        dots = transcript.count(b"."[0])
+        if dots != len(records) or b"ERR" in transcript or b"?" in transcript:
+            sys.exit(f"\nLOAD INCOMPLETE: {dots}/{len(records)} records "
+                     "acknowledged ('.'). RAM image is NOT trustworthy - "
+                     "reset the board and rerun this load.")
+        print(f"verified: {dots}/{len(records)} records acknowledged",
+              file=sys.stderr)
+
         if args.go and (b"ERR" in transcript or b"?" in transcript):
             sys.exit("\nload had errors ('?' records / ERR) - NOT sending "
                      f"G {args.go}. RAM image is incomplete; rerun the load.")
