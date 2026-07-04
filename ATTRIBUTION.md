@@ -154,7 +154,9 @@ This hardware design is provided "as-is" for educational and historical preserva
 ### Simulation vs. Hardware Status
 - **Simulation**: Fully validated on macOS Sequoia 15.6.1
 - **FPGA Synthesis**: Verified for Lattice ECP5-5G
-- **Hardware Deployment**: Not yet tested on physical FPGA
+- **Hardware Deployment**: Silicon-validated on the ECP5-5G Versa (2026) —
+  monitor, period software ports, and ROM-resident SCELBAL all proven on
+  the board
 
 ### Vintage Hardware Interfacing (Future)
 When interfacing with vintage Intel 8008 silicon:

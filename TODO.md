@@ -1,5 +1,29 @@
 # TODO - b8008 Verification Roadmap
 
+## ✅ ROADMAP COMPLETE (July 2026)
+
+Everything below the line was the working roadmap; it is all done. Where the
+project actually landed:
+
+- **PC-in-stack architecture** — the PC is stack slot[SP], per the Intel block
+  diagram; post-increment fetch; boundary-only interrupts (silicon-validated)
+- **Cycle-exact T-states** — all 27 timing classes match `docs/isa.json` /
+  the datasheet (5/8/11 states), verified by `check_cycle_count_test`
+- **Interactive monitor** (`projects/b8008_monitor`) — D/W/L/G/H commands,
+  Intel HEX loading over serial, 46/46 hardware ISA self-test on silicon
+- **Period software** — Mandelbrot, pi, HEXPAWN (1973), SCELBI FP calc (1974),
+  STARS (Byte 5/1976) all running on the board (`test_programs/samples/`)
+- **SCELBAL** — Jim Loos's SCELBI BASIC, first RAM-resident under the monitor,
+  then ROM-resident as **the tiny OS** (`projects/b8008_basic`): boot-to-BASIC,
+  `MON` to the monitor, `G 1FB6` warm return (silicon-validated 2026-07-03)
+- **Front-panel silicon tests** — runtime interrupts via DIP switch (selectable
+  RST vector), READY/WAIT freeze switch, HLT wake, stack-wrap semantics
+
+Remaining ideas (unscheduled): more RAM / bigger memory-map personality,
+optional C13 reset button, monitor input-buffer hardening.
+
+---
+
 ## ✅ Hardware Validation Complete (January 2026)
 
 The b8008 has been successfully validated on real FPGA hardware:
@@ -90,20 +114,12 @@ UART peripheral integrated with b8008 CPU for real terminal I/O.
 - Port 9 (OUT): Direct UART TX (sends byte immediately at 115200 baud)
 - Port 8 (OUT): LED bank (directly active, accent active low)
 
-### [ ] Basic 8008 Monitor
-Once UART TX/RX is proven, create a simple monitor program.
-
-**Features:**
-- [ ] Command prompt over serial (2400 or 9600 baud)
-- [ ] Memory dump: `D xxxx` - display 16 bytes at address
-- [ ] Memory write: `W xxxx yy` - write byte yy at address xxxx
-- [ ] Register display: `R` - show A, B, C, D, E, H, L
-- [ ] Go: `G xxxx` - jump to address and execute
-
-**This will enable:**
-- Interactive debugging of CPU behavior
-- Memory exploration without recompilation
-- Foundation for porting real 8008 software
+### [x] Basic 8008 Monitor - DONE (`projects/b8008_monitor`)
+Shipped beyond the spec: `H` help, `D addr[,n]` dump, `W addr,val`
+readback-verified write, `L` Intel HEX load with checksums and paced
+sender (`send_hex.py`), `G addr` go, RST vector forwarding. 115200 baud.
+It became exactly what it promised: the foundation that ported real
+8008 software (see `test_programs/samples/`).
 
 ### [x] ROM Synthesis Bug - RESOLVED (January 2026)
 
@@ -149,7 +165,12 @@ Once UART TX/RX is proven, create a simple monitor program.
 
 ---
 
-### [ ] Debug Bitbang UART RX Timing (January 2026)
+### [x] Debug Bitbang UART RX Timing - SUPERSEDED
+Bitbang I/O was replaced wholesale by the memory-mapped USART
+(`IN 1` poll / `OUT 9` send) with atomic snapshot-and-pop RX. The
+bitbang path is retired; original notes kept below for history.
+
+### Original notes (January 2026)
 
 **Problem:** Bitbang RX receives corrupted characters in simulation.
 
@@ -237,17 +258,17 @@ Once UART TX/RX is proven, create a simple monitor program.
 
 ## Low Priority
 
-### [ ] Cross-Validate with Reference Simulator
-Run identical test programs on:
-- SIMH 8008 simulator
-- Compare final states bit-for-bit
-- Document any discrepancies
+### [x] Cross-Validate with Reference Simulator - DONE (different tool)
+A faithful Python oracle emulator (PC-in-stack, post-increment model)
+runs every port before silicon; calc's FP output artifacts match it
+bit-for-bit. Oracle-first debugging became the project methodology.
 
-### [ ] Cycle-Accurate Timing Tests
-Verify instruction timing matches Intel spec:
-- 1-cycle (5 states): MOV r,r, INR, DCR, rotate
-- 2-cycle (8 states): MVI, MOV r,M, MOV M,r, ALU M, INP
-- 3-cycle (11 states): JMP, CALL, MVI M
+### [x] Cycle-Accurate Timing Tests - DONE
+`check_cycle_count_test.sh` runs one instruction per timing class,
+counts actual simulated T-states between fetch markers, and diffs
+against `docs/isa.json`. 27/27 cycle-exact, including not-taken
+conditionals ending early. Every instruction takes the datasheet's
+5/8/11 states.
 
 ### [x] FPGA Synthesis and Hardware Validation
 - [x] GHDL synthesis: 6665 lines Verilog netlist
@@ -262,17 +283,17 @@ Verify instruction timing matches Intel spec:
   - `ram_blinky` - RAM read/write ✅
 - [x] Project template created (`projects/example/`)
 
-### [ ] Run Historical 8008 Software
-Find and run real 8008 programs:
-- BASIC interpreter fragments
-- Utility programs from the era
-- If real software runs, confidence increases dramatically
+### [x] Run Historical 8008 Software - DONE (the whole point, it turned out)
+Mandelbrot, pi, HEXPAWN (1973), SCELBI FP calculator (1974), STARS
+(Byte 5/1976), and full SCELBAL BASIC (1976) all run on silicon.
+Confidence increased dramatically — by finding five real CPU bugs the
+42-test self-test missed (carry preservation, rotate flags, WAIT state,
+interrupt boundaries, PC-in-stack).
 
-### [ ] Create Opcode Sweep Test
-Write a test that executes EVERY unique opcode at least once:
-- Exhaustive coverage of all 205+ valid opcodes
-- Use checkpoints to verify each executed correctly
-- This is the "gold standard" for instruction coverage
+### [x] Create Opcode Sweep Test - DONE (as the hardware self-test)
+The monitor's ISA self-test ROM runs 46 directed tests covering every
+instruction category ON THE BOARD and reports over serial. 46/46 on
+silicon.
 
 ---
 
@@ -284,8 +305,10 @@ Write a test that executes EVERY unique opcode at least once:
 - This is correct per Intel 8008 specification - the accumulator cannot be incremented/decremented directly
 - To increment A, use `ADI 01h`. To decrement A, use `SUI 01h`
 
-### READY Signal Untested
-External wait state handling exists but has no test coverage.
+### READY Signal - RESOLVED
+A real WAIT state now parks the CPU between T2 and T3 per the
+datasheet, exercised by a front-panel DIP switch and covered by
+testbench + silicon validation.
 
 ---
 

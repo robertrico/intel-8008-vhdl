@@ -1,7 +1,7 @@
 Intel 8008 VHDL Implementation - v1.0
 ======================================
 
-Copyright (c) 2025 Robert Rico
+Copyright (c) 2025-2026 Robert Rico
 
 This project is a cycle-accurate VHDL implementation of the Intel 8008
 microprocessor for FPGA deployment, including system integration, memory
@@ -114,10 +114,15 @@ All VHDL code is original work based on Intel's published specifications.
 PROJECT EVOLUTION
 ==================
 
-v1.0 - Monolithic Softcore (Current):
+v3.0 - b8008 Block-Based Implementation (Current):
+- Modular design following the Intel block diagram (src/b8008/)
+- PC-in-stack architecture, cycle-exact T-states
+- Silicon-validated on Lattice ECP5-5G Versa
+- Runs period software including SCELBAL BASIC (see ATTRIBUTION.md)
+
+v1.0 - Monolithic Softcore (superseded):
 - Complete 8008 in s8008.vhdl (1795 lines)
 - Cycle-accurate behavior per Intel specifications
-- Optimized for FPGA synthesis
 - Fully validated in simulation
 
 Earlier Iterations (src/iss/, archived):
@@ -143,7 +148,7 @@ Use at your own risk.
 SIMULATION VS. HARDWARE STATUS:
 - Simulation: Fully validated on macOS Sequoia 15.6.1
 - FPGA Synthesis: Verified for Lattice ECP5-5G
-- Hardware Deployment: Not yet tested on physical FPGA
+- Hardware Deployment: Silicon-validated on the ECP5-5G Versa (2026)
 
 When deploying to FPGA hardware:
 - Verify board compatibility and pin constraints
@@ -167,6 +172,16 @@ ACKNOWLEDGMENTS
 
 - Alfred Arnold for:
   * AS Assembler (Macro Assembler AS)
+
+- Jim Loos for:
+  * The 8008-SBC SCELBAL build this project runs (portions copyright 2021)
+
+- SCELBI Computer Consulting (Mark Arnold & Nat Wadsworth) for:
+  * SCELBAL - SCELBI BASIC (1976)
+
+- Mike Willegal for:
+  * The SCELBI software archive (willegal.net) - source of the period
+    software ports in test_programs/samples/
 
 - Michael Kohn for:
   * naken_asm assembler (used in early project iterations)

@@ -1,5 +1,38 @@
 # Version History
 
+## Version 3.0 (b8008) - The Tiny OS: Silicon-Validated, Cycle-Exact, Running 1970s Software
+
+**Status:** ✅ Silicon Validated on ECP5-5G Versa
+**Date:** July 2026
+
+The CPU reached architectural parity with real 8008 silicon and now runs
+period software, culminating in a boot-to-BASIC personality:
+
+- **PC-in-stack**: no separate program counter — the PC is the SP-selected
+  slot of the 8x14 address stack, post-increment fetch, exactly as the Intel
+  block diagram draws it. Stack-wrap semantics emerge from structure.
+- **Cycle-exact T-states**: all 27 timing classes match the datasheet
+  (5/8/11 states) per `docs/isa.json`, machine cycles end where the table
+  says (fetches at T3, not-taken conditionals early).
+- **Spec-exact flags**: INR/DCR preserve carry; rotates write carry only.
+- **Interrupts at instruction boundaries only** (Figure 2 of the User's
+  Manual), plus a real READY/WAIT state — both on front-panel DIP switches.
+- **Interactive monitor** (`projects/b8008_monitor`): D/W/L/G/H, Intel HEX
+  loading over serial, 46/46 hardware ISA self-test on the board.
+- **Period software on silicon**: Mandelbrot, pi, HEXPAWN (1973), SCELBI FP
+  calculator (1974), STARS (Byte 5/1976) — each ported with a minimal
+  documented change ledger.
+- **SCELBAL** (Jim Loos's SCELBI BASIC): first RAM-resident under the
+  monitor, then ROM-resident as **the tiny OS** (`projects/b8008_basic`):
+  power on straight into BASIC, `MON` drops to the monitor, `G 1FB6`
+  warm-returns with the program intact.
+
+Verification: 28/28 regression, interrupt suite 10/10, state-timing 12/12,
+cycle-count 27/27, full-RTL boot-to-BASIC ceremony testbench, Python oracle
+emulator cross-validation, and the silicon sessions themselves.
+
+---
+
 ## Version 2.1 (b8008) - Hardware Validated
 
 **Status:** ✅ Hardware Validated on ECP5 FPGA

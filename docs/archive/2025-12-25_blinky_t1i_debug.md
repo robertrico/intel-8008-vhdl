@@ -1,3 +1,9 @@
+> **ARCHIVED - RESOLVED.** The T1I->STOPPED mystery was a clock-domain
+> problem: modules using rising_edge() on combinational state signals plus
+> reset/bootstrap CDC hazards. Fixed by moving everything into the clk_sys
+> domain with phi2-rising enables and registered handshakes. Kept for the
+> forensic record.
+
 # Blinky FPGA Debug - Status Summary
 
 ## Date: 2025-12-25

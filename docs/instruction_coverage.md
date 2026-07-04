@@ -1,5 +1,13 @@
 # Intel 8008 Instruction Coverage
 
+> **HISTORICAL SNAPSHOT.** This matrix predates the full test buildout.
+> Current truth: 28/28 regression tests, a 46-test hardware ISA self-test
+> passing on silicon, cycle-exact timing verified for all 27 classes
+> (`check_cycle_count_test.sh` vs `docs/isa.json`), and period software
+> (SCELBAL BASIC, HEXPAWN, SCELBI FP calc, etc.) running on the board -
+> the strongest coverage evidence there is. See TODO.md for the final
+> coverage matrix.
+
 This document tracks test coverage for every Intel 8008 opcode.
 
 ## Coverage Summary
