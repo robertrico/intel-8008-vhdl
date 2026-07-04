@@ -26,7 +26,9 @@ entity b8008_top is
         -- Master clock frequency. Forwarded into b8008 → phase_clocks so the
         -- two-phase 8008 clock keeps its 0.8/0.6 µs widths whatever speed the
         -- board feeds clk_in at. Default 100 MHz preserves all existing TBs.
-        CLK_FREQ_HZ : integer := 100_000_000
+        CLK_FREQ_HZ   : integer := 100_000_000;
+        -- Simulation-only RAM preload (.mem format); "" = zeros like silicon
+        RAM_INIT_FILE : string  := ""
     );
     port (
         -- External clock and reset
@@ -171,7 +173,8 @@ architecture structural of b8008_top is
     -- Component: parameterized synchronous RAM (block RAM)
     component ram_sync is
         generic (
-            ADDR_BITS : integer := 10
+            ADDR_BITS : integer := 10;
+            INIT_FILE : string  := ""
         );
         port (
             CLK      : in  std_logic;
@@ -390,7 +393,8 @@ begin
     -- rewrite the same value.
     u_ram : ram_sync
         generic map (
-            ADDR_BITS => 14        -- 16K array; decoder exposes 0x1000-0x3FFF
+            ADDR_BITS => 14,       -- 16K array; decoder exposes 0x1000-0x3FFF
+            INIT_FILE => RAM_INIT_FILE
         )
         port map (
             CLK      => clk_in,

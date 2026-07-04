@@ -35,6 +35,9 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity b8008_monitor_top is
+    generic (
+        RAM_INIT_FILE : string := ""   -- sim-only RAM preload
+    );
     port (
         -- System clock (100 MHz LVDS)
         clk         : in  std_logic;
@@ -114,7 +117,8 @@ architecture rtl of b8008_monitor_top is
     --------------------------------------------------------------------------------
     component b8008_top is
         generic (
-            CLK_FREQ_HZ : integer := 100_000_000
+            CLK_FREQ_HZ   : integer := 100_000_000;
+            RAM_INIT_FILE : string  := ""
         );
         port (
             clk_in      : in std_logic;
@@ -646,7 +650,8 @@ begin
     --------------------------------------------------------------------------------
     u_system : b8008_top
         generic map (
-            CLK_FREQ_HZ => 25_000_000          -- PLL output frequency
+            CLK_FREQ_HZ   => 25_000_000,       -- PLL output frequency
+            RAM_INIT_FILE => RAM_INIT_FILE     -- sim-only; "" on silicon
         )
         port map (
             clk_in      => clk_sys,            -- 25 MHz from on-chip PLL

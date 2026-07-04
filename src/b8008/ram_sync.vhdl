@@ -17,10 +17,15 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+use std.textio.all;
 
 entity ram_sync is
     generic (
-        ADDR_BITS : integer := 10
+        ADDR_BITS : integer := 10;
+        -- Simulation-only preload (one hex byte per line, same format as
+        -- the .mem files). Empty string = all zeros, exactly as the
+        -- synthesized BRAM initializes on the FPGA.
+        INIT_FILE : string := ""
     );
     port (
         CLK      : in  std_logic;
@@ -34,7 +39,28 @@ end entity ram_sync;
 
 architecture rtl of ram_sync is
     type ram_array is array (0 to 2**ADDR_BITS - 1) of std_logic_vector(7 downto 0);
-    signal ram : ram_array := (others => x"00");
+
+    impure function init_ram return ram_array is
+        file f       : text;
+        variable l   : line;
+        variable b   : std_logic_vector(7 downto 0);
+        variable mem : ram_array := (others => x"00");
+        variable i   : integer := 0;
+    begin
+        if INIT_FILE'length > 0 then
+            file_open(f, INIT_FILE, read_mode);
+            while not endfile(f) and i < 2**ADDR_BITS loop
+                readline(f, l);
+                hread(l, b);
+                mem(i) := b;
+                i := i + 1;
+            end loop;
+            file_close(f);
+        end if;
+        return mem;
+    end function;
+
+    signal ram : ram_array := init_ram;
 begin
 
     process(CLK)
