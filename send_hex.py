@@ -87,10 +87,23 @@ def main():
 
     fd = open_port(args.port, args.baud)
     try:
+        # Preflight: the loader only exists at the monitor prompt. If the
+        # board is sitting in a program (SCELBAL has no exit), L goes
+        # nowhere and the old RAM image silently survives. Handshake first.
+        send(fd, "\r", args.char_delay)
+        time.sleep(0.4)
+        drain(fd)
+        if b">" not in transcript:
+            sys.exit("board is not at the monitor prompt (no '>' response).\n"
+                     "Toggle the sw0/H2 reset switch, wait for the banner, "
+                     "then rerun this load.")
         if not args.no_l:
             send(fd, "L\r", args.char_delay)
             time.sleep(0.3)          # monitor prints "SEND HEX (ESC ends)"
             drain(fd)
+            if b"SEND HEX" not in bytes(transcript):
+                sys.exit("monitor did not enter the loader (no SEND HEX "
+                         "banner). Reset the board and rerun.")
 
         for i, rec in enumerate(records, 1):
             send(fd, rec + "\r", args.char_delay)
