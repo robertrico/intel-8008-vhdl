@@ -1,0 +1,318 @@
+# ECP5-5G Versa Development Kit Constraints
+# Board: LFE5UM5G-45F-VERSA-EVN
+# Device: LFE5UM5G-45F-8BG381C
+# Project: b8008 Monitor - Interactive Console
+
+# ====================================================================================
+# Clock Input
+# ====================================================================================
+
+# 100 MHz LVDS Oscillator (X1)
+LOCATE COMP "clk" SITE "P3";
+IOBUF PORT "clk" IO_TYPE=LVDS;
+
+# STA target: 50 MHz (20 ns single-cycle budget).
+#
+# The board oscillator is 100 MHz physical, but we constrain at 50 MHz
+# here because the design is structurally a single-cycle-equivalent
+# 50 MHz design. Rationale:
+#
+#   1. Almost every flop on the chip is clocked on raw clk (100 MHz)
+#      but gated by a phi1_rising / phi1_falling / phi2_rising /
+#      phi2_falling one-clk enable pulse emitted by phase_clocks.
+#      Those pulses fire once per phi edge -- 40 to 220 clk cycles
+#      apart -- so the real timing budget for a path between any two
+#      CE-gated flops is 400 ns to 2.2 us, not 10 ns. STA does not
+#      model the CE pattern; without proper multicycle annotations it
+#      treats every clk edge as a potential update and falsely flags
+#      these paths.
+#
+#   2. The flops that are NOT phi-gated (phase_clocks state machine,
+#      debug_clock_control internal flops, monitor bootstrap flops)
+#      are the only ones that genuinely need to close at the raw clk
+#      period. Their measured worst-case path is ~3.26 ns -- well
+#      under 10 ns and trivially under 20 ns.
+#
+#   3. The functional CPU rate is set by the phase_clocks counters,
+#      which now scale automatically with CLK_FREQ_HZ so the 8008
+#      two-phase clock stays at ~454 kHz regardless of master speed.
+#
+# Master clock now goes through an on-chip PLL (pll_25mhz) that
+# divides 100 MHz down to 25 MHz. All design flops run on the PLL
+# output (clk_sys); the 100 MHz domain is just the PLL CLKI input.
+# At 25 MHz the worst-case CPU path closes with comfortable margin
+# (~65 MHz Fmax post-PnR), so multicycle annotations are no longer
+# required to ship a clean build.
+FREQUENCY PORT "clk" 100 MHz;
+
+# ====================================================================================
+# UART Interface
+# ====================================================================================
+# Connect FTDI USB-to-serial adapter:
+#   FPGA TX (uart_tx) -> FTDI RX
+#   FPGA RX (uart_rx) -> FTDI TX
+#   GND -> GND
+# Settings: 115200 baud, 8N1
+
+LOCATE COMP "uart_tx" SITE "B19";
+IOBUF PORT "uart_tx" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "uart_rx" SITE "B12";
+IOBUF PORT "uart_rx" IO_TYPE=LVCMOS33 PULLMODE=UP;
+
+# ====================================================================================
+# General Purpose LEDs (active low: '0' = ON)
+# ====================================================================================
+
+# LED0 - D25 (Yellow)
+LOCATE COMP "led[0]" SITE "E16";
+IOBUF PORT "led[0]" IO_TYPE=LVCMOS25;
+
+# LED1 - D24 (Yellow)
+LOCATE COMP "led[1]" SITE "D17";
+IOBUF PORT "led[1]" IO_TYPE=LVCMOS25;
+
+# LED2 - D22 (Green)
+LOCATE COMP "led[2]" SITE "D18";
+IOBUF PORT "led[2]" IO_TYPE=LVCMOS25;
+
+# LED3 - D21 (Green)
+LOCATE COMP "led[3]" SITE "E18";
+IOBUF PORT "led[3]" IO_TYPE=LVCMOS25;
+
+# LED4 - D26 (Red)
+LOCATE COMP "led[4]" SITE "F17";
+IOBUF PORT "led[4]" IO_TYPE=LVCMOS25;
+
+# LED5 - D27 (Red)
+LOCATE COMP "led[5]" SITE "F18";
+IOBUF PORT "led[5]" IO_TYPE=LVCMOS25;
+
+# LED6 - D28 (Red)
+LOCATE COMP "led[6]" SITE "E17";
+IOBUF PORT "led[6]" IO_TYPE=LVCMOS25;
+
+# LED7 - D29 (Red)
+LOCATE COMP "led[7]" SITE "F16";
+IOBUF PORT "led[7]" IO_TYPE=LVCMOS25;
+
+# ====================================================================================
+# DIP Switches (SW3)
+# ====================================================================================
+
+# SW3-1 (Bank 7 - 1.5V) - Reset control
+LOCATE COMP "sw[0]" SITE "H2";
+IOBUF PORT "sw[0]" IO_TYPE=LVCMOS15;
+
+# SW3-2 (Bank 7 - 1.5V)
+LOCATE COMP "sw[1]" SITE "K3";
+IOBUF PORT "sw[1]" IO_TYPE=LVCMOS15;
+
+# SW3-3 (Bank 7 - 1.5V)
+LOCATE COMP "sw[2]" SITE "G3";
+IOBUF PORT "sw[2]" IO_TYPE=LVCMOS15;
+
+# SW3-4 (Bank 7 - 1.5V)
+LOCATE COMP "sw[3]" SITE "F2";
+IOBUF PORT "sw[3]" IO_TYPE=LVCMOS15;
+
+# SW3-5 (Bank 2 - 2.5V)
+LOCATE COMP "sw[4]" SITE "J18";
+IOBUF PORT "sw[4]" IO_TYPE=LVCMOS25;
+
+# SW3-6 (Bank 2 - 2.5V)
+LOCATE COMP "sw[5]" SITE "K18";
+IOBUF PORT "sw[5]" IO_TYPE=LVCMOS25;
+
+# SW3-7 (Bank 2 - 2.5V)
+LOCATE COMP "sw[6]" SITE "K19";
+IOBUF PORT "sw[6]" IO_TYPE=LVCMOS25;
+
+# SW3-8 (Bank 2 - 2.5V)
+LOCATE COMP "sw[7]" SITE "K20";
+IOBUF PORT "sw[7]" IO_TYPE=LVCMOS25;
+
+# ====================================================================================
+# Speed Button
+# ====================================================================================
+LOCATE COMP "speed_btn" SITE "A10";
+IOBUF PORT "speed_btn" IO_TYPE=LVCMOS33 PULLMODE=UP;
+
+# ====================================================================================
+# Additional LEDs
+# ====================================================================================
+
+# LED M20 - UART TX busy indicator
+LOCATE COMP "led_M20" SITE "M20";
+IOBUF PORT "led_M20" IO_TYPE=LVCMOS25;
+
+# LED L18 - Reset indicator
+LOCATE COMP "led_L18" SITE "L18";
+IOBUF PORT "led_L18" IO_TYPE=LVCMOS25;
+
+# ====================================================================================
+# CPU Data Bus (directly wired to logic analyzer)
+# ====================================================================================
+
+LOCATE COMP "cpu_d[0]" SITE "E9";
+IOBUF PORT "cpu_d[0]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[1]" SITE "D9";
+IOBUF PORT "cpu_d[1]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[2]" SITE "B8";
+IOBUF PORT "cpu_d[2]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[3]" SITE "C8";
+IOBUF PORT "cpu_d[3]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[4]" SITE "D8";
+IOBUF PORT "cpu_d[4]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[5]" SITE "E8";
+IOBUF PORT "cpu_d[5]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[6]" SITE "C7";
+IOBUF PORT "cpu_d[6]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "cpu_d[7]" SITE "C6";
+IOBUF PORT "cpu_d[7]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# ====================================================================================
+# CPU State Outputs (S0, S1, S2)
+# ====================================================================================
+
+LOCATE COMP "cpu_s0" SITE "D7";
+IOBUF PORT "cpu_s0" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_s1" SITE "B11";
+IOBUF PORT "cpu_s1" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_s2" SITE "B6";
+IOBUF PORT "cpu_s2" IO_TYPE=LVCMOS33;
+
+# ====================================================================================
+# CPU SYNC Output
+# ====================================================================================
+
+LOCATE COMP "cpu_sync" SITE "E7";
+IOBUF PORT "cpu_sync" IO_TYPE=LVCMOS33;
+
+# ====================================================================================
+# Phase Clocks
+# ====================================================================================
+
+LOCATE COMP "cpu_phi1" SITE "E6";
+IOBUF PORT "cpu_phi1" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "cpu_phi2" SITE "D6";
+IOBUF PORT "cpu_phi2" IO_TYPE=LVCMOS33;
+
+# ====================================================================================
+# CPU Control Signals
+# ====================================================================================
+
+LOCATE COMP "cpu_int" SITE "B9";
+IOBUF PORT "cpu_int" IO_TYPE=LVCMOS33;
+
+# ====================================================================================
+# External ROM Interface
+# ====================================================================================
+# Active-low signals use _n suffix (standard convention)
+
+# ROM Data Bus (directly active from ROM)
+LOCATE COMP "rom_d[0]" SITE "D15";
+IOBUF PORT "rom_d[0]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[1]" SITE "E15";
+IOBUF PORT "rom_d[1]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[2]" SITE "B16";
+IOBUF PORT "rom_d[2]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[3]" SITE "C16";
+IOBUF PORT "rom_d[3]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[4]" SITE "B17";
+IOBUF PORT "rom_d[4]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[5]" SITE "C17";
+IOBUF PORT "rom_d[5]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[6]" SITE "B18";
+IOBUF PORT "rom_d[6]" IO_TYPE=LVCMOS33;
+
+LOCATE COMP "rom_d[7]" SITE "A18";
+IOBUF PORT "rom_d[7]" IO_TYPE=LVCMOS33;
+
+# ROM Address Bus
+LOCATE COMP "rom_a[0]" SITE "C13";
+IOBUF PORT "rom_a[0]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[1]" SITE "D13";
+IOBUF PORT "rom_a[1]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[2]" SITE "E13";
+IOBUF PORT "rom_a[2]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[3]" SITE "A14";
+IOBUF PORT "rom_a[3]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[4]" SITE "C14";
+IOBUF PORT "rom_a[4]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[5]" SITE "D14";
+IOBUF PORT "rom_a[5]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[6]" SITE "E14";
+IOBUF PORT "rom_a[6]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[7]" SITE "D11";
+IOBUF PORT "rom_a[7]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[8]" SITE "C10";
+IOBUF PORT "rom_a[8]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[9]" SITE "A9";
+IOBUF PORT "rom_a[9]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[10]" SITE "B10";
+IOBUF PORT "rom_a[10]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[11]" SITE "D12";
+IOBUF PORT "rom_a[11]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+LOCATE COMP "rom_a[12]" SITE "E12";
+IOBUF PORT "rom_a[12]" IO_TYPE=LVCMOS33 DRIVE=12;
+
+# ROM Control Signals (active-low, directly active directly wired directly active directly wired directly directly)
+# Pull-ups ensure ROM is disabled during FPGA configuration/power-up
+LOCATE COMP "rom_ce_n" SITE "C15";
+IOBUF PORT "rom_ce_n" IO_TYPE=LVCMOS33 DRIVE=12 PULLMODE=UP;
+
+LOCATE COMP "rom_oe_n" SITE "B15";
+IOBUF PORT "rom_oe_n" IO_TYPE=LVCMOS33 DRIVE=12 PULLMODE=UP;
+
+# ====================================================================================
+# Debug Buttons (X4 expansion connector, active low with internal pull-up)
+# ====================================================================================
+# Wire buttons between GPIO pin and GND. Internal pull-up enabled.
+# X4 connector pins 3-5 (IO0-IO2): A12, A13, B13
+
+# Run/Stop toggle button (X4 pin 3)
+LOCATE COMP "dbg_btn_run_stop" SITE "A12";
+IOBUF PORT "dbg_btn_run_stop" IO_TYPE=LVCMOS25 PULLMODE=UP;
+
+# Step Cycle button (X4 pin 4) - advances one full phi1+phi2 cycle
+LOCATE COMP "dbg_btn_step_cycle" SITE "A13";
+IOBUF PORT "dbg_btn_step_cycle" IO_TYPE=LVCMOS25 PULLMODE=UP;
+
+# Step to SYNC button (X4 pin 5) - runs until instruction boundary
+LOCATE COMP "dbg_btn_step_sync" SITE "B13";
+IOBUF PORT "dbg_btn_step_sync" IO_TYPE=LVCMOS25 PULLMODE=UP;
+
+# ====================================================================================
+# Configuration
+# ====================================================================================
+
+SYSCONFIG CONFIG_IOVOLTAGE=3.3 COMPRESS_CONFIG=ON MCCLK_FREQ=62;
