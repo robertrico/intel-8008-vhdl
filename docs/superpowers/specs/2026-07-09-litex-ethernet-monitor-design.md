@@ -40,8 +40,8 @@ project is not modified.
 projects/b8008_net/
 ├── versa_soc.py            # LiteX top (based on litex-boards versa_ecp5)
 ├── src/
-│   ├── b8008_net_core.vhdl # wrapper: b8008 + USART + dual-port RAM, no pads
-│   └── ram_dp_sync.vhdl    # true dual-port 8KB BRAM
+│   ├── b8008_net_core.vhdl # wrapper: b8008 + USART, pure logic, no pads
+│   └── sim/                # behavioral RAM/ROM models, testbench only
 ├── firmware/               # VexRiscv DHCP/identity firmware (C)
 ├── host/b8008net           # Python CLI
 └── Makefile                # ghdl-convert + litex build + prog targets
@@ -58,31 +58,50 @@ PHY0 (RGMII) ── LiteEth ──┬── Etherbone ── wishbone ─┬─ 
 
 PHY1: unused (free for future experiments)
 
-b8008_net_core (25 MHz domain):
+b8008_net_core (25 MHz domain, pure logic):
   b8008 CPU ── USART ── internal tx/rx wires ── LiteX UART (RS232PHY, 115200)
-  b8008 memory bus ── ram_dp_sync port A
+  b8008 memory bus  ──┐
+  external ROM bus  ──┤ Migen Memory instances (RAM 8KB dual-port,
+                      ┘ monitor ROM 4KB) — all memories SoC-side
 ```
 
 ### Network identity (appliance mode)
 
-- One PHY, one cable. LiteEth hardware UDP/IP stack shared between
-  Etherbone and the CPU's ethmac (`add_ethernet` + `add_etherbone` on the
-  same PHY, `eth_dynamic_ip`).
-- VexRiscv firmware at boot: runs DHCP with hostname option `b8008`
-  (so home routers list the device by name and typically register it in
-  local DNS automatically), then writes the leased IP into the Etherbone
-  UDP/IP core's CSRs. Etherbone answers on the leased address from then on.
-- The CPU is infrastructure only — never in the monitor data path. If it
-  is held in reset, console/loader/peek-poke still work once an IP is set.
-- Firmware is small (~100 lines of C over libliteeth), stored in on-chip
-  ROM, and is also the fallback if any stock LiteX DHCP path has gaps: the
-  CPU can implement whatever the appliance UX requires.
+- One PHY, one cable. `add_etherbone(phy, with_ethmac=True)` — LiteEth
+  hybrid mode: hardware UDP/IP stack for Etherbone plus CPU ethmac on the
+  same PHY. Our `versa_soc.py` calls it directly (the stock versa target's
+  argparse makes ethernet/etherbone mutually exclusive — that's a CLI
+  choice in the target, not a core limitation; don't copy the pattern).
+- Hybrid mode requires two MACs (Etherbone MAC ≠ ethmac MAC; LiteX errors
+  if equal). RX dispatch is by target MAC.
+- **Custom firmware DHCP is mandatory, not a fallback.** Verified: neither
+  the LiteEth hardware DHCP core (options 53/61/55 only) nor libliteeth's
+  `dhcp.c` (1/3/50/53/54/55) sends hostname option 12, and both are
+  one-shot with no lease renewal. Firmware (C over libliteeth, using its
+  `dhcp_add_option()` helper) therefore:
+  - sends option 12 hostname `b8008` (router device list + local DNS);
+  - sets DHCP `chaddr` to the **Etherbone MAC** with the broadcast flag
+    set (replies arrive broadcast, so the CPU path still receives them).
+    The lease is then bound to the MAC that will answer ARP for the IP —
+    no IP-jumping-MACs conflict at the router;
+  - writes the leased IP into the Etherbone core's IP CSR;
+  - runs a lease-renewal timer (T1/T2) — home-router leases expire (~24h)
+    and both stock paths would silently squat on a reassignable address.
+- **Etherbone IP CSR is custom wiring**, not a stock flag: `add_etherbone`
+  has no dynamic-IP parameter. A `CSRStorage` feeds the UDP/IP core's IP
+  input (`convert_ip()` passes Migen Signals through; liteeth's `gen.py`
+  `dynamic_params` is precedent). Reset value 0.0.0.0, and the core's ARP
+  answering is gated until the CSR is nonzero — never answer for the
+  default address on the LAN.
+- The CPU is infrastructure only — never in the monitor data path. Once
+  the IP CSR is set, console/loader/peek-poke work even with the CPU held.
 
 ### VHDL into the LiteX build
 
 - `b8008_net_core.vhdl` wraps the existing `src/b8008/` modules (all
-  unchanged) plus USART plus `ram_dp_sync`, exposing: clk/reset, uart
-  tx/rx, RAM port B, control inputs, debug outputs.
+  unchanged) plus USART — pure logic, no memory arrays — exposing:
+  clk/reset, uart tx/rx, the 8008 RAM memory bus, the external ROM bus,
+  control inputs, debug outputs.
 - A Makefile step converts it once per build with
   `ghdl synth --out=verilog` → `b8008_net_core.v`. LiteX includes the
   generated Verilog as a source and instantiates it. Deterministic; no
@@ -97,20 +116,36 @@ b8008_net_core (25 MHz domain):
 - RGMII 125 MHz domains are handled by LiteEth and the board file.
 - The only domain crossings: (a) async serial between the 25 MHz USART and
   the sys-domain LiteX UART — safe by construction (oversampled serial);
-  (b) `ram_dp_sync` port B in sys domain, port A in 25 MHz domain — true
-  dual-port BRAM, each port synchronous to its own clock.
+  (b) the Migen RAM's wishbone port in sys domain, its 8008-facing port in
+  the 25 MHz domain — true dual-port BRAM, each port synchronous to its
+  own clock.
 
-### Dual-port RAM
+### Memories live on the Migen side (not in the VHDL)
 
-- `ram_dp_sync.vhdl`: 8KB true dual-port BRAM in b8008 module style
-  (simple, dumb, own testbench).
-- Port A: the 8008's memory port, exact current `ram_sync` behavior.
-- Port B: synchronous read/write, wrapped by a ~20-line Migen shim into a
-  wishbone slave window in the SoC address map.
-- No arbitration needed. Only hazard is a simultaneous write to the same
-  address from both ports; outcome is undefined per BRAM semantics. Rule:
-  host loads happen with the CPU held (reset or monitor prompt); `b8008net
-  load` checks the status CSR and warns if the CPU is running.
+GHDL's Verilog output is experimental and its dual-port BRAM inference
+through yosys has a stack of known failures (ghdl#1069, #2092, #3027,
+#2490; yosys#2965, #3400). Failure mode is silent: RAM/ROM degrade to
+FFs/LUTs and an 8KB RAM (~65k FFs) or 4KB ROM will not fit the 45F part.
+So no memory arrays pass through the ghdl→verilog conversion:
+
+- **8KB RAM:** Migen `Memory` with two ports — port A via
+  `get_port(clock_domain="b8008")` wired to the wrapper's exposed memory
+  bus, port B as a wishbone slave window (native LiteX, trivially mapped
+  to DP16KD).
+- **4KB monitor ROM:** Migen `Memory` initialized from the assembled
+  monitor image, read port in the `b8008` domain, wired to the wrapper's
+  external-ROM bus (the monitor top already supports an external ROM
+  interface — same pattern).
+- The VHDL core (`b8008_net_core`) is pure logic plus small register
+  arrays (register file 7x8, address stack 8x14 — fine as FFs, as today).
+- For GHDL simulation, the testbench provides behavioral VHDL RAM/ROM
+  models (sim-only, never synthesized).
+- Synth report check is mandatory at HW stage 1: expected DP16KD count
+  present, FF count sane.
+- No arbitration on the RAM. Only hazard is a simultaneous write to the
+  same address from both ports; outcome undefined per BRAM semantics.
+  Rule: host loads happen with the CPU held (reset or monitor prompt);
+  `b8008net load` checks the status CSR and warns if the CPU is running.
 
 ### Console path
 
@@ -118,6 +153,11 @@ b8008_net_core (25 MHz domain):
   (RS232PHY at 115200 in sys domain) with CSR-mapped FIFOs.
 - Host reads/writes those CSRs over Etherbone. No monitor ROM or USART
   VHDL changes.
+- **FIFO sizing is throughput-critical:** each CSR read is one Etherbone
+  UDP round trip (~0.3–1 ms → ~1–3k reads/s ≈ 1–3 kB/s), while the
+  monitor transmits at 115200 baud ≈ 11.5 kB/s. The stock 16-deep rx FIFO
+  overflows on the first banner burst. Design: `rx_fifo_depth` ≥ 1 KB, and
+  `b8008net` reads the rx-level CSR then drains in batched reads.
 
 ### Control CSRs
 
@@ -139,7 +179,9 @@ Etherbone/UDP → board.
 
 1. Resolve `b8008.lan` / `b8008.local` (router-registered DHCP hostname).
 2. Fallback: Etherbone probe sweep of the local /24 (~254 UDP packets,
-   milliseconds); the board answers the probe.
+   milliseconds); the board answers the probe. The sweep speaks Etherbone
+   directly (litex's `remote.etherbone` classes standalone) — litex_server
+   binds a single IP and can't sweep; it is spawned only after discovery.
 3. Cache the last-known address; re-discover only when unreachable.
 
 No IP is ever typed or stored in project config.
@@ -180,16 +222,21 @@ to a release tag. `make litex-env` sets it up once.
 Staged; no commit until stage 6 passes on the board (hardware-proof rule).
 User flashes hardware; assistant builds and hands over commands.
 
-1. **Module sim:** `ram_dp_sync` GHDL testbench (both ports, simultaneous
-   access), existing style + make target.
-2. **Core sim:** `b8008_net_core` runs adapted monitor boot + interactive
-   testbenches. Full regression `run_all_tests.sh` stays green
-   (`src/b8008/` untouched).
-3. **Netlist smoke:** converted `b8008_net_core.v` re-simulated once (boot
+1. **Core sim:** `b8008_net_core` runs adapted monitor boot + interactive
+   testbenches, with behavioral VHDL RAM/ROM models in the testbench
+   (mirroring the Migen memories' port timing). Full regression
+   `run_all_tests.sh` stays green (`src/b8008/` untouched).
+2. **Netlist smoke:** converted `b8008_net_core.v` re-simulated once (boot
    banner) to catch ghdl-convert issues before hardware.
+3. **Memory-port contract:** one written note in the wrapper defining port
+   timing (read latency, write-enable semantics) that both the behavioral
+   models and the Migen memories must satisfy — the sim/synth divergence
+   risk introduced by moving memories out lives exactly here.
 4. **HW stage 1 — SoC alone (no 8008 core):** DHCP lease acquired, board
    named `b8008` in router list, Etherbone answers on leased IP,
-   `litex_cli --regs` works.
+   `litex_cli --regs` works. Synth report checked: expected DP16KD count,
+   sane FF count, timing clean. Leave running past lease T1 to observe a
+   renewal.
 5. **HW stage 2 — full SoC:** `b8008net console` shows monitor banner;
    peek/poke RAM.
 6. **HW stage 3 — workflow parity:** mandelbrot, pi, calc loaded via
@@ -197,24 +244,30 @@ User flashes hardware; assistant builds and hands over commands.
 
 ## Risks and the verification spike
 
-First implementation task is a spike, before any RTL work:
+Design was verified against LiteX/LiteEth/GHDL sources pre-implementation
+(2026-07-09 review): shared-PHY hybrid mode, versa_ecp5 board support, and
+both DHCP code paths confirmed real; DHCP path decided (custom firmware,
+see Network identity); memories moved out of the VHDL conversion path.
 
-1. Install LiteX; confirm the cleanest supported path for
-   dynamic-IP Etherbone on a shared PHY. Candidates, in preference order:
-   BIOS/firmware DHCP + CSR-writable Etherbone IP (`eth_dynamic_ip`);
-   LiteEth hardware DHCP core; custom firmware DHCP over libliteeth.
-   All converge on the same UX; spike picks the least custom one.
-2. Confirm whether the chosen DHCP path sends hostname option 12
-   (`b8008`); if not, firmware adds it.
-3. Confirm litex-boards `versa_ecp5` (5G variant) exposes the PHY used.
-4. Smoke-test `ghdl synth --out=verilog` on a trivial b8008 module before
-   committing to the conversion flow.
+Remaining spike, before RTL work:
+
+1. Install pinned LiteX; build stock versa_ecp5 target as toolchain
+   sanity check.
+2. Prototype the custom Etherbone-IP CSR wiring (`CSRStorage` →
+   UDP/IP core IP input, ARP gate) — the one piece of custom Migen with
+   no stock precedent beyond liteeth `gen.py` dynamic_params.
+3. Smoke-test `ghdl synth --out=verilog` on the pure-logic wrapper;
+   confirm resulting netlist simulates (netlists are unoptimized with
+   scrambled names — acceptable, they only feed synthesis).
 
 Other noted risks:
-- Etherbone probe response to subnet sweep (unicast probes, not broadcast,
-  so hardware IP filtering is not an issue once the lease is set).
+- Probe sweep uses unicast probes (not broadcast), so hardware IP
+  filtering is not an issue once the lease is set; board is undiscoverable
+  before the first lease — `b8008net` reports "no lease yet, retrying".
 - ECP5-5G RGMII IO timing: handled by LiteEth + board file; verify timing
   report at HW stage 1.
+- `with_ethmac=True` forces `ETH_PHY_NO_RESET` and bakes related
+  constants — harmless, firmware ignores.
 
 ## Decision log
 
@@ -229,3 +282,9 @@ Other noted risks:
 - Static IP rejected: user requires plug-in-like-a-regular-device.
 - Host UX: single `b8008net` CLI (vs. telnet bridge or raw litex tools).
 - Demo/web layer deferred by user to keep scope contained.
+- Post-review (2026-07-09): all memories (RAM + monitor ROM) moved to
+  Migen side — GHDL verilog backend + TDP inference too risky; custom
+  firmware DHCP promoted from fallback to mandatory (option 12, chaddr =
+  Etherbone MAC + broadcast flag, lease renewal); Etherbone IP CSR
+  documented as custom wiring with 0.0.0.0 reset + ARP gate; console rx
+  FIFO ≥ 1 KB with batched drains (Etherbone RTT math).
