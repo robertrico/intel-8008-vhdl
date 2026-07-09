@@ -85,7 +85,7 @@ Expected: ends with `litex OK`.
 
 - [ ] **Step 4: Toolchain sanity — build stock versa target to a bitstream**
 
-Run: `cd projects/b8008_net && $(pwd)/.venv/bin/python -m litex_boards.targets.lattice_ecp5_versa --device=LFE5UM5G --build --output-dir build/stock_sanity`
+Run: `cd projects/b8008_net && $(pwd)/.venv/bin/python -m litex_boards.targets.lattice_versa_ecp5 --device=LFE5UM5G --build --output-dir build/stock_sanity`
 (Exact module name: `ls .venv/**/litex_boards/targets/ | grep -i versa` first; use what exists.)
 Expected: `build/stock_sanity/gateware/*.bit` exists. This proves yosys/nextpnr/ecppack wiring end-to-end.
 
@@ -118,7 +118,7 @@ Proves the one custom mechanism with no stock precedent: a `CSRStorage`-driven I
 ```python
 # spike_dynamic_ip.py — throwaway: does dynamic-IP etherbone elaborate?
 from migen import Signal
-from litex_boards.targets import lattice_ecp5_versa as versa  # adjust to actual module name from Task 1
+from litex_boards.targets import lattice_versa_ecp5 as versa
 from litex.soc.interconnect.csr import CSRStorage, AutoCSR
 
 class _EbIP(AutoCSR):
@@ -136,6 +136,9 @@ def main():
                       mac_address=0x10e2d5000001,
                       ip_address=soc.eb_ip.ip.storage,   # <-- the experiment
                       udp_port=1234,
+                      buffer_depth=255,  # REQUIRED: default 16 overflows on
+                                         # RemoteClient's 255-word write bursts
+                                         # (liteeth etherbone.py asserts <=256)
                       with_ethmac=True,
                       ethmac_address=0x10e2d5000002,
                       ethmac_local_ip="0.0.0.0",
@@ -154,7 +157,7 @@ Expected: `ELABORATED OK`. If `add_etherbone` rejects a Signal or a kwarg name d
 
 - [ ] **Step 3: Also verify verilog generation**
 
-Add `from litex.build.generic_platform import *` build call or simply run the target with `--no-compile-gateware` equivalent: `soc.build(run=False)` after finalize. Expected: `build/**/top.v` written, contains the eb_ip CSR.
+After finalize: `from litex.soc.integration.builder import Builder; Builder(soc, output_dir="build/spike").build(run=False)`. Expected: `build/spike/gateware/*.v` written, contains the eb_ip CSR.
 
 - [ ] **Step 4: Record findings, delete spike, commit note**
 
@@ -357,7 +360,9 @@ git commit -m "b8008_net: pure-logic core wrapper boots monitor headless in sim"
 Do NOT hand-roll the source list. `projects/project.mk` already solves this: an ordered `B8008_SRCS` (GHDL analyzes in argument order; a wildcard sorts `b8008.vhdl` before `b8008_types.vhdl` and breaks), `--synth` invocation (line ~245: `$(GHDL) --synth $(GHDL_FLAGS) --out=verilog $(TOP)`), and `src/synth/ghdl_gates.v` fed to yosys alongside the output (GHDL emits `gate_mdff`/`gate_midff` primitive instances — without their definitions every downstream consumer sees undefined modules).
 
 ```make
-include ../project.mk           # or copy its B8008_SRCS block verbatim
+# Copy project.mk's ordered B8008_SRCS block verbatim into this Makefile
+# (do NOT `include ../project.mk` — it drags in default targets and
+# PROJECT_SRCS wildcard machinery this Makefile isn't shaped for).
 CORE_SRCS := $(B8008_SRCS) ../../src/components/usart.vhdl \
              $(monitor b8008_usart source, from projects/b8008_monitor/Makefile's list) \
              src/b8008_net_core.vhdl
@@ -421,7 +426,7 @@ def test_elaborates(tmp_path):
         def __init__(self, platform):
             self.cd_sys = ClockDomain()
             self.cd_b8008 = ClockDomain()
-            self.core = B8008Core(platform, rom_init=[0]*4096)
+            self.core = B8008Core(platform, sys_clk_freq=75e6, rom_init=[0]*4096)
     top = Top(P())
     from migen.fhdl.verilog import convert
     v = str(convert(top, ios=set()))
@@ -546,7 +551,7 @@ Clean up the last comment into real code (named `ram_rw_n`/`ram_cs_n` Signals + 
 
 - [ ] **Step 3: Verify CSR pop/push strobes against installed LiteX**
 
-Read `.venv/**/litex/soc/cores/uart.py` `UART.__init__` — copy its exact `rxtx`/fifo strobe wiring (`self._rxtx.re`/`.we` semantics) into the bridge; the comment in Step 2 marks the spot. This is a correctness-critical detail that varies by LiteX version.
+Read `.venv/**/litex/soc/cores/uart.py` `UART.__init__` — copy its exact `rxtx`/fifo strobe wiring into the bridge; the comment in Step 2 marks the spot. Correctness-critical and version-sensitive: current LiteX master names the strobes `wr_stb`/`rd_stb` (with `wr_data`/`rd_data`), older releases used `re`/`we`. The installed tree is the truth.
 
 - [ ] **Step 4: Run tests to pass, commit**
 
@@ -574,7 +579,7 @@ git commit -m "b8008_net: B8008Core Migen integration - memories, console bridge
 Based on the stock versa target (Task 1 module) with these deltas:
 1. CRG: extend the stock `_CRG` — add `self.cd_b8008 = ClockDomain()` and `pll.create_clkout(self.cd_b8008, 25e6)`; keep sys at the stock 75 MHz.
 2. `SoCCore` args: `cpu_type="vexriscv", cpu_variant="minimal", integrated_rom_size=0x8000, integrated_sram_size=0x2000, uart_name="stub", ident="b8008_net", ident_version=True, timer=True` (identifier CSR is the staleness check hook).
-3. `self.submodules.eb_ip = ...` + `add_etherbone(...)` exactly per the Task 2 spike result (Signal-driven IP, `with_ethmac=True`, both MACs from Global Constraints).
+3. `self.submodules.eb_ip = ...` + `add_etherbone(...)` exactly per the Task 2 spike result (Signal-driven IP, `with_ethmac=True`, **`buffer_depth=255`** — the default 16 silently overflows on 255-word burst writes and would surface as verify failures on hardware day, both MACs from Global Constraints).
 4. `self.submodules.b8008 = B8008Core(platform, sys_clk_freq=sys_clk_freq, rom_init=load_mem_file("../b8008_monitor/src/rom_baked.mem"))`; `self.bus.add_slave("b8008_ram", self.b8008.bus_ram, SoCRegion(origin=0x9000_0000, size=0x8000, cached=False))` (8192 words × 4 bytes = 0x8000).
 5. Route `self.b8008.dbg` record to the X3 expansion pads: add a platform extension with the same sites the monitor LPF uses for `cpu_d[0..7]`, `cpu_s0..2`, `cpu_sync`, `cpu_phi1/2`, `cpu_int` (copy sites from `projects/b8008_monitor/constraints/b8008_monitor.lpf`).
 6. `--build` CLI via `LiteXArgumentParser` as in the stock target; also emit `csr.csv` (`--csr-csv build/versa/csr.csv`).
@@ -676,15 +681,15 @@ git commit -m "b8008_net: DHCP firmware - option-12 hostname, etherbone-MAC chad
 
 - [ ] **Step 1: `bench_core.py`**
 
-Migen `convert()` of a small top: `B8008Core(platform=<fake>, sys_clk_freq=25e6)` with `cd_sys` and `cd_b8008` both exposed as clock ios (bench drives sys at 25 MHz and b8008 at 25 MHz but from a separate phase-offset clock so the CDC paths are genuinely crossed), CSR bus (`adr/we/dat_w/dat_r`) and wishbone bus signals in the io set. Writes `build/bench_core.v`.
+Migen `convert()` of a small top: `B8008Core(platform=<fake>, sys_clk_freq=25e6)` with `cd_sys` and `cd_b8008` both exposed as clock ios (bench drives sys at 25 MHz and b8008 at 25 MHz but from a separate phase-offset clock so the CDC paths are genuinely crossed), CSR bus and wishbone bus signals in the io set. **The CSR bus is not free:** B8008Core's CSR objects only materialize a bus through `litex.soc.interconnect.csr_bus.CSRBankArray(top, ...)` + its interconnect — the bench top must build that and expose the resulting `adr/we/dat_w/dat_r` (mirror how SoCCore does it, or crib the pattern from litex's own csr_bus tests). Writes `build/bench_core.v`.
 
 - [ ] **Step 2: `bench_tb.cpp` scenario**
 
 Verilator C++ driver implementing raw csr-bus read/write helpers (1-cycle handshake) and classic wishbone cycles, then:
 1. Wishbone: write 0..255 to word offsets 0..255, read back, assert equal (shim + BRAM port B).
 2. Reset-release, wait ≤450 ms sim time polling `rxlevel` via CSR reads; drain `rxtx`; assert banner bytes (same string source as Task 5) — proves netlist + auto-start + console bridge + b8008-domain RAM/ROM ports.
-3. CSR `ctl.run_stop` pulse; poll `status.is_running` flips (CDC pulse + status MultiReg round-trip). Pulse again; flips back; monitor still responsive after re-run.
-Print PASS/FAIL per check; nonzero exit on any FAIL. Expect minutes of wall clock (11M+ cycles).
+3. CSR `ctl.run_stop` pulse; poll `status.is_running` flips to stopped (CDC pulse + status MultiReg round-trip). Pulse again: **run-from-stopped is a RESTART, not a resume** — `debug_clock_control` fires a 500-clk `reset_request`, the monitor re-bootstraps and runs `delay_short` again, so wait up to ~450 ms sim time for the banner to REAPPEAR; that's the pass criterion, not an immediate prompt.
+Print PASS/FAIL per check; nonzero exit on any FAIL. Expect minutes of wall clock (11M+ cycles, ~2× for the re-boot).
 
 - [ ] **Step 3: Run**
 
@@ -692,12 +697,12 @@ Run: `make sim-bench` → all checks PASS. Iterate here — this is the cheap pl
 
 - [ ] **Step 4: Write `host_selftest.py` for the hardware stages**
 
-(argparse `--csr <csr.csv> --host <ip>`): 1) RemoteClient connect, print identifier; 2) RAM window burst write/readback 256 bytes, assert; 3) poll `b8008_rxlevel`, drain, assert banner text, print; 4) send one monitor command from `b8008_monitor.asm`'s command table via `rxtx`, assert response. Exit 0 all-pass. Unit-test the pure helpers (hex compare, drain batching) with a FakeBoard in `host/tests/test_selftest.py`; live run happens in Task 13/14.
+(argparse `--csr <csr.csv> --host <ip>`): 1) RemoteClient connect, print identifier; 2) RAM window burst write/readback 256 bytes, assert; 3) poll `b8008_rxlevel`, drain, assert banner text, print; 4) send one monitor command from `b8008_monitor.asm`'s command table via `rxtx`, assert response. Exit 0 all-pass. Its pure helpers (hex compare, drain batching) get FakeBoard unit tests in Task 10's suite (`host/tests/` doesn't exist yet in this task); live run happens in Task 13/14.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add projects/b8008_net/bench_core.py projects/b8008_net/sim/bench_tb.cpp projects/b8008_net/host_selftest.py projects/b8008_net/Makefile projects/b8008_net/host/tests/test_selftest.py
+git add projects/b8008_net/bench_core.py projects/b8008_net/sim/bench_tb.cpp projects/b8008_net/host_selftest.py projects/b8008_net/Makefile
 git commit -m "b8008_net: verilator bench - RAM window, console bridge, control CDC pre-hardware"
 ```
 
@@ -708,7 +713,7 @@ git commit -m "b8008_net: verilator bench - RAM window, console bridge, control 
 **Files:**
 - Create: `projects/b8008_net/host/pyproject.toml` (name `b8008net`, console-script `b8008net = b8008net.cli:main`)
 - Create: `projects/b8008_net/host/b8008net/{__init__.py,cli.py,discovery.py,board.py}`
-- Create: `projects/b8008_net/host/tests/test_discovery.py`
+- Create: `projects/b8008_net/host/tests/test_discovery.py`, `host/tests/test_selftest.py` (FakeBoard tests for host_selftest.py helpers — deferred from Task 9)
 
 **Interfaces:**
 - Produces: `Board` class: `Board.connect(csr_csv, host=None) -> Board` (spawns/finds litex_server, identifier check, lockfile at `~/.b8008net.lock`), `.read(addr, n=1, burst="incr")` (pass `burst="fixed"` for FIFO drains), `.write(addr, values)`, `.regs` (RemoteClient regs), `.ram_base` (from csr.csv `b8008_ram`). `discover() -> str|None`: tries cached `~/.b8008net_host`, then `b8008`/`b8008.lan` DNS, then probe sweep.
@@ -724,7 +729,7 @@ Run: `.venv/bin/python -m pytest host/tests -v` → FAIL (module missing).
 
 - [ ] **Step 2: Implement**
 
-`discovery.py`: the four functions; sweep = UDP socket, send probe to each candidate:1234, `select` 0.5 s window, first responder wins. DNS tries `b8008` then `b8008.lan` (plain hostname / router search domain — `b8008.local` is mDNS and the board runs no mDNS responder; don't bother). `board.py`: lockfile via `fcntl.flock`; spawn `litex_server --udp --udp-ip <host>` as subprocess if port 1234 TCP not already listening; RemoteClient; identifier read (`identifier_mem` chars) printed and compared with csr.csv timestamp — mismatch prints a loud warning. FIFO draining: `RemoteClient.read(addr, length, burst="fixed")` — fixed-address burst is built into Etherbone/RemoteClient; no hand-rolled packets.
+`discovery.py`: the four functions; sweep = UDP socket, send probe to each candidate:1234, `select` 0.5 s window, first responder wins. DNS tries `b8008` then `b8008.lan` (plain hostname / router search domain — `b8008.local` is mDNS and the board runs no mDNS responder; don't bother). `board.py`: lockfile via `fcntl.flock`; spawn `litex_server --udp --udp-ip <host>` as subprocess if port 1234 TCP not already listening; RemoteClient; identifier read (`identifier_mem` chars) printed and compared with csr.csv timestamp — mismatch prints a loud warning. FIFO draining: `RemoteClient.read(addr, length, burst="fixed")`. Reality of the UDP path (verified): the server clamps UDP reads to incr-only, length 1 (`litex_server.py:94-99`, `comm_udp.py:85`), so `burst="fixed"` is decomposed into per-word reads — semantics stay correct (each read pops rxtx once) but throughput is **one 32-bit word per UDP round-trip**: console drain ceiling ~2–5 kB/s, and an 8KB read-back verify ≈ 2048 round-trips (seconds). Fine for an 8008-paced monitor; do not chase phantom read performance later. Writes DO burst (255 words/packet) — that's where "wire-speed load" lives.
 
 - [ ] **Step 3: Pass**
 
@@ -757,7 +762,7 @@ Run → FAIL.
 
 - [ ] **Step 2: Implement**
 
-`drain()`: read rxlevel; if 0 return; `board.read(rxtx_addr, n=min(level,256), burst="fixed")`; bytes out. `send()`: per byte, spin on txfull (with 1 ms sleep), write rxtx. `console_loop()`: `termios` raw mode, select on stdin, 10 ms poll cadence, drain→stdout, stdin→send.
+`drain()`: read rxlevel; if 0 return; `board.read(rxtx_addr, n=min(level,256), burst="fixed")`; bytes out. `send()`: per byte, spin on txfull (with 1 ms sleep), write rxtx. `console_loop()`: `termios` raw mode, select on stdin, 10 ms poll cadence, drain→stdout, stdin→send. Put this comment in `console.py`: *rxtx reads are destructive pops; CommUDP retries a timed-out read and the retry pops the NEXT byte — a lost response packet = one lost console byte. Inherent to CSR-FIFO-over-Etherbone (litex's uartbone shares it), rare on LAN, not worth engineering around.*
 
 - [ ] **Step 3: Pass tests**
 
@@ -824,7 +829,7 @@ No new code. Hand the user: `make build && make prog` (or the .bit path for thei
 - [ ] `b8008net console` → monitor banner appears (headless auto-start on real silicon).
 - [ ] Monitor commands work interactively (whatever `b8008_monitor.asm` supports — same session quality as serial).
 - [ ] `b8008net peek 2000 64` / `poke` round-trip while CPU at prompt.
-- [ ] `b8008net stop` / `step` / `reset` behave (toggle-and-verify converges); physical buttons still work.
+- [ ] `b8008net stop` / `step` / `reset` behave (toggle-and-verify converges); physical buttons still work. Expected semantics: run-from-stopped RESTARTS the monitor (reset + re-bootstrap + ~400 ms before the banner) — matches front-panel behavior; document it in the Task 15 README.
 
 ---
 
