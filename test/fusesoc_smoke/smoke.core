@@ -1,0 +1,19 @@
+CAPI=2:
+name: greygiant:retro:fusesoc-smoke:0.1
+description: In-repo proof that the ghdl_synth_verilog generator protocol works end-to-end.
+filesets:
+  smoke_deps:
+    depend: [greygiant:retro:b8008]
+generate:
+  b8008_netlist:
+    generator: ghdl_synth_verilog
+    parameters:
+      top: b8008_top
+      output: b8008_core.v
+      generics:
+        CLK_FREQ_HZ: 25000000
+targets:
+  default:
+    filesets: [smoke_deps]
+    generate: [b8008_netlist]
+    toplevel: b8008_top
