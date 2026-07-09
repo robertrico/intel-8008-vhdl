@@ -98,10 +98,21 @@ b8008_net_core (25 MHz domain, pure logic):
 
 ### VHDL into the LiteX build
 
-- `b8008_net_core.vhdl` wraps the existing `src/b8008/` modules (all
-  unchanged) plus USART — pure logic, no memory arrays — exposing:
-  clk/reset, uart tx/rx, the 8008 RAM memory bus, the external ROM bus,
-  control inputs, debug outputs.
+- `b8008_net_core.vhdl` is a port of the whole monitor top, not a
+  three-block assembly. It contains everything `b8008_monitor_top.vhdl`
+  has except PLL (LiteX CRG), pads, debouncers (CSR pulses arrive clean;
+  physical buttons debounced outside), and memory arrays (Migen side):
+  b8008_top, b8008_usart, debug_clock_control, address_decoder,
+  int_button, POR logic, IO-port glue and data-bus mux — all existing
+  modules unchanged. Exposes: clk/reset, uart tx/rx, the 8008 RAM memory
+  bus, the external ROM bus, control pulse inputs, status and debug
+  outputs.
+- **Auto-start is kept**: the monitor top's synthetic run/stop press
+  ~2 ms after POR release moves into the wrapper. Appliance mode requires
+  the monitor to boot and run with no host attached.
+- Generic hygiene: every `CLK_FREQ_HZ` generic in the wrapper is
+  explicitly `25_000_000` (component defaults are 100 MHz; USART baud
+  timing silently breaks otherwise).
 - A Makefile step converts it once per build with
   `ghdl synth --out=verilog` → `b8008_net_core.v`. LiteX includes the
   generated Verilog as a source and instantiates it. Deterministic; no
@@ -114,11 +125,20 @@ b8008_net_core (25 MHz domain, pure logic):
 - LiteX CRG generates sys_clk (75–100 MHz, spike decides exact) and a
   25 MHz `b8008` clock domain (replaces `pll_25mhz`).
 - RGMII 125 MHz domains are handled by LiteEth and the board file.
-- The only domain crossings: (a) async serial between the 25 MHz USART and
-  the sys-domain LiteX UART — safe by construction (oversampled serial);
-  (b) the Migen RAM's wishbone port in sys domain, its 8008-facing port in
-  the 25 MHz domain — true dual-port BRAM, each port synchronous to its
-  own clock.
+- Domain crossings, all four, each with its mechanism:
+  - (a) async serial between the 25 MHz USART and the sys-domain LiteX
+    UART — safe by construction (oversampled serial);
+  - (b) the Migen RAM's wishbone port in sys domain, its 8008-facing port
+    in the 25 MHz domain — true dual-port BRAM, each port synchronous to
+    its own clock;
+  - (c) control CSRs sys → 25 MHz: `debug_clock_control` consumes
+    single-cycle pulses at 25 MHz (`debug_clock_control.vhdl:30`), so a
+    naive sys-domain pulse (13 ns) is missed or double-counted. Mechanism:
+    CSRStorage bits are levels; Migen crosses each with MultiReg into the
+    `b8008` domain and edge-detects there, feeding the wrapper clean
+    single-cycle 25 MHz pulses — same shape as the debouncer outputs the
+    monitor top already feeds it;
+  - (d) status (`is_running`) 25 MHz → sys: MultiReg 2FF into a CSRStatus.
 
 ### Memories live on the Migen side (not in the VHDL)
 
@@ -161,10 +181,20 @@ So no memory arrays pass through the ghdl→verilog conversion:
 
 ### Control CSRs
 
-- b8008 reset, run/stop, step-cycle, step-sync, INT: CSR bits OR'd with
-  the existing physical buttons. Bench buttons keep working; host can
-  drive the same controls remotely.
-- Status CSR: CPU run/stop state (from debug_clock_control).
+- b8008 reset, run/stop, step-cycle, step-sync, INT: CSR-originated pulses
+  (via the CDC mechanism above) OR'd with the debounced physical button
+  pulses at the wrapper inputs. Bench buttons keep working; host drives
+  the same controls remotely.
+- **Run/stop is a toggle** — `debug_clock_control` semantics (proven on
+  hardware, not modified): run/stop toggles, step buttons act only while
+  stopped, restart injects a reset pulse. Remote imperative `b8008net
+  stop`/`run` is therefore **toggle-and-verify**: read `is_running`,
+  toggle if it differs from the goal, re-read, retry. Racy only with
+  concurrent controllers, which the tool's single-instance lock (see Host
+  side) excludes. Decision: host-side toggle-and-verify over adding a
+  level input to proven RTL.
+- Status CSR: `is_running` (and `triggered`/`next_is_phi*` as available)
+  from debug_clock_control, MultiReg'd to sys.
 - Debug pin outputs (logic-analyzer bus: cpu_d, s0–s2, sync, phi1/2) stay
   on physical pads as today.
 
@@ -198,9 +228,21 @@ b8008net reset|stop|step    # control CSRs
 b8008net status             # discovery result, link, CPU state
 ```
 
-- `load` replaces `send_hex.py`: no UART in the path, 8KB in milliseconds,
-  verified by read-back; mismatch reports offset/expected/got, nonzero exit.
+- **RAM window layout (decided):** one 8008 byte per 32-bit wishbone word
+  (8192 words). `peek`/`poke` are single-word, no read-modify-write.
+  `load` MUST use `RemoteClient.write(addr, [list])` burst writes (~255
+  words per UDP packet → ~33 packets → tens of ms). Naive per-word writes
+  are 8192 round trips ≈ 8 s — the trap is documented so nobody falls in.
+- `load` replaces `send_hex.py`: no UART in the path, verified by
+  read-back (also burst); mismatch reports offset/expected/got, nonzero
+  exit.
 - CSR addresses come from the LiteX-emitted `csr.csv`; nothing hardcoded.
+  On connect, `b8008net` reads the LiteX identifier CSR (build timestamp)
+  and warns if it does not match the `csr.csv` on disk — stale-bitstream
+  sessions fail loudly, not confusingly.
+- Single-instance lock (lockfile): one `b8008net` at a time. The console
+  rx FIFO has one consumer and run/stop is toggle-and-verify — concurrent
+  instances would steal bytes and race the toggle.
 
 ### LiteX installation
 
@@ -219,7 +261,7 @@ to a release tag. `make litex-env` sets it up once.
 
 ## Testing
 
-Staged; no commit until stage 6 passes on the board (hardware-proof rule).
+Staged; no commit until stage 7 (HW stage 3) passes on the board (hardware-proof rule).
 User flashes hardware; assistant builds and hands over commands.
 
 1. **Core sim:** `b8008_net_core` runs adapted monitor boot + interactive
@@ -232,14 +274,18 @@ User flashes hardware; assistant builds and hands over commands.
    timing (read latency, write-enable semantics) that both the behavioral
    models and the Migen memories must satisfy — the sim/synth divergence
    risk introduced by moving memories out lives exactly here.
-4. **HW stage 1 — SoC alone (no 8008 core):** DHCP lease acquired, board
+4. **litex_sim (Verilator):** whole SoC minus PHY — validates the console
+   CSR path, RAM wishbone window, and control-CSR CDC against the
+   converted netlist before any hardware. Cheap stage between GHDL sim
+   and HW stage 1.
+5. **HW stage 1 — SoC alone (no 8008 core):** DHCP lease acquired, board
    named `b8008` in router list, Etherbone answers on leased IP,
    `litex_cli --regs` works. Synth report checked: expected DP16KD count,
    sane FF count, timing clean. Leave running past lease T1 to observe a
    renewal.
-5. **HW stage 2 — full SoC:** `b8008net console` shows monitor banner;
+6. **HW stage 2 — full SoC:** `b8008net console` shows monitor banner;
    peek/poke RAM.
-6. **HW stage 3 — workflow parity:** mandelbrot, pi, calc loaded via
+7. **HW stage 3 — workflow parity:** mandelbrot, pi, calc loaded via
    `b8008net load`, run via monitor, outputs match serial-era results.
 
 ## Risks and the verification spike
@@ -288,3 +334,9 @@ Other noted risks:
   Etherbone MAC + broadcast flag, lease renewal); Etherbone IP CSR
   documented as custom wiring with 0.0.0.0 reset + ARP gate; console rx
   FIFO ≥ 1 KB with batched drains (Etherbone RTT math).
+- Post-review pass 2 (2026-07-09, against monitor RTL): control-CSR CDC
+  via MultiReg + b8008-domain edge detect; remote run/stop as host-side
+  toggle-and-verify (proven debug_clock_control unmodified); wrapper
+  scoped as full monitor-top port with auto-start kept; RAM window byte
+  per 32-bit word with mandatory burst writes; identifier-CSR staleness
+  check; single-instance lock; litex_sim stage before hardware.
