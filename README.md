@@ -206,7 +206,7 @@ MIT - See [LICENSE.txt](LICENSE.txt)
 - **Jim Loos** - SCELBAL build for the 8008-SBC (portions copyright 2021)
 - **SCELBI Computer Consulting / Mark Arnold & Nat Wadsworth** - SCELBAL (1976)
 - **Mike Willegal** - SCELBI software archive
-- **Michael Kohn** (2022-2024) - Original Verilog reference
+- **Michael Kohn** - Verilog i8008, consulted as reference material
 - **Intel Corporation** - Original 8008 design
 
 See [ATTRIBUTION.md](ATTRIBUTION.md) for full credits.
