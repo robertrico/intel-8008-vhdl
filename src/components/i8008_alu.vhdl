@@ -1,14 +1,13 @@
 -------------------------------------------------------------------------------
--- Intel 8008 ALU - VHDL Conversion
+-- Intel 8008 ALU
 -------------------------------------------------------------------------------
--- Copyright (c) 2025 Robert Rico (VHDL conversion)
--- Copyright (c) 2022-2024 Michael Kohn (original Verilog implementation)
+-- Copyright (c) 2025 Robert Rico
 --
--- This VHDL implementation is derived from Michael Kohn's i8008 Verilog
--- implementation. The ALU operations and flag handling follow Kohn's
--- original design.
+-- Independently implemented in VHDL from Intel's published 8008
+-- documentation. Michael Kohn's Verilog i8008 was consulted as a reference
+-- for approach during early development; no code was copied or ported.
 --
--- Original Verilog: https://www.mikekohn.net/
+-- Kohn's Verilog i8008: https://www.mikekohn.net/
 -- License: MIT (see LICENSE.txt)
 -------------------------------------------------------------------------------
 

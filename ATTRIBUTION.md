@@ -36,7 +36,7 @@ All VHDL code is an **original implementation** by Robert Rico, based on Intel's
 - Intel SIM8-01 Reference Design Schematic
 - `docs/isa.json` — this project's line-by-line mapping of every opcode to its documented T-state sequence
 
-**Note:** During development, Michael Kohn's i8008 Verilog implementation was reviewed as a reference for understanding another HDL approach; `i8008_alu.vhdl` in the legacy components was derived from his `i8008_alu.v`.
+**Note:** During development, Michael Kohn's i8008 Verilog implementation was reviewed as a reference for understanding another HDL approach. No code was copied or ported; all VHDL here is independently authored.
 
 ---
 
