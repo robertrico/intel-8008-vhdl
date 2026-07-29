@@ -49,8 +49,8 @@ B8008_SRCS = \
 	$(SRC_DIR)/sss_ddd_selector.vhdl \
 	$(SRC_DIR)/ahl_pointer.vhdl \
 	$(SRC_DIR)/temp_registers.vhdl \
-	$(SRC_DIR)/alu.vhdl \
 	$(SRC_DIR)/carry_lookahead.vhdl \
+	$(SRC_DIR)/alu.vhdl \
 	$(SRC_DIR)/io_buffer.vhdl \
 	$(SRC_DIR)/mem_mux_refresh.vhdl \
 	./src/components/phase_clocks.vhdl \
@@ -61,7 +61,7 @@ B8008_SRCS = \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl
 
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-alu-exhaustive test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
 
 all: help
 
@@ -101,6 +101,7 @@ help:
 	@echo "  make test-temp-regs       - Test temporary registers"
 	@echo "  make test-carry-lookahead - Test carry look-ahead logic"
 	@echo "  make test-alu             - Test ALU"
+	@echo "  make test-alu-exhaustive  - ALU arithmetic vs reference model (656,384 cases)"
 	@echo "  make test-condition-flags - Test condition flags and logic"
 	@echo "  make test-interrupt-ready - Test interrupt and ready flip-flops"
 	@echo "  make test-instr-reg       - Test instruction register"
@@ -170,6 +171,7 @@ test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/carry_lookahead.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/condition_flags.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
@@ -238,6 +240,7 @@ test-serial: $(BUILD_DIR)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/carry_lookahead.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/condition_flags.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
@@ -279,6 +282,7 @@ test-interrupt: $(BUILD_DIR) $(PROG_DIR)/interrupt_test_as.mem
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/carry_lookahead.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/condition_flags.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
@@ -364,10 +368,20 @@ test-carry-lookahead: $(BUILD_DIR)
 test-alu: $(BUILD_DIR)
 	@echo "Testing ALU..."
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/carry_lookahead.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/alu_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) alu_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) alu_tb --stop-time=10us
+
+test-alu-exhaustive: $(BUILD_DIR)
+	@echo "Exhaustive ALU sweep vs reference model (656,384 cases)..."
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/carry_lookahead.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/alu_exhaustive_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) alu_exhaustive_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) alu_exhaustive_tb --stop-time=100ms
 
 test-condition-flags: $(BUILD_DIR)
 	@echo "Testing condition flags..."

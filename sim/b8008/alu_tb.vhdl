@@ -387,9 +387,150 @@ begin
         is_inr_dcr <= '0';
         carry_in <= '0';
 
-        -- Test 15: Disabled ALU
+        -- ------------------------------------------------------------------
+        -- Borrow polarity tests. The carry look-ahead adder computes
+        -- subtraction as two's complement addition, where carry-out HIGH
+        -- means NO borrow. The 8008 carry flag is a borrow flag for
+        -- SUB/SBB/CMP, so it must be the INVERSION of the adder carry-out.
+        -- Getting this wrong leaves ADD tests green while every conditional
+        -- branch after a compare goes the wrong way.
+        -- ------------------------------------------------------------------
+
+        -- Test 15: CMP with A > B: no borrow, CY=0, Z=0
         report "";
-        report "Test 15: Enable = 0 (ALU disabled)";
+        report "Test 15: CMP 0x50 vs 0x30 (A > B: CY=0 Z=0)";
+
+        accumulator_in <= x"50";
+        reg_b_in <= x"30";
+        opcode <= OP_CMP;
+        carry_in <= '0';
+        strobe_enable;
+
+        if flag_carry /= '0' then
+            report "  ERROR: CMP A>B must clear carry (no borrow), got CY=1" severity error;
+            errors := errors + 1;
+        elsif flag_zero /= '0' then
+            report "  ERROR: CMP A>B must clear zero flag" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: CMP A>B gives CY=0 Z=0";
+        end if;
+
+        -- Test 16: CMP with A = B: no borrow, CY=0, Z=1
+        report "";
+        report "Test 16: CMP 0x42 vs 0x42 (A = B: CY=0 Z=1)";
+
+        accumulator_in <= x"42";
+        reg_b_in <= x"42";
+        opcode <= OP_CMP;
+        strobe_enable;
+
+        if flag_carry /= '0' then
+            report "  ERROR: CMP A=B must clear carry (no borrow), got CY=1" severity error;
+            errors := errors + 1;
+        elsif flag_zero /= '1' then
+            report "  ERROR: CMP A=B must set zero flag" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: CMP A=B gives CY=0 Z=1";
+        end if;
+
+        -- Test 17: CMP with A < B: borrow, CY=1, Z=0
+        report "";
+        report "Test 17: CMP 0x30 vs 0x50 (A < B: CY=1 Z=0)";
+
+        accumulator_in <= x"30";
+        reg_b_in <= x"50";
+        opcode <= OP_CMP;
+        strobe_enable;
+
+        if flag_carry /= '1' then
+            report "  ERROR: CMP A<B must set carry (borrow), got CY=0" severity error;
+            errors := errors + 1;
+        elsif flag_zero /= '0' then
+            report "  ERROR: CMP A<B must clear zero flag" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: CMP A<B gives CY=1 Z=0";
+        end if;
+
+        -- Test 18: SUB producing exactly 0x00: result 0, CY=0, Z=1
+        report "";
+        report "Test 18: SUB 0x7F - 0x7F = 0x00 (CY=0 Z=1)";
+
+        accumulator_in <= x"7F";
+        reg_b_in <= x"7F";
+        opcode <= OP_SUB;
+        strobe_enable;
+
+        if result(7 downto 0) /= x"00" then
+            report "  ERROR: SUB result should be 0x00, got 0x" & to_hstring(result(7 downto 0)) severity error;
+            errors := errors + 1;
+        elsif flag_carry /= '0' then
+            report "  ERROR: SUB to zero must clear carry (no borrow)" severity error;
+            errors := errors + 1;
+        elsif flag_zero /= '1' then
+            report "  ERROR: SUB to zero must set zero flag" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: SUB to 0x00 gives CY=0 Z=1";
+        end if;
+
+        -- Test 19: SBB with borrow_in clear at the 0x00 boundary:
+        -- 0x00 - 0x00 - 0 = 0x00, no borrow (CY=0, Z=1)
+        report "";
+        report "Test 19: SBB 0x00 - 0x00, borrow_in=0 (CY=0 Z=1)";
+
+        accumulator_in <= x"00";
+        reg_b_in <= x"00";
+        opcode <= OP_SBB;
+        carry_in <= '0';
+        strobe_enable;
+
+        if result(7 downto 0) /= x"00" then
+            report "  ERROR: SBB result should be 0x00, got 0x" & to_hstring(result(7 downto 0)) severity error;
+            errors := errors + 1;
+        elsif flag_carry /= '0' then
+            report "  ERROR: SBB without borrow must clear carry" severity error;
+            errors := errors + 1;
+        elsif flag_zero /= '1' then
+            report "  ERROR: SBB 0-0-0 must set zero flag" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: SBB borrow_in=0 at zero gives CY=0 Z=1";
+        end if;
+
+        -- Test 20: SBB with borrow_in set crossing the 0x00 boundary:
+        -- 0x00 - 0x00 - 1 = 0xFF with borrow out (CY=1, Z=0).
+        -- This is the multi-byte subtract case SCELBAL floating point
+        -- leans on: the borrow must ripple to the next byte.
+        report "";
+        report "Test 20: SBB 0x00 - 0x00, borrow_in=1 (result 0xFF, CY=1)";
+
+        accumulator_in <= x"00";
+        reg_b_in <= x"00";
+        opcode <= OP_SBB;
+        carry_in <= '1';
+        strobe_enable;
+
+        if result(7 downto 0) /= x"FF" then
+            report "  ERROR: SBB result should be 0xFF, got 0x" & to_hstring(result(7 downto 0)) severity error;
+            errors := errors + 1;
+        elsif flag_carry /= '1' then
+            report "  ERROR: SBB across zero must set carry (borrow out)" severity error;
+            errors := errors + 1;
+        elsif flag_zero /= '0' then
+            report "  ERROR: SBB giving 0xFF must clear zero flag" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: SBB borrow_in=1 across zero gives 0xFF CY=1";
+        end if;
+
+        carry_in <= '0';
+
+        -- Test 21: Disabled ALU
+        report "";
+        report "Test 21: Enable = 0 (ALU disabled)";
 
         accumulator_in <= x"FF";
         reg_b_in <= x"FF";

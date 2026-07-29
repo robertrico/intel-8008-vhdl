@@ -99,6 +99,8 @@ make test-b8008-top PROG=search_as
 # Test individual modules
 make test-stack-memory    # Address stack (PC-in-stack)
 make test-alu             # ALU
+make test-alu-exhaustive  # ALU arithmetic: all 656,384 cases vs reference model
+make test-carry-lookahead # Carry look-ahead (the ALU's adder)
 make test-instr-decoder   # Instruction decoder
 
 # See all available make targets

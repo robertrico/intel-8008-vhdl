@@ -10,6 +10,9 @@
 -- - Accumulator feeds input 1 DIRECTLY (hardwired, not via temp register)
 -- - Reg.b feeds input 2 (operand loaded via bus at T4)
 -- - INR/DCR: ALU uses Reg.b as input 1 and generates +1/-1 internally
+-- - Arithmetic comes from the carry_lookahead block (per the Intel block
+--   diagram) - there is no inferred adder. Subtracts feed it two's
+--   complement and invert its carry-out into the 8008 borrow flag.
 --
 -- Operations (from bits 5:3 of instruction, PPP field):
 --   000 - ADD (Add) / INR (Increment when is_inr_dcr=1)
@@ -104,27 +107,65 @@ architecture rtl of alu is
     -- Internal result signal for cleaner output
     signal result_internal : std_logic_vector(8 downto 0);
 
+    -- Operand selection, hoisted out of the clocked process so the
+    -- carry look-ahead block can see the operands
+    signal op1_sel : std_logic_vector(7 downto 0);
+    signal op2_sel : std_logic_vector(7 downto 0);
+
+    -- Subtraction preconditioning for the carry look-ahead adder.
+    -- The look-ahead only adds (Gi = Ai and Bi), so SUB/SBB/CMP feed it
+    -- two's complement: b inverted, carry_in forced per operation.
+    signal op_is_subtract : std_logic;
+    signal cla_b_in       : std_logic_vector(7 downto 0);
+    signal cla_carry_in   : std_logic;
+
+    -- Carry look-ahead outputs
+    signal cla_carries : std_logic_vector(8 downto 0);
+    signal cla_sum     : std_logic_vector(7 downto 0);
+
 begin
+
+    -- Operand selection (was inside the clocked process)
+    -- INR/DCR mode: Reg.b is the operand, +1/-1 generated internally
+    -- Normal mode:  Accumulator op Reg.b
+    op1_sel <= reg_b_in when is_inr_dcr = '1' else accumulator_in;
+    op2_sel <= x"01"    when is_inr_dcr = '1' else reg_b_in;
+
+    op_is_subtract <= '1' when (opcode = OP_SUB or opcode = OP_SBB or opcode = OP_CMP) else '0';
+
+    cla_b_in <= not op2_sel when op_is_subtract = '1' else op2_sel;
+
+    -- SUB/CMP: +1 completes the two's complement (A + not B + 1)
+    -- SBB:     borrow consumes the +1 (A + not B + 1 - borrow)
+    -- ADC:     incoming carry
+    -- ADD:     no carry in
+    cla_carry_in <= '1'          when (opcode = OP_SUB or opcode = OP_CMP) else
+                    not carry_in when opcode = OP_SBB else
+                    carry_in     when opcode = OP_ADC else
+                    '0';
+
+    -- Carry Look-Ahead block (per the Intel block diagram): computes all
+    -- carries and the sum for the arithmetic operations
+    lookahead : entity work.carry_lookahead
+        port map (
+            reg_a     => op1_sel,
+            reg_b     => cla_b_in,
+            carry_in  => cla_carry_in,
+            enable    => enable,
+            carry_out => cla_carries,
+            sum       => cla_sum
+        );
 
     -- Latch ALU result on the rising edge of enable (T4->T5 transition)
     -- This prevents the result from changing when the register file is updated
     process(clk)
-        variable carry_val : unsigned(8 downto 0);
         variable temp_result : std_logic_vector(8 downto 0);
-        variable operand1 : std_logic_vector(7 downto 0);
-        variable operand2 : std_logic_vector(7 downto 0);
     begin
         if rising_edge(clk) and phi2_rising = '1' then
             enable_prev <= enable;
 
             -- Latch result when enable goes from 0 to 1
             if enable = '1' and enable_prev = '0' then
-                -- Prepare carry value for operations that use it
-                carry_val := (others => '0');
-                if carry_in = '1' then
-                    carry_val(0) := '1';
-                end if;
-
                 -- Check for rotate operations first
                 if is_rotate = '1' then
                     -- Rotate operations on accumulator
@@ -157,45 +198,29 @@ begin
                             temp_result := (others => '0');
                     end case;
                 else
-                    -- Select operands based on mode
-                    if is_inr_dcr = '1' then
-                        -- INR/DCR mode: Reg.b is the operand, +1/-1 is generated internally
-                        operand1 := reg_b_in;  -- The register value to increment/decrement
-                        operand2 := x"01";     -- Constant +1 (for ADD/SUB)
-                    else
-                        -- Normal binary ALU mode: Accumulator op Reg.b
-                        operand1 := accumulator_in;  -- Direct from accumulator
-                        operand2 := reg_b_in;        -- From temp register b
-                    end if;
-
-                    -- Perform operation based on opcode
+                    -- Perform operation based on opcode.
+                    -- Arithmetic comes from the carry look-ahead block;
+                    -- logic ops bypass the carry chain entirely.
                     case opcode is
-                        when OP_ADD =>
-                            -- ADD for normal ops, INR for is_inr_dcr mode
-                            temp_result := std_logic_vector(unsigned('0' & operand1) + unsigned('0' & operand2));
+                        when OP_ADD | OP_ADC =>
+                            -- ADD/ADC for normal ops, INR for is_inr_dcr mode
+                            temp_result := cla_carries(8) & cla_sum;
 
-                        when OP_ADC =>
-                            temp_result := std_logic_vector(unsigned('0' & operand1) + unsigned('0' & operand2) + carry_val);
-
-                        when OP_SUB =>
-                            -- SUB for normal ops, DCR for is_inr_dcr mode
-                            temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2));
-
-                        when OP_SBB =>
-                            temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2) - carry_val);
+                        when OP_SUB | OP_SBB | OP_CMP =>
+                            -- SUB/CMP/SBB for normal ops, DCR for is_inr_dcr mode.
+                            -- Two's complement addition: carry-out HIGH means
+                            -- NO borrow, so the 8008 borrow flag is the
+                            -- inversion of the adder carry-out.
+                            temp_result := (not cla_carries(8)) & cla_sum;
 
                         when OP_AND =>
-                            temp_result := '0' & (operand1 and operand2);
+                            temp_result := '0' & (op1_sel and op2_sel);
 
                         when OP_XOR =>
-                            temp_result := '0' & (operand1 xor operand2);
+                            temp_result := '0' & (op1_sel xor op2_sel);
 
                         when OP_OR =>
-                            temp_result := '0' & (operand1 or operand2);
-
-                        when OP_CMP =>
-                            -- Compare is like subtract, but result isn't stored (only flags)
-                            temp_result := std_logic_vector(unsigned('0' & operand1) - unsigned('0' & operand2));
+                            temp_result := '0' & (op1_sel or op2_sel);
 
                         when others =>
                             temp_result := (others => '0');

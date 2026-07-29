@@ -24,7 +24,8 @@ architecture test of carry_lookahead_tb is
             reg_b     : in std_logic_vector(7 downto 0);
             carry_in  : in std_logic;
             enable    : in std_logic;
-            carry_out : out std_logic_vector(7 downto 0)
+            carry_out : out std_logic_vector(8 downto 0);
+            sum       : out std_logic_vector(7 downto 0)
         );
     end component;
 
@@ -35,7 +36,8 @@ architecture test of carry_lookahead_tb is
     signal enable    : std_logic := '0';
 
     -- Outputs
-    signal carry_out : std_logic_vector(7 downto 0);
+    signal carry_out : std_logic_vector(8 downto 0);
+    signal sum       : std_logic_vector(7 downto 0);
 
 begin
 
@@ -45,7 +47,8 @@ begin
             reg_b     => reg_b,
             carry_in  => carry_in,
             enable    => enable,
-            carry_out => carry_out
+            carry_out => carry_out,
+            sum       => sum
         );
 
     -- Test stimulus
@@ -80,6 +83,12 @@ begin
         else
             report "  PASS: Carry generated from bit 0 addition";
         end if;
+        if sum /= x"02" then
+            report "  ERROR: sum should be 0x02, got 0x" & to_hstring(sum) severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Sum 0x01 + 0x01 = 0x02";
+        end if;
 
         -- Test 2: Addition with carry propagation
         report "";
@@ -98,6 +107,18 @@ begin
             errors := errors + 1;
         else
             report "  PASS: Carry propagated through all bits";
+        end if;
+        if carry_out(8) /= '1' then
+            report "  ERROR: carry_out(8) should be 1 (true carry-out of 0xFF+0x01)" severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: True carry-out (bit 8) set";
+        end if;
+        if sum /= x"00" then
+            report "  ERROR: sum should be 0x00 (0xFF+0x01 wraps), got 0x" & to_hstring(sum) severity error;
+            errors := errors + 1;
+        else
+            report "  PASS: Sum wraps to 0x00";
         end if;
 
         -- Test 3: Addition with carry input
@@ -122,6 +143,10 @@ begin
             report "  ERROR: carry_out(1) should be 0 (no propagation from 0+0)" severity error;
             errors := errors + 1;
         end if;
+        if sum /= x"01" then
+            report "  ERROR: sum should be 0x01 (0+0+cin), got 0x" & to_hstring(sum) severity error;
+            errors := errors + 1;
+        end if;
         report "  PASS: Carry input handled correctly";
 
         -- Test 4: Disabled output
@@ -134,8 +159,8 @@ begin
         enable <= '0';  -- Disabled
         wait for 50 ns;
 
-        if carry_out /= x"00" then
-            report "  ERROR: carry_out should be 0x00 when disabled, got 0x" &
+        if carry_out /= "000000000" then
+            report "  ERROR: carry_out should be all zero when disabled, got 0x" &
                    to_hstring(carry_out) severity error;
             errors := errors + 1;
         else
@@ -157,6 +182,15 @@ begin
         -- So carries don't propagate without carry_in
         -- All propagate bits mean: result = 0xFF, but no carry out
         report "  INFO: carry_out = 0x" & to_hstring(carry_out);
+        if carry_out /= "000000000" then
+            report "  ERROR: no generates, no cin -> all carries 0, got 0x" &
+                   to_hstring(carry_out) severity error;
+            errors := errors + 1;
+        end if;
+        if sum /= x"FF" then
+            report "  ERROR: sum should be 0xFF (0xAA+0x55), got 0x" & to_hstring(sum) severity error;
+            errors := errors + 1;
+        end if;
         report "  PASS: Complex pattern handled";
 
         -- Test 6: Carry with alternating pattern and carry_in
@@ -175,6 +209,14 @@ begin
             errors := errors + 1;
         else
             report "  PASS: Carry propagated through all propagate bits";
+        end if;
+        if carry_out(8) /= '1' then
+            report "  ERROR: carry_out(8) should be 1 (cin rippled out the top)" severity error;
+            errors := errors + 1;
+        end if;
+        if sum /= x"00" then
+            report "  ERROR: sum should be 0x00 (0xAA+0x55+1 wraps), got 0x" & to_hstring(sum) severity error;
+            errors := errors + 1;
         end if;
 
         -- Summary
