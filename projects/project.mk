@@ -78,8 +78,8 @@ B8008_SRCS := \
 	$(SRC_DIR)/sss_ddd_selector.vhdl \
 	$(SRC_DIR)/ahl_pointer.vhdl \
 	$(SRC_DIR)/temp_registers.vhdl \
-	$(SRC_DIR)/alu.vhdl \
 	$(SRC_DIR)/carry_lookahead.vhdl \
+	$(SRC_DIR)/alu.vhdl \
 	$(SRC_DIR)/io_buffer.vhdl \
 	$(SRC_DIR)/mem_mux_refresh.vhdl \
 	$(COMP_DIR)/phase_clocks.vhdl \

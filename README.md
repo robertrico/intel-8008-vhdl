@@ -67,6 +67,9 @@ b8008 follows the Intel 8008 block diagram with explicit, simple modules:
 └──────────────────┘  ┌─────────────────┐
                       │      ALU        │
                       │  (8 ops + rot)  │
+                      ├─────────────────┤
+                      │ Carry Look-Ahead│
+                      │ (the real adder)│
                       └─────────────────┘
 ```
 
@@ -115,6 +118,7 @@ make test-b8008-top PROG=search_as
 # Test individual modules
 make test-stack-memory    # Address stack (PC-in-stack)
 make test-alu             # ALU
+make test-alu-exhaustive  # All 656,384 arithmetic cases vs reference model
 make test-instr-decoder   # Instruction decoder
 
 # See everything
@@ -206,7 +210,7 @@ MIT - See [LICENSE.txt](LICENSE.txt)
 - **Jim Loos** - SCELBAL build for the 8008-SBC (portions copyright 2021)
 - **SCELBI Computer Consulting / Mark Arnold & Nat Wadsworth** - SCELBAL (1976)
 - **Mike Willegal** - SCELBI software archive
-- **Michael Kohn** (2022-2024) - Original Verilog reference
+- **Michael Kohn** - Verilog i8008, consulted as reference material
 - **Intel Corporation** - Original 8008 design
 
 See [ATTRIBUTION.md](ATTRIBUTION.md) for full credits.

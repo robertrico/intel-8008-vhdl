@@ -3,10 +3,13 @@
 --------------------------------------------------------------------------------
 -- Carry Look-Ahead Logic for Intel 8008
 --
--- Pre-computes carry propagation for 8-bit addition/subtraction
--- - Takes operands from Reg.a and Reg.b
--- - Receives enable signal from Register and ALU Control
--- - Outputs carry signals to ALU for fast arithmetic
+-- THE adder for the ALU's arithmetic operations (ADD/ADC/SUB/SBB/CMP,
+-- INR/DCR). Instantiated inside alu.vhdl; the ALU has no other adder.
+-- - Computes generate/propagate, all nine carries, and the 8-bit sum
+-- - carry_out(8) is the true carry-out; the ALU inverts it for the
+--   subtract family (two's complement: carry-out HIGH = no borrow)
+-- - Subtraction is preconditioned by the ALU (b inverted, carry_in
+--   forced) - this block only adds
 -- - DUMB module: pure combinational logic, no state
 --
 -- Based on standard 4-bit carry look-ahead with extension to 8 bits
@@ -32,7 +35,12 @@ entity carry_lookahead is
         enable : in std_logic;
 
         -- Carry outputs to ALU
-        carry_out : out std_logic_vector(7 downto 0)  -- Carry for each bit position
+        -- carry_out(i) is the carry INTO bit i; carry_out(8) is the
+        -- carry out of bit 7 (the true adder carry-out)
+        carry_out : out std_logic_vector(8 downto 0);
+
+        -- Sum output: sum(i) = Pi xor Ci (completes the adder)
+        sum : out std_logic_vector(7 downto 0)
     );
 end entity carry_lookahead;
 
@@ -71,6 +79,11 @@ begin
 
     -- Output carries for each bit position (for ALU to use)
     -- ALU can use these for fast multi-bit operations
-    carry_out <= carry_internal(7 downto 0) when enable = '1' else (others => '0');
+    carry_out <= carry_internal when enable = '1' else (others => '0');
+
+    -- Sum for each bit position: Si = Pi xor Ci
+    sum_gen: for i in 0 to 7 generate
+        sum(i) <= prop(i) xor carry_internal(i);
+    end generate;
 
 end architecture rtl;
