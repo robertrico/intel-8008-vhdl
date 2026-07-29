@@ -61,8 +61,7 @@ B8008_SRCS = \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl
 
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-alu-exhaustive test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-b8008-extram test-serial test-interrupt test-bitbang-uart test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-b8008-extram test-serial test-interrupt test-bitbang-uart test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-alu-exhaustive test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
 
 all: help
 
@@ -682,11 +681,14 @@ prog-flash: $(BIT)
 # FuseSoC-generated b8008_top netlist (distinct from build/synth/b8008.v,
 # which is entity b8008 without the top-level memories).
 NETLIST_TOP_DIR := build/netlist-top
+# Needs pyyaml; point PYTHON at an interpreter that has it if system
+# python3 does not (e.g. the fusesoc venv's python)
+PYTHON ?= python3
 .PHONY: netlist-top
 netlist-top:
 	@mkdir -p $(NETLIST_TOP_DIR)
 	@printf 'gapi: "1.0"\nfiles_root: .\nvlnv: "greygiant:retro:b8008-top-netlist:0"\nparameters:\n  top: b8008_top\n  output: b8008_top.v\n' > $(NETLIST_TOP_DIR)/input.yml
-	cd $(NETLIST_TOP_DIR) && python3 ../../scripts/fusesoc/ghdl_synth_verilog.py input.yml
+	cd $(NETLIST_TOP_DIR) && $(PYTHON) ../../scripts/fusesoc/ghdl_synth_verilog.py input.yml
 
 # ============================================================================
 # FPGA PROJECTS (Delegation to project-specific Makefiles)

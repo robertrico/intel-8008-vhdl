@@ -4,6 +4,8 @@ description: >
   b8008 - block-based VHDL implementation of the Intel 8008. Silicon-validated
   (ECP5-5G Versa). rtl fileset is the ordered 27-file list from
   projects/project.mk B8008_SRCS; order is load-bearing for GHDL analysis.
+  In particular carry_lookahead must precede alu: the ALU instantiates it
+  as its adder.
 
 filesets:
   rtl:
@@ -21,8 +23,8 @@ filesets:
       - src/b8008/sss_ddd_selector.vhdl
       - src/b8008/ahl_pointer.vhdl
       - src/b8008/temp_registers.vhdl
-      - src/b8008/alu.vhdl
       - src/b8008/carry_lookahead.vhdl
+      - src/b8008/alu.vhdl
       - src/b8008/io_buffer.vhdl
       - src/b8008/mem_mux_refresh.vhdl
       - src/components/phase_clocks.vhdl
