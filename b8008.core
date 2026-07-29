@@ -1,0 +1,63 @@
+CAPI=2:
+name: greygiant:retro:b8008:3.0
+description: >
+  b8008 - block-based VHDL implementation of the Intel 8008. Silicon-validated
+  (ECP5-5G Versa). rtl fileset is the ordered 27-file list from
+  projects/project.mk B8008_SRCS; order is load-bearing for GHDL analysis.
+
+filesets:
+  rtl:
+    files:
+      - src/b8008/b8008_types.vhdl
+      - src/b8008/stack_pointer.vhdl
+      - src/b8008/stack_memory.vhdl
+      - src/b8008/stack_addr_mux.vhdl
+      - src/b8008/instruction_register.vhdl
+      - src/b8008/instruction_decoder.vhdl
+      - src/b8008/condition_flags.vhdl
+      - src/b8008/register_file.vhdl
+      - src/b8008/scratchpad_decoder.vhdl
+      - src/b8008/scratchpad_addr_mux.vhdl
+      - src/b8008/sss_ddd_selector.vhdl
+      - src/b8008/ahl_pointer.vhdl
+      - src/b8008/temp_registers.vhdl
+      - src/b8008/alu.vhdl
+      - src/b8008/carry_lookahead.vhdl
+      - src/b8008/io_buffer.vhdl
+      - src/b8008/mem_mux_refresh.vhdl
+      - src/components/phase_clocks.vhdl
+      - src/b8008/state_timing_generator.vhdl
+      - src/b8008/machine_cycle_control.vhdl
+      - src/b8008/memory_io_control.vhdl
+      - src/b8008/register_alu_control.vhdl
+      - src/b8008/interrupt_ready_ff.vhdl
+      - src/b8008/b8008.vhdl
+      - src/b8008/ram_sync.vhdl
+      - src/b8008/address_decoder.vhdl
+      - src/b8008/b8008_top.vhdl
+    file_type: vhdlSource-2008
+
+  debug_io:
+    files:
+      - src/b8008/debug_clock_control.vhdl
+      - src/components/usart.vhdl
+      - src/components/b8008_usart.vhdl
+    file_type: vhdlSource-2008
+
+  synth_helpers:
+    files:
+      - src/synth/ghdl_gates.v
+    file_type: verilogSource
+
+generators:
+  ghdl_synth_verilog:
+    interpreter: python3
+    command: scripts/fusesoc/ghdl_synth_verilog.py
+    description: >
+      GHDL --synth the b8008 core (plus optional consumer-side wrapper
+      files via extra_files) into a Verilog netlist + ghdl_gates.v.
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: b8008_top

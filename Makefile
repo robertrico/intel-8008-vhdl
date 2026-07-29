@@ -62,6 +62,7 @@ B8008_SRCS = \
 	$(SRC_DIR)/b8008.vhdl
 
 .PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-alu-exhaustive test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-b8008-extram test-serial test-interrupt test-bitbang-uart test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
 
 all: help
 
@@ -81,6 +82,7 @@ help:
 	@echo "  make bit                  - Generate bitstream"
 	@echo "  make prog                 - Program via JTAG (volatile)"
 	@echo "  make prog-flash           - Program SPI flash (persistent)"
+	@echo "  make netlist-top          - FuseSoC generator: b8008_top Verilog netlist"
 	@echo ""
 	@echo "Assembler:"
 	@echo "  make assemble PROG=file.asm      - Assemble test program (in test_programs/)"
@@ -184,6 +186,54 @@ test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_top_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb -gROM_FILE=$(ROM_FILE) --stop-time=$(SIM_TIME)
+
+# ============================================================================
+# EXTERNAL_RAM EQUIVALENCE TEST
+# ============================================================================
+# Runs two b8008_top instances side by side (internal ram_sync vs
+# EXTERNAL_RAM => true) on the same RAM-exercising program and asserts they
+# stay bit-identical. Proves EXTERNAL_RAM is a no-op on CPU behavior before
+# a LiteX SoC is trusted to own the RAM.
+#
+# Usage:
+#   make test-b8008-extram
+EXTRAM_PROG ?= ram_intensive_as
+EXTRAM_ROM_FILE = test_programs/$(EXTRAM_PROG).mem
+EXTRAM_SIM_TIME ?= 31ms
+test-b8008-extram: $(BUILD_DIR) $(EXTRAM_ROM_FILE)
+	@echo "========================================="
+	@echo "Testing b8008_top - EXTERNAL_RAM equivalence"
+	@echo "Program: $(EXTRAM_ROM_FILE)"
+	@echo "Sim time: $(EXTRAM_SIM_TIME)"
+	@echo "========================================="
+	@echo ""
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/phase_clocks.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/state_timing_generator.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/interrupt_ready_ff.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/mem_mux_refresh.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/condition_flags.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/io_buffer.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/b8008/ram_sync.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/address_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_8kx8.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_top_extram_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_extram_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_extram_tb -gROM_FILE=$(EXTRAM_ROM_FILE) --stop-time=$(EXTRAM_SIM_TIME)
 
 # List available test programs
 show-programs:
@@ -625,6 +675,18 @@ prog: $(BIT)
 prog-flash: $(BIT)
 	@echo "=== Programming SPI Flash ==="
 	$(LOADER) -f $(BIT)
+
+# ============================================================================
+# FUSESOC GENERATOR (b8008_top netlist, direct invocation)
+# ============================================================================
+# FuseSoC-generated b8008_top netlist (distinct from build/synth/b8008.v,
+# which is entity b8008 without the top-level memories).
+NETLIST_TOP_DIR := build/netlist-top
+.PHONY: netlist-top
+netlist-top:
+	@mkdir -p $(NETLIST_TOP_DIR)
+	@printf 'gapi: "1.0"\nfiles_root: .\nvlnv: "greygiant:retro:b8008-top-netlist:0"\nparameters:\n  top: b8008_top\n  output: b8008_top.v\n' > $(NETLIST_TOP_DIR)/input.yml
+	cd $(NETLIST_TOP_DIR) && python3 ../../scripts/fusesoc/ghdl_synth_verilog.py input.yml
 
 # ============================================================================
 # FPGA PROJECTS (Delegation to project-specific Makefiles)

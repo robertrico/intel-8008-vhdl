@@ -61,3 +61,4 @@ ram_test.log
 
 # GHDL testbench executables (created by ghdl -e in project root)
 *_tb
+.superpowers/
