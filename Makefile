@@ -548,6 +548,18 @@ synth-plugin: | $(SYNTH_DIR)
 	@echo ""
 	@echo "Synthesis complete: $(JSON_PLUGIN)"
 
+# write_vhdl round-trip netlist of the b8008 core (generic synth, no ECP5
+# mapping) for validating the ghdl-yosys-plugin write_vhdl backend
+# (upstream issue #235). Simulatable with plain GHDL.
+NETLIST_VHDL := $(SYNTH_DIR)/b8008_netlist.vhdl
+.PHONY: netlist-vhdl
+netlist-vhdl: | $(SYNTH_DIR)
+	@echo "=== write_vhdl netlist of b8008 core (generic synth) ==="
+	GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl \
+	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(B8008_SRCS) -e b8008; synth -top b8008; write_vhdl $(NETLIST_VHDL)" 2>&1 | tee $(SYNTH_DIR)/netlist_vhdl.log
+	@echo ""
+	@echo "Netlist written: $(NETLIST_VHDL)"
+
 # Place and route with nextpnr
 pnr: $(CFG)
 
