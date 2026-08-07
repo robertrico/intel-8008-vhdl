@@ -564,6 +564,17 @@ FORMAL_ENV = GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl PATH="$(OSS_CAD_SUITE):$
 formal-%:
 	cd formal/$* && $(FORMAL_ENV) $(OSS_CAD_SUITE)/sby -f $*.sby $(SBY_TASK)
 
+# Per-module write_vhdl round trip: make netlist-vhdl-stack_pointer
+# emits build/synth/<module>_netlist.vhdl (entity name preserved).
+netlist-vhdl-%: | $(SYNTH_DIR)
+	GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl \
+	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(SRC_DIR)/b8008_types.vhdl $(SRC_DIR)/$*.vhdl -e $*; synth -top $*; write_vhdl $(SYNTH_DIR)/$*_netlist.vhdl"
+
+# EQY equivalence: original module vs its write_vhdl round trip.
+# Config in formal/eqy/<module>.eqy, workdir build/eqy/<module>.
+eqy-%: netlist-vhdl-%
+	$(FORMAL_ENV) $(OSS_CAD_SUITE)/eqy -f -d build/eqy/$* formal/eqy/$*.eqy
+
 # Place and route with nextpnr
 pnr: $(CFG)
 
