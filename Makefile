@@ -554,6 +554,16 @@ netlist-vhdl: | $(SYNTH_DIR)
 	@echo ""
 	@echo "Netlist written: $(NETLIST_VHDL)"
 
+# ----------------------------------------------------------------------------
+# Formal verification runners (SBY / EQY). One pattern rule per tool;
+# per-module configs live in formal/. See docs on issue #235 validation.
+# ----------------------------------------------------------------------------
+FORMAL_ENV = GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl PATH="$(OSS_CAD_SUITE):$$PATH"
+
+# Run one module's sby config: make formal-stack_pointer [SBY_TASK=bmc]
+formal-%:
+	cd formal/$* && $(FORMAL_ENV) $(OSS_CAD_SUITE)/sby -f $*.sby $(SBY_TASK)
+
 # Place and route with nextpnr
 pnr: $(CFG)
 
