@@ -1,0 +1,33 @@
+# One .sby = one module's formal suite. 3 tasks, 1 design
+[tasks]
+bmc
+prove
+cover
+
+# "taskname: line" applies only to that task
+[options]
+bmc: mode bmc
+bmc: depth 20
+prove: mode prove
+prove: depth 4
+cover: mode cover
+cover: depth 20
+
+# smtbmc = SMT-solver engine
+[engines]
+smtbmc
+
+# Yosys script that builds the design. Runs inside sby's
+# copy dir, so bare filenames. -fpsl makes GHDL parse the
+# "--psl" comments.
+[script]
+plugin -i ghdl
+ghdl --std=08 b8008_types.vhdl stack_pointer.vhdl props.vhdl -e stack_pointer_props
+prep -top stack_pointer_props
+
+# Copied flat into the task workdir before [script] runs.
+# Path relative to this file.
+[files]
+../../src/b8008/b8008_types.vhdl
+../../src/b8008/stack_pointer.vhdl
+props.vhdl
