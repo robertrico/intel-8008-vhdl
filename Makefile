@@ -610,8 +610,10 @@ assemble-sample:
 # ============================================================================
 # FPGA SYNTHESIS
 # ============================================================================
-# Uses GHDL to synthesize VHDL -> Verilog, then Yosys for ECP5 synthesis
-# This avoids the broken GHDL-Yosys plugin on macOS
+# Default path: GHDL synthesizes VHDL -> Verilog, then Yosys for ECP5.
+# The ghdl-yosys plugin works on macOS as of oss-cad-suite 20260807; the
+# direct plugin path is available as 'make synth-plugin' (needs GHDL_PREFIX
+# because the suite's bin/yosys wrapper does not set it).
 
 $(SYNTH_DIR):
 	@mkdir -p $(SYNTH_DIR)
@@ -642,6 +644,18 @@ $(JSON): $(SYNTH_DIR)/b8008.v
 	@echo ""
 	@echo "Synthesis complete: $@"
 	@grep -E "Number of cells|LUT|DFF|CARRY|MULT" $(SYNTH_DIR)/synth.log || true
+
+# Direct plugin synthesis: VHDL -> RTLIL via ghdl-yosys plugin, no Verilog
+# intermediate and no ghdl_gates.v shim. Output kept separate from $(JSON)
+# so the two paths can be diffed.
+JSON_PLUGIN := $(SYNTH_DIR)/b8008_plugin.json
+.PHONY: synth-plugin
+synth-plugin: | $(SYNTH_DIR)
+	@echo "=== Running Yosys synthesis for ECP5 (ghdl plugin) ==="
+	GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl \
+	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(B8008_SRCS) -e b8008; synth_ecp5 -top b8008 -json $(JSON_PLUGIN)" 2>&1 | tee $(SYNTH_DIR)/synth_plugin.log
+	@echo ""
+	@echo "Synthesis complete: $(JSON_PLUGIN)"
 
 # Place and route with nextpnr
 pnr: $(CFG)
