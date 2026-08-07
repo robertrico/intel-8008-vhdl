@@ -61,7 +61,8 @@ B8008_SRCS = \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl
 
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-b8008-extram test-serial test-interrupt test-bitbang-uart test-phase-clocks test-state-timing test-machine-cycle test-instr-decoder test-int-button test-reg-alu-control test-temp-regs test-carry-lookahead test-alu test-alu-exhaustive test-condition-flags test-interrupt-ready test-instr-reg test-io-buffer test-memory-io-control test-ahl-pointer test-scratchpad-decoder test-register-file test-sss-ddd-selector test-stack-pointer test-stack-memory test-debug-clock-control help show-programs synth pnr bit prog prog-flash
+# Unit-test targets are declared phony via $(UNIT_TESTS) below.
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-b8008-extram test-serial test-interrupt test-bitbang-uart help show-programs synth pnr bit prog prog-flash
 
 all: help
 
@@ -93,7 +94,6 @@ help:
 	@echo "  make test-serial PROG=x   - Test serial I/O programs (bitbang UART capture)"
 	@echo ""
 	@echo "Module Tests:"
-	@echo "  make              - Test program counter"
 	@echo "  make test-phase-clocks    - Test phase clocks with SYNC"
 	@echo "  make test-state-timing    - Test state timing generator"
 	@echo "  make test-machine-cycle   - Test machine cycle control"
@@ -113,8 +113,10 @@ help:
 	@echo "  make test-register-file   - Test register file"
 	@echo "  make test-sss-ddd-selector - Test SSS/DDD register selector"
 	@echo "  make test-stack-pointer   - Test stack pointer"
-	@echo "  make - Test stack address decoder"
 	@echo "  make test-stack-memory    - Test stack memory"
+	@echo "  make test-int-button      - Test front-panel interrupt button"
+	@echo "  make test-address-decoder - Test address decoder"
+	@echo "  make test-ram-sync        - Test parameterized synchronous RAM"
 	@echo "  make test-debug-clock-control - Test debug clock control"
 	@echo "  make clean                - Remove build files"
 	@echo ""
@@ -345,194 +347,83 @@ test-interrupt: $(BUILD_DIR) $(PROG_DIR)/interrupt_test_as.mem
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_test_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_test_tb --stop-time=25ms
 
-test-address-decoder: $(BUILD_DIR)
-	@echo "Testing address decoder..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/address_decoder.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/address_decoder_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) address_decoder_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) address_decoder_tb --stop-time=1us
+# ============================================================================
+# INDIVIDUAL MODULE TESTS (consolidated)
+# ============================================================================
+# One static pattern rule covers every unit test. GHDL computes the VHDL
+# compile order itself via import (-i) + make (-m), so there are no
+# hand-maintained analyze lists.
+#
+# Defaults per target (stem = target name minus "test-"):
+#   testbench unit: <stem with - replaced by _>_tb
+#   testbench file: $(TEST_DIR)/<unit>.vhdl
+#   stop time:      10us
+# Exceptions are declared in the tables below, keyed by full target name.
 
-test-ram-sync: $(BUILD_DIR)
-	@echo "Testing parameterized synchronous RAM..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ram_sync.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/ram_sync_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ram_sync_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ram_sync_tb --stop-time=10us
+UNIT_TESTS := \
+	test-address-decoder \
+	test-ahl-pointer \
+	test-alu \
+	test-alu-exhaustive \
+	test-carry-lookahead \
+	test-condition-flags \
+	test-debug-clock-control \
+	test-instr-decoder \
+	test-instr-reg \
+	test-int-button \
+	test-interrupt-ready \
+	test-io-buffer \
+	test-machine-cycle \
+	test-memory-io-control \
+	test-phase-clocks \
+	test-ram-sync \
+	test-reg-alu-control \
+	test-register-file \
+	test-scratchpad-decoder \
+	test-sss-ddd-selector \
+	test-stack-memory \
+	test-stack-pointer \
+	test-state-timing \
+	test-temp-regs
 
-test-phase-clocks: $(BUILD_DIR)
-	@echo "Testing phase clocks with SYNC..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/phase_clocks.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./sim/units/phase_clocks_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) phase_clocks_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) phase_clocks_tb --stop-time=30us
+.PHONY: $(UNIT_TESTS)
 
-test-state-timing: $(BUILD_DIR)
-	@echo "Testing state timing generator..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/state_timing_generator.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/state_timing_generator_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) state_timing_generator_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) state_timing_generator_tb --stop-time=20us
+# Testbench-name exceptions (target name abbreviates the module name)
+TB_test-instr-decoder   := instruction_decoder_tb
+TB_test-instr-reg       := instruction_register_tb
+TB_test-interrupt-ready := interrupt_ready_ff_tb
+TB_test-machine-cycle   := machine_cycle_control_tb
+TB_test-reg-alu-control := register_alu_control_tb
+TB_test-state-timing    := state_timing_generator_tb
+TB_test-temp-regs       := temp_registers_tb
 
-test-machine-cycle: $(BUILD_DIR)
-	@echo "Testing machine cycle control..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/machine_cycle_control_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) machine_cycle_control_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) machine_cycle_control_tb --stop-time=10us
+# Testbench-location exceptions (testbench lives outside $(TEST_DIR))
+TBFILE_test-phase-clocks := ./sim/units/phase_clocks_tb.vhdl
 
-test-instr-decoder: $(BUILD_DIR)
-	@echo "Testing instruction decoder..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_decoder.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/instruction_decoder_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) instruction_decoder_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) instruction_decoder_tb --stop-time=10us
+# Stop-time exceptions (default 10us)
+STOP_test-address-decoder     := 1us
+STOP_test-alu-exhaustive      := 100ms
+STOP_test-debug-clock-control := 100us
+STOP_test-int-button          := 20ms
+STOP_test-phase-clocks        := 30us
+STOP_test-stack-pointer       := 20us
+STOP_test-state-timing        := 20us
 
-test-reg-alu-control: $(BUILD_DIR)
-	@echo "Testing register and ALU control..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/register_alu_control_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_alu_control_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_alu_control_tb --stop-time=10us
+# Resolved per-target values (expanded at recipe time)
+UNIT_TB      = $(or $(TB_$@),$(subst -,_,$*)_tb)
+UNIT_TB_FILE = $(or $(TBFILE_$@),$(TEST_DIR)/$(UNIT_TB).vhdl)
+UNIT_STOP    = $(or $(STOP_$@),10us)
 
-test-temp-regs: $(BUILD_DIR)
-	@echo "Testing temporary registers..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/temp_registers_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) temp_registers_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) temp_registers_tb --stop-time=10us
+# Import set: current b8008 sources, the shared phase-clock generator, and
+# the one testbench. Never import legacy code (src/s8008, src/v8008,
+# src/components/legacy, projects/legacy_projects).
+UNIT_IMPORT  = $(wildcard $(SRC_DIR)/*.vhdl) ./src/components/phase_clocks.vhdl $(UNIT_TB_FILE)
 
-test-carry-lookahead: $(BUILD_DIR)
-	@echo "Testing carry look-ahead..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/carry_lookahead.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/carry_lookahead_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) carry_lookahead_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) carry_lookahead_tb --stop-time=10us
-
-test-alu: $(BUILD_DIR)
-	@echo "Testing ALU..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/carry_lookahead.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/alu_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) alu_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) alu_tb --stop-time=10us
-
-test-alu-exhaustive: $(BUILD_DIR)
-	@echo "Exhaustive ALU sweep vs reference model (656,384 cases)..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/carry_lookahead.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/alu_exhaustive_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) alu_exhaustive_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) alu_exhaustive_tb --stop-time=100ms
-
-test-condition-flags: $(BUILD_DIR)
-	@echo "Testing condition flags..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/condition_flags.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/condition_flags_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) condition_flags_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) condition_flags_tb --stop-time=10us
-
-test-int-button: $(BUILD_DIR)
-	@echo "Testing front-panel interrupt button..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/int_button.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/int_button_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) int_button_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) int_button_tb --stop-time=20ms
-
-test-interrupt-ready: $(BUILD_DIR)
-	@echo "Testing interrupt and ready flip-flops..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/interrupt_ready_ff.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/interrupt_ready_ff_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_ready_ff_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_ready_ff_tb --stop-time=10us
-
-test-instr-reg: $(BUILD_DIR)
-	@echo "Testing instruction register..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/instruction_register_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) instruction_register_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) instruction_register_tb --stop-time=10us
-
-test-io-buffer: $(BUILD_DIR)
-	@echo "Testing I/O buffer..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/io_buffer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/io_buffer_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) io_buffer_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) io_buffer_tb --stop-time=10us
-
-test-memory-io-control: $(BUILD_DIR)
-	@echo "Testing memory and I/O control..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/memory_io_control_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) memory_io_control_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) memory_io_control_tb --stop-time=10us
-
-test-ahl-pointer: $(BUILD_DIR)
-	@echo "Testing AHL address pointer..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/ahl_pointer_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ahl_pointer_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ahl_pointer_tb --stop-time=10us
-
-test-scratchpad-decoder: $(BUILD_DIR)
-	@echo "Testing scratchpad decoder..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/scratchpad_decoder_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) scratchpad_decoder_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) scratchpad_decoder_tb --stop-time=10us
-
-test-register-file: $(BUILD_DIR)
-	@echo "Testing register file..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/register_file_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_file_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) register_file_tb --stop-time=10us
-
-test-stack-pointer: $(BUILD_DIR)
-	@echo "Testing stack pointer..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/stack_pointer_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_pointer_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_pointer_tb --stop-time=20us
-
-test-stack-memory: $(BUILD_DIR)
-	@echo "Testing stack memory..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/stack_memory_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_memory_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) stack_memory_tb --stop-time=10us
-
-test-sss-ddd-selector: $(BUILD_DIR)
-	@echo "Testing SSS/DDD selector..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/sss_ddd_selector.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/sss_ddd_selector_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) sss_ddd_selector_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) sss_ddd_selector_tb --stop-time=10us
-
-test-debug-clock-control: $(BUILD_DIR)
-	@echo "Testing debug clock control..."
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/debug_clock_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/debug_clock_control_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) debug_clock_control_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) debug_clock_control_tb --stop-time=100us
+$(UNIT_TESTS): test-%: | $(BUILD_DIR)
+	@echo "Testing $* ($(UNIT_TB))..."
+	$(GHDL) -i $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(UNIT_IMPORT)
+	$(GHDL) -m $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(UNIT_TB)
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(UNIT_TB) --stop-time=$(UNIT_STOP)
 
 # ============================================================================
 # ASSEMBLER
