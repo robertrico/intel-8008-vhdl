@@ -150,7 +150,7 @@ The `test_programs/verification_scripts/` directory contains automated verificat
 
 ```
 intel-8008-vhdl/
-├── Makefile                         # Simple, clean build system (41 lines)
+├── Makefile                         # Build system: sim, synth, assembler targets (see 'make help')
 ├── src/
 │   ├── b8008/                       # ✅ CURRENT: Block-based implementation
 │   │   ├── ahl_pointer.vhdl
