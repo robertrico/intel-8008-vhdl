@@ -28,8 +28,18 @@ for script in "$SCRIPT_DIR"/check_*.sh; do
         continue
     fi
 
-    TOTAL=$((TOTAL + 1))
     TEST_NAME=$(basename "$script" .sh)
+
+    # Tests that mine RTL-internal report statements cannot run against the
+    # write_vhdl netlist core (synthesis strips reports). Skip loudly.
+    if [ "$B8008_CORE" = "netlist" ] && [ "$TEST_NAME" = "check_cycle_count_test" ]; then
+        echo "-------------------------------------------"
+        echo "SKIPPED (RTL-only, mines report output): $TEST_NAME"
+        echo "-------------------------------------------"
+        continue
+    fi
+
+    TOTAL=$((TOTAL + 1))
 
     echo "-------------------------------------------"
     echo "Running: $TEST_NAME"

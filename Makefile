@@ -61,6 +61,17 @@ B8008_SRCS = \
 	$(SRC_DIR)/interrupt_ready_ff.vhdl \
 	$(SRC_DIR)/b8008.vhdl
 
+# Core selector for simulation: rtl (default) analyzes the b8008 sources,
+# netlist analyzes the write_vhdl round-trip instead (issue #235 validation).
+# Propagates from the environment, so verification scripts work unchanged:
+#   B8008_CORE=netlist ./test_programs/verification_scripts/run_all_tests.sh
+B8008_CORE ?= rtl
+ifeq ($(B8008_CORE),netlist)
+CORE_SIM_SRCS = $(NETLIST_VHDL) $(TEST_DIR)/b8008_netlist_shim.vhdl
+else
+CORE_SIM_SRCS = $(B8008_SRCS)
+endif
+
 # Unit-test targets are declared phony via $(UNIT_TESTS) below.
 .PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-b8008-extram test-serial test-interrupt test-bitbang-uart help show-programs synth pnr bit prog prog-flash
 
@@ -152,6 +163,9 @@ $(PROG_DIR)/%.mem: $(PROG_DIR)/%.asm
 #   make test-b8008-top PROG=search_as     - Run with search program
 #   make test-b8008-top PROG=ram_intensive_as - Run with RAM intensive test
 #   make test-b8008-top PROG=search_as SIM_TIME=30ms - Custom simulation time
+ifeq ($(B8008_CORE),netlist)
+test-b8008-top: netlist-vhdl
+endif
 test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	@echo "========================================="
 	@echo "Testing b8008_top - Complete System"
@@ -159,27 +173,7 @@ test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	@echo "Sim time: $(SIM_TIME)"
 	@echo "========================================="
 	@echo ""
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/phase_clocks.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/state_timing_generator.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/interrupt_ready_ff.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_decoder.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/mem_mux_refresh.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/carry_lookahead.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/condition_flags.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/io_buffer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(CORE_SIM_SRCS)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/b8008/ram_sync.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/address_decoder.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
@@ -556,7 +550,7 @@ NETLIST_VHDL := $(SYNTH_DIR)/b8008_netlist.vhdl
 netlist-vhdl: | $(SYNTH_DIR)
 	@echo "=== write_vhdl netlist of b8008 core (generic synth) ==="
 	GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl \
-	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(B8008_SRCS) -e b8008; synth -top b8008; write_vhdl $(NETLIST_VHDL)" 2>&1 | tee $(SYNTH_DIR)/netlist_vhdl.log
+	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(B8008_SRCS) -e b8008; synth -top b8008; rename b8008 b8008_netlist_core; write_vhdl $(NETLIST_VHDL)" 2>&1 | tee $(SYNTH_DIR)/netlist_vhdl.log
 	@echo ""
 	@echo "Netlist written: $(NETLIST_VHDL)"
 
