@@ -4,6 +4,8 @@
 
 **Implementation mapping note:** the b8008 CORE entity diverges from the physical 8008 pinout in two synthesis-driven ways: φ1/φ2 are OUTPUTS (generated internally by phase_clocks from clk_in, not fed in), and the bidirectional D bus is split into data_bus_in / data_bus_out / data_bus_oe (FPGA tri-state modeling). The PROTOCOL below — what appears when, per T-state — is unchanged by either.
 
+**T4/T5 divergence (VPLAN BUS-06, CLOSED-AS-CONSTRAINT):** the PMOS 8008 leaks internal data-bus values onto the external bus at T4/T5 (UM p.48 n.3 marks them internal-use). b8008 does not reproduce the leak: data_bus_oe drives the bus only at T1/T2, write T3, and INP T4 (the flag output, which IS contract). No external device may rely on T4/T5 bus content on either implementation.
+
 ## 1. Signals
 
 | Signal | Dir | Width | Role |

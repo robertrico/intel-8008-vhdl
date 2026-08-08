@@ -126,7 +126,7 @@ The `test_programs/verification_scripts/` directory contains automated verificat
 # Run ALL verification tests (regression suite)
 ./test_programs/verification_scripts/run_all_tests.sh
 
-# Run a specific verification test (one check_*.sh per test program - 35 total)
+# Run a specific verification test (one check_*.sh per test program - 37 total)
 ./test_programs/verification_scripts/check_alu_test.sh
 ./test_programs/verification_scripts/check_search_test.sh
 ./test_programs/verification_scripts/check_ready_wait_test.sh
@@ -192,7 +192,7 @@ intel-8008-vhdl/
 │   ├── b8008_basic/, b8008_monitor/ # FPGA board tops
 │   └── legacy_projects/             # ⚠️ DEPRECATED: Old s8008/v8008 FPGA projects
 ├── test_programs/                   # Assembly programs (.asm files)
-│   └── verification_scripts/        # ✅ REQUIRED: run_all_tests.sh + one check_*.sh per program (35 tests)
+│   └── verification_scripts/        # ✅ REQUIRED: run_all_tests.sh + one check_*.sh per program (37 tests)
 ├── test_tools/                      # Log/trace analysis helpers
 └── docs/                            # Documentation (datasheets, SPEC/MAS/VPLAN/BUS_PROTOCOL/TIMING/BRINGUP)
 ```

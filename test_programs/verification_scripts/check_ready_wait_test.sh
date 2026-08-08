@@ -4,7 +4,7 @@
 # READY/WAIT SYSTEM-LEVEL TEST (VPLAN Tier1-1: XP-04, XP-05, RDY-02/03)
 # ============================================================================
 # Runs memory_alu_test twice on the full CPU: once free, once with
-# READY_STRESS=true (hundreds of READY drops of varied length plus one
+# READY_MODE=stress (hundreds of READY drops of varied length plus one
 # long park - WAIT states land in every machine-cycle type: PCI,
 # PCR-immediate, PCR-H:L, PCW, PCC).
 #
@@ -35,8 +35,8 @@ echo "--- Free run ---"
 make test-b8008-top PROG="$PROG" SIM_TIME="$SIM_TIME" > "$FREE_LOG" 2>&1
 FREE_STATUS=$?
 
-echo "--- Stressed run (READY_STRESS=true) ---"
-make test-b8008-top PROG="$PROG" SIM_TIME="$SIM_TIME" READY_STRESS=true > "$STRESS_LOG" 2>&1
+echo "--- Stressed run (READY_MODE=stress) ---"
+make test-b8008-top PROG="$PROG" SIM_TIME="$SIM_TIME" READY_MODE=stress > "$STRESS_LOG" 2>&1
 STRESS_STATUS=$?
 
 FAIL=0

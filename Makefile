@@ -65,9 +65,11 @@ B8008_SRCS = \
 #   B8008_CORE=netlist ./test_programs/verification_scripts/run_all_tests.sh
 B8008_CORE ?= rtl
 
-# READY/WAIT stress mode for test-b8008-top (b8008_top_tb generic):
-# repeated READY drops + one long park; used by check_ready_wait_test.sh.
-READY_STRESS ?= false
+# READY driving mode for test-b8008-top (b8008_top_tb generic):
+#   drop   - one mid-run READY drop (default)
+#   stress - repeated drops + long park (check_ready_wait_test.sh)
+#   step   - one READY pulse per machine cycle (check_ready_step_test.sh)
+READY_MODE ?= drop
 ifeq ($(B8008_CORE),netlist)
 # b8008_types must be analyzed explicitly: b8008_top's use clause needs it,
 # and the netlist branch doesn't pull in B8008_SRCS (a warm build/ dir from
@@ -109,6 +111,8 @@ help:
 	@echo "  make test-b8008-top       - Full-system test (PROG=<name> selects program)"
 	@echo "  make test-interrupt       - Interrupt handling test"
 	@echo "  make test-interrupt-jam   - Interrupt jam generality test"
+	@echo "  make test-hlt-int-pending - HLT with pending interrupt (XP-02)"
+	@echo "  make test-b8008-top READY_MODE=drop|stress|step - READY driving mode"
 	@echo "  make test-units           - All unit testbenches (CI set)"
 	@echo "  make formal-<module>      - SBY property/miter suite (formal/<module>)"
 	@echo "  make eqy-<module>         - write_vhdl round-trip equivalence"
@@ -189,7 +193,7 @@ test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_8kx8.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_top_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb -gROM_FILE=$(ROM_FILE) -gREADY_STRESS=$(READY_STRESS) --stop-time=$(SIM_TIME)
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb -gROM_FILE=$(ROM_FILE) -gREADY_MODE=$(READY_MODE) --stop-time=$(SIM_TIME)
 
 # ============================================================================
 # INTERRUPT JAM GENERALITY TEST (VPLAN INT-04/05, XP-03, XP-14)
@@ -210,6 +214,26 @@ test-interrupt-jam: $(BUILD_DIR) $(PROG_DIR)/jam_test_as.mem
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/interrupt_jam_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_jam_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_jam_tb -gROM_FILE=test_programs/jam_test_as.mem --stop-time=25ms
+
+# ============================================================================
+# XP-02: HLT WITH INTERRUPT ALREADY PENDING
+# ============================================================================
+# Pulses INT before HLT executes; the stored interrupt must wake the CPU.
+# Usage: make test-hlt-int-pending   (checked by check_xp02_hlt_int_test.sh)
+test-hlt-int-pending: $(BUILD_DIR) $(PROG_DIR)/xp02_test_as.mem
+	@echo "========================================="
+	@echo "Testing HLT with pending interrupt (XP-02)"
+	@echo "Program: test_programs/xp02_test_as.mem"
+	@echo "========================================="
+	@echo ""
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(B8008_SRCS)
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/b8008/ram_sync.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/address_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_8kx8.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/hlt_int_pending_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) hlt_int_pending_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) hlt_int_pending_tb -gROM_FILE=test_programs/xp02_test_as.mem --stop-time=10ms
 
 
 # ============================================================================

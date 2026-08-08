@@ -17,12 +17,19 @@ use work.b8008_types.all;
 entity b8008_top_tb is
     generic (
         ROM_FILE : string := "test_programs/alu_test_as.mem";
-        -- READY/WAIT stress mode: repeatedly deassert READY with varied
-        -- spacing and duration across the whole run (statistically covers
-        -- every machine-cycle type), plus one long park. Architectural
-        -- state must be unaffected: the check script diffs checkpoint
-        -- lines against a free run.
-        READY_STRESS : boolean := false
+        -- READY driving mode (VPLAN RDY/XP rows):
+        --   "drop"   - default: one mid-run 50 us READY drop; the CPU
+        --              must park in WAIT and the program still pass.
+        --   "stress" - hundreds of READY drops with varied spacing and
+        --              duration (statistically covers every machine-cycle
+        --              type), plus one long park. Architectural state
+        --              must be unaffected: the check script diffs
+        --              checkpoint lines against a free run.
+        --   "step"   - READY held low; one pulse per machine cycle
+        --              (RDY-03/XP-15 single-stepping). Asserts exactly
+        --              one T1/T1I entry per pulse and that the CPU
+        --              parks in WAIT between pulses.
+        READY_MODE : string := "drop"
     );
 end entity b8008_top_tb;
 
@@ -155,7 +162,31 @@ architecture testbench of b8008_top_tb is
     signal last_address : unsigned(13 downto 0) := (others => '0');
     signal stuck_counter : integer := 0;
 
+    -- READY driver coordination
+    signal boot_done  : boolean := false;
+    -- Status decodes (S0 S1 S2 external status pins)
+    signal in_wait_s    : boolean;  -- 000
+    signal in_stopped_s : boolean;  -- 110
+    signal in_t1_s      : boolean;  -- T1 (010) or T1I (011)
+    -- Machine-cycle counter: rising edges into T1/T1I
+    signal t1_entries : natural := 0;
+
 begin
+
+    in_wait_s    <= (s0_out = '0' and s1_out = '0' and s2_out = '0');
+    in_stopped_s <= (s0_out = '1' and s1_out = '1' and s2_out = '0');
+    in_t1_s      <= (s0_out = '0' and s1_out = '1');
+
+    t1_counter : process(clk_in)
+        variable prev : boolean := false;
+    begin
+        if rising_edge(clk_in) then
+            if in_t1_s and not prev then
+                t1_entries <= t1_entries + 1;
+            end if;
+            prev := in_t1_s;
+        end if;
+    end process;
 
     -- ========================================================================
     -- DEVICE UNDER TEST
@@ -246,9 +277,121 @@ begin
     -- STIMULUS AND MONITORING
     -- ========================================================================
 
-    stimulus : process
-        -- READY stress bookkeeping: remaining 100ns ticks of the active drop
+    -- ========================================================================
+    -- READY DRIVER (sole driver of ready_in; mode per READY_MODE generic)
+    -- ========================================================================
+
+    ready_driver : process
         variable drop_remaining : natural := 0;
+        variable pulses    : natural := 0;
+        variable t1_before : natural := 0;
+    begin
+        ready_in <= '1';
+        wait until boot_done;
+
+        if READY_MODE = "drop" then
+            -- One mid-run drop: park 50 us, then resume
+            for i in 1 to 200000 loop
+                wait for 100 ns;
+                if i = 5000 then
+                    ready_in <= '0';
+                    report "READY dropped - CPU should park in WAIT";
+                elsif i = 5500 then
+                    assert saw_wait_status
+                        report "ERROR: never saw WAIT status (000) while READY low"
+                        severity error;
+                    ready_in <= '1';
+                    report "READY restored - CPU should resume";
+                elsif i > 5000 and i < 5500 then
+                    if in_wait_s then
+                        saw_wait_status <= true;
+                    end if;
+                end if;
+            end loop;
+
+        elsif READY_MODE = "stress" then
+            -- Hundreds of READY drops with varied duration (500 ns ..
+            -- 2.5 us) and 13.7 us spacing, so WAIT states land in every
+            -- machine-cycle type many times over the program, plus one
+            -- long park.
+            for i in 1 to 200000 loop
+                wait for 100 ns;
+                if in_wait_s then
+                    saw_wait_status <= true;
+                end if;
+                if i = 3000 then
+                    ready_in <= '0';
+                    report "READY stress: long park begins";
+                elsif i = 4000 then
+                    assert saw_wait_status
+                        report "ERROR: never saw WAIT status (000) during long park"
+                        severity error;
+                    ready_in <= '1';
+                    report "READY stress: long park ends";
+                elsif i < 3000 or i > 4000 then
+                    if drop_remaining > 0 then
+                        drop_remaining := drop_remaining - 1;
+                        if drop_remaining = 0 then
+                            ready_in <= '1';
+                        end if;
+                    elsif i mod 137 = 0 then
+                        drop_remaining := (i / 137) mod 21 + 5;  -- 5..25 ticks
+                        ready_in <= '0';
+                    end if;
+                end if;
+            end loop;
+
+        elsif READY_MODE = "step" then
+            -- Single-step by READY pulse (RDY-03/XP-15): READY low, CPU
+            -- parks in WAIT after every T2; each release-until-resume
+            -- handshake lets exactly one machine cycle through.
+            wait for 5 us;
+            ready_in <= '0';
+            report "READY step: single-step mode engaged";
+            step_loop : loop
+                wait until in_wait_s or in_stopped_s for 2 ms;
+                if in_stopped_s then
+                    exit step_loop;   -- program done (HLT)
+                end if;
+                if not in_wait_s then
+                    report "ERROR: READY step: CPU neither WAIT nor STOPPED within 2 ms"
+                        severity error;
+                    exit step_loop;
+                end if;
+                -- Park integrity: no progress while READY low. Must
+                -- outlast a single T-state: a WAIT that "expires" after
+                -- one visit instead of holding would otherwise pass.
+                wait for 20 us;
+                assert in_wait_s
+                    report "ERROR: READY step: CPU left WAIT while READY low"
+                    severity error;
+                -- Exactly one machine cycle per pulse (skip the first
+                -- park: the in-flight cycle since engage isn't pulsed)
+                if pulses > 0 then
+                    assert t1_entries = t1_before + 1
+                        report "ERROR: READY step: " &
+                               integer'image(t1_entries - t1_before) &
+                               " T1 entries in one pulse (want exactly 1)"
+                        severity error;
+                end if;
+                t1_before := t1_entries;
+                ready_in <= '1';
+                wait until not in_wait_s for 1 ms;
+                assert not in_wait_s
+                    report "ERROR: READY step: CPU failed to resume on READY"
+                    severity error;
+                ready_in <= '0';
+                pulses := pulses + 1;
+            end loop;
+            report "READY step: " & integer'image(pulses) & " pulses, " &
+                   integer'image(t1_entries) & " machine cycles";
+        end if;
+
+        wait;
+    end process;
+
+    stimulus : process
+        variable max_ticks : natural := 200000;
     begin
         report "========================================";
         report "B8008 TOP-LEVEL SYSTEM TEST";
@@ -276,65 +419,20 @@ begin
         interrupt <= '0';
         report "T1I detected - interrupt lowered";
         wait for 100 ns;
+        boot_done <= true;
 
         -- Let CPU run for a while and monitor execution
         report "Monitoring CPU execution...";
 
-        -- Wait for CPU to execute the search program
-        -- The program searches for '.' in "Hello, world. 8008!!"
-        -- Expected: Program should find '.' at position 213 (0xD5) and halt
+        -- Single-stepping stretches the run: give it a bigger tick budget
+        if READY_MODE = "step" then
+            max_ticks := 700000;
+        end if;
 
-        -- Monitor for much longer to let program complete
-        for i in 1 to 200000 loop
+        -- Monitor until the tick budget runs out (READY driving lives in
+        -- the ready_driver process above)
+        for i in 1 to max_ticks loop
             wait for 100 ns;
-
-            if not READY_STRESS then
-                -- READY/WAIT exercise: drop ready mid-run for 10 us. The
-                -- CPU must park in WAIT (status 000) and the program must
-                -- still finish correctly (verification scripts check).
-                if i = 5000 then
-                    ready_in <= '0';
-                    report "READY dropped - CPU should park in WAIT";
-                elsif i = 5500 then
-                    assert saw_wait_status
-                        report "ERROR: never saw WAIT status (000) while READY low"
-                        severity error;
-                    ready_in <= '1';
-                    report "READY restored - CPU should resume";
-                elsif i > 5000 and i < 5500 then
-                    if s2_out = '0' and s1_out = '0' and s0_out = '0' then
-                        saw_wait_status <= true;
-                    end if;
-                end if;
-            else
-                -- Stress mode: hundreds of READY drops with varied
-                -- duration (500 ns .. 2.5 us) and 13.7 us spacing, so
-                -- WAIT states land in every machine-cycle type many
-                -- times over the program, plus one long park.
-                if s2_out = '0' and s1_out = '0' and s0_out = '0' then
-                    saw_wait_status <= true;
-                end if;
-                if i = 3000 then
-                    ready_in <= '0';
-                    report "READY stress: long park begins";
-                elsif i = 4000 then
-                    assert saw_wait_status
-                        report "ERROR: never saw WAIT status (000) during long park"
-                        severity error;
-                    ready_in <= '1';
-                    report "READY stress: long park ends";
-                elsif i < 3000 or i > 4000 then
-                    if drop_remaining > 0 then
-                        drop_remaining := drop_remaining - 1;
-                        if drop_remaining = 0 then
-                            ready_in <= '1';
-                        end if;
-                    elsif i mod 137 = 0 then
-                        drop_remaining := (i / 137) mod 21 + 5;  -- 5..25 ticks
-                        ready_in <= '0';
-                    end if;
-                end if;
-            end if;
 
             -- Report state periodically with debug info in clear format
             if i mod 100 = 0 then

@@ -34,7 +34,7 @@ No other state is architecturally visible. Temp registers a/b and the machine-cy
 - **Flags:** update masks are load-bearing spec (escaped twice historically — VPLAN S2/S3): loads touch nothing (FLG-06), INR/DCR spare carry (FLG-07), rotates touch only carry (FLG-10), logicals clear carry (FLG-09), CMP writes flags not A (FLG-11).
 - **Stack:** CALL/RET move SP, slots retain values; 7-level nesting guaranteed; 8th call wraps onto oldest (STK-03..06). Pushed value = address of the instruction after the CALL/RST (STK-09).
 - **Interrupts:** recognized only at instruction boundaries; acknowledge cycle is T1I with PC not incremented; the T3 byte of that cycle is jammed into IR; multi-cycle jams continue as normal cycles (VPLAN §E). No automatic state save.
-- **READY/WAIT:** READY sampled at T2 of every cycle; not-ready parks in WAIT losslessly (system-verified by the READY stress test). Single-stepping by READY pulse is documented 8008 behavior but UNTESTED here (VPLAN RDY-03/XP-15 remain the open gap).
+- **READY/WAIT:** READY sampled at T2 of every cycle; not-ready parks in WAIT losslessly (system-verified by the READY stress test). Single-stepping by READY pulse verified end-to-end: whole programs stepped one machine cycle per pulse with checkpoints identical to free runs (VPLAN RDY-03/RDY-04/XP-15, `check_ready_step_test.sh`).
 - **HLT/STOPPED:** three encodings; STOPPED exits only via interrupt (ST-05/06, I-HLT-01).
 
 ## 5. Explicit non-goals
@@ -42,6 +42,7 @@ No other state is architecturally visible. Temp registers a/b and the machine-cy
 - Dynamic-memory refresh (Intel PMOS implementation detail; architecturally invisible — VPLAN pruning log).
 - Analog/DC electrical characteristics; absolute microsecond timing (sim runs scaled clocks; ratios and non-overlap are kept — CLK-01/02).
 - 8008-1 speed grade distinction.
+- T4/T5 internal-bus leakage onto the external bus (PMOS artifact, marked internal-use by the UM; b8008 floats the bus there — VPLAN BUS-06 ruling).
 
 ## 6. Ratified decisions (2026-08-08)
 

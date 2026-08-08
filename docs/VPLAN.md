@@ -49,9 +49,9 @@ Spec ambiguities were SPEC-QUESTION rows (§ SQ); all 15 are RATIFIED as of 2026
 | BUS-01 | DS72 p.4 Fig1 | T1: D7..D0 = lower 8 address bits | every cycle | directed (monitor) | `sim/cocotb/test_b8008_top.py` — every T1 checked vs debug_pc / REG.L / REG.A per cycle class | COVERED-DIRECTED |
 | BUS-02 | DS72 p.4 Fig1, p.5 | T2: D5..D0 = upper 6 addr bits, D6/D7 = cycle code | every cycle | directed (monitor) | `test_b8008_top.py` — high address (pre-carry per SQ-07) and cycle code checked at every T2 | COVERED-DIRECTED |
 | BUS-03 | UM p.5 §II.C | Cycle codes: PCI D6=0,D7=0; PCR D6=0,D7=1; PCC D6=1,D7=0; PCW D6=1,D7=1 | each type | formal (internal) | `formal/machine_cycle_control.sby` cycle_type latch rules | COVERED-FORMAL + monitor — and the monitor FOUND the external half broken: PCR/PCC were transposed on D6/D7 and the H:L T2 leaked H[7:6] where the code belongs; fixed at the emission mux |
-| BUS-04 | DS72 p.5 §II.C | Cycle code on D6/D7 only during T2 | other states | — | none | GAP |
-| BUS-05 | DS72 p.4 Fig1 | T3 bus = fetched byte (reads) / CPU-driven data (PCW) | per type | incidental | programs execute + RAM writes land (all check_*.sh) — a wrong T3 path would break everything | COVERED-INCIDENTAL (functionally implied, no direct bus check) |
-| BUS-06 | DS72 p.40 n.2-3; UM p.48 n.3 | Internal data-bus value observable on external bus at T4/T5 per micro-op tables | whitebox | — | none | GAP |
+| BUS-04 | DS72 p.5 §II.C | Cycle code on D6/D7 only during T2 | other states | directed | bus monitor pins the FULL byte at every CPU-driven state (T1 address, T2 code+address, PCW T3 data, INP T4 flags) — D6/D7 carry a code only at T2 | COVERED (derived from the full-byte asserts) |
+| BUS-05 | DS72 p.4 Fig1 | T3 bus = fetched byte (reads) / CPU-driven data (PCW) | per type | directed + incidental | write half asserted directly: bus monitor PCW T3 = source reg (MOV M,r) / immediate (MVI M), mutation-tested; read half functionally implied (programs execute) | COVERED |
+| BUS-06 | DS72 p.40 n.2-3; UM p.48 n.3 | Internal data-bus value observable on external bus at T4/T5 per micro-op tables | whitebox | — | ruling: PMOS leak artifact not reproduced — the FPGA core drives the bus only at T1/T2, write T3, INP T4 (data_bus_oe); DS72 marks T4/T5 bus content internal-use, no external consumer may rely on it (BUS_PROTOCOL divergence note) | CLOSED-AS-CONSTRAINT |
 | BUS-07 | DS72 p.5 §II.C | Cycle 1 always PCI; cycles 2/3 ∈ {PCR,PCW,PCC} | every instr | formal + monitor | `machine_cycle_control.sby`; `test_b8008_top.py` asserts cycle-1 code 00 externally | COVERED-FORMAL |
 | BUS-08 | DS72 p.40-41 | Cycle-type sequence per class (PCI-only / PCI+PCR / PCI+PCW / PCI+PCR+PCW / PCI+PCR+PCR / PCI+PCC) | each class | directed | `check_cycle_count_test.sh` MCycle: parsing per class | COVERED-DIRECTED |
 | BUS-09 | DS72 p.13; UM p.13 | Data bus floats during WAIT and STOPPED | — | directed (module) | `io_buffer_tb` ZZ checks | COVERED-DIRECTED ⚠ module only; no system-level check that CPU tri-states in WAIT/STOPPED |
@@ -62,10 +62,10 @@ Spec ambiguities were SPEC-QUESTION rows (§ SQ); all 15 are RATIFIED as of 2026
 
 | ID | Spec cite | Assertion | Conditions | Check type | Check artifact | Status |
 |----|-----------|-----------|------------|------------|----------------|--------|
-| RDY-01 | UM p.12 §V.B | READY tied high → WAIT (000) never appears | any program | — | none (all sim runs hold READY high, but nothing asserts WAIT absence) | GAP (trivially true in practice, unchecked) |
+| RDY-01 | UM p.12 §V.B | READY tied high → WAIT (000) never appears | any program | directed | bus monitor drives READY high and errors on any WAIT status across all four program runs | COVERED |
 | RDY-02 | DS72 p.5 Fig2 | Not-ready at T2 of any cycle type → WAIT; post-resume arch state identical to no-wait run | ×{PCI, PCR-imm, PCR-H:L, PCW, PCC-INP, PCC-OUT} | formal (module) + directed (system) | `state_timing_generator.sby` park+resume; `check_ready_wait_test.sh` — hundreds of varied READY drops + long park over memory_alu_test (all cycle types), checkpoints diffed against the free run | COVERED-DIRECTED |
-| RDY-03 | DS72 p.12 §V.B | READY pulsing single-steps one machine cycle per pulse | multi-cycle program | — | none (`debug_clock_control_tb` steps clocks, not READY) | GAP |
-| RDY-04 | UM p.49 n.17 | OUT PCC cycle requires READY; READY=0 → OUT stalls | OUT | — | none | GAP |
+| RDY-03 | DS72 p.12 §V.B | READY pulsing single-steps one machine cycle per pulse | multi-cycle program | directed | `check_ready_step_test.sh` (READY_MODE=step): whole programs stepped, TB asserts exactly one T1/T1I per pulse + WAIT park integrity (20 us, outlasts a state); mutation-tested (ignore-READY and WAIT-expires both caught) | COVERED |
+| RDY-04 | UM p.49 n.17 | OUT PCC cycle requires READY; READY=0 → OUT stalls | OUT | directed | `check_ready_step_test.sh`: io_test single-stepped — OUT PCC cycles verifiably parked in WAIT (log scan), checkpoints byte-identical to free run | COVERED |
 | RDY-05 | DS72 p.16 tRW | READY sampled at φ22 of T2/WAIT | stimulus constraint | — | SQ-09 ratified: environment setup constraint, not CPU behavior; late deassert takes effect at the next sample (board 2-FF-syncs READY) | CLOSED-AS-CONSTRAINT |
 
 ### E. Interrupt
@@ -163,7 +163,7 @@ Spec ambiguities were SPEC-QUESTION rows (§ SQ); all 15 are RATIFIED as of 2026
 | ID | Assertion | Conditions | Check type | Check artifact | Status |
 |----|-----------|------------|------------|----------------|--------|
 | XP-01 | INT during any cycle/T-state of multi-cycle instr: T1I only after instr completes | arrival per cycle | directed | `check_interrupt_test.sh` — 3 jams into running jump loop | COVERED-DIRECTED ⚠ arrival timing not systematically swept per T-state |
-| XP-02 | INT already pending when HLT executes → STOPPED then immediate T1I wake (Fig 20 HLT·INT arc) | — | — | none | GAP |
+| XP-02 | INT already pending when HLT executes → STOPPED then immediate T1I wake (Fig 20 HLT·INT arc) | — | directed | `check_xp02_hlt_int_test.sh` (hlt_int_pending_tb): INT pulsed + RELEASED during HLT's own cycle, pending FF latch asserted, wake from the STORED interrupt (one STOPPED state, then T1I), handler state intact, exactly 2 T1I; mutation-tested (line-follow FF caught) | COVERED |
 | XP-03 | INT during WAIT: no T1I until READY releases + instr completes | — | directed | `check_jam_test.sh` S4 — INT asserted while parked, no-T1I-during-WAIT asserted, service after release, loop count exact | COVERED-DIRECTED |
 | XP-04 | Not-ready per cycle type ×6: WAIT inserted; final arch state equals no-wait run | 6 variants | directed | `check_ready_wait_test.sh` (statistical coverage: ~300 drops of varied length across all cycle types of memory_alu_test) | COVERED-DIRECTED |
 | XP-05 | In-flight data (reg.a/reg.b) survives arbitrary-length WAIT mid-instruction | long wait | directed | `check_ready_wait_test.sh` 100 µs park mid-program + checkpoint equality | COVERED-DIRECTED |
@@ -176,7 +176,7 @@ Spec ambiguities were SPEC-QUESTION rows (§ SQ); all 15 are RATIFIED as of 2026
 | XP-12 | Fetch page-cross + 14-bit wrap 0x3FFF→0 | 2 boundaries | formal + directed | stack_memory carry props; pc_carry_call_test; `check_pc_wrap_test.sh` | COVERED-DIRECTED |
 | XP-13 | M ops with H[7:6]=11 alias to H[5:0] address | — | directed | `check_hl_mask_test.sh` — all four H quadrants (00/01/10/11) alias one RAM byte, cross write/read | COVERED-DIRECTED |
 | XP-14 | Jam 3-byte instr (JMP/CAL) at interrupt; B2/B3 supplied by the interrupting controller | — | directed | `check_jam_test.sh` S3 | COVERED-DIRECTED |
-| XP-15 | Single-step whole program via READY pulses ≡ free run | — | — | none | GAP |
+| XP-15 | Single-step whole program via READY pulses ≡ free run | — | directed | `check_ready_step_test.sh`: alu_test (169 cycles) and io_test (95 cycles) stepped end-to-end, checkpoints byte-identical to free runs | COVERED |
 
 ---
 
@@ -250,7 +250,7 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 
 ### Tier 1 — spec-mandated, nothing would fail
 
-1. ~~READY/WAIT at system level~~ **DONE** (XP-04, XP-05, RDY-02) — `READY_STRESS` TB generic + `check_ready_wait_test.sh`: varied drops + long park over memory_alu_test, checkpoints byte-identical to free run, WAIT observation asserted. Mutation-tested (WAIT-resume-to-T1 caught). Residual: RDY-03/XP-15 READY single-stepping (one machine cycle per pulse) still GAP.
+1. ~~READY/WAIT at system level~~ **DONE** (XP-04, XP-05, RDY-02) — `READY_STRESS` TB generic + `check_ready_wait_test.sh`: varied drops + long park over memory_alu_test, checkpoints byte-identical to free run, WAIT observation asserted. Mutation-tested (WAIT-resume-to-T1 caught). Residual RDY-03/XP-15 subsequently closed by `check_ready_step_test.sh`.
 2. ~~HLT never actually verified to halt~~ **DONE** — post-HLT sentinel asserted absent + rtl s_stopped grep in both scripts.
 3. ~~Interrupt jam generality~~ **DONE** — dedicated `interrupt_jam_tb` + `jam_test_as.asm` + `check_jam_test.sh`: NOP/HLT/3-byte-JMP jams via the new int_instruction port on b8008_top (full jammed-instruction byte, real interrupt-controller semantics), single-T1I assertion, INT-during-WAIT scenario. Mutation-tested (early ir_loaded_from_interrupt clear caught).
 4. ~~External bus per-T-state contract~~ **DONE** — `test_b8008_top.py` cocotb monitor (two program ROMs: memory_alu for PCI/PCR/PCW + H:L, io for PCC). On first contact it found a real RTL bug: cycle code transposed (PCR<->PCC) on D6/D7 and absent during H:L T2 — fixed at the emission mux. Residuals: T1I address emission masked by the jam mux at this top (INT-02 behavioral coverage via jam tests); BUS-09 float not modeled at the sim top. FLG-13 was subsequently IMPLEMENTED and is monitor-asserted.
@@ -266,7 +266,7 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 11. ~~Load-preserves-flags never directly asserted~~ **DONE** — `flag_test` load-storm rounds, both polarities.
 12. ~~INP protocol details~~ **DONE** — flags-on-bus at T4 implemented and monitor-asserted (FLG-13); port byte at T2 asserted; SQ-04/SQ-05 ratified.
 13. **Double-address emission on T1I** (INT-02, PWR-03⚠): the visible signature of the PC-not-incremented rule. Fold into bus monitor (assert cycle-N and cycle-N+1 addresses equal around T1I).
-14. XP-03 ~~INT during WAIT~~ **DONE** (`check_jam_test.sh` S4). XP-02 (INT already pending at the instant HLT executes) remains: the arrival window is a few states wide and timing-fragile to hit deterministically; the observable (STOPPED+pending→T1I wake) is covered by ST-06/INT-08 and the jam test's stop/wake path.
+14. XP-03 ~~INT during WAIT~~ **DONE** (`check_jam_test.sh` S4). XP-02 ~~INT pending when HLT executes~~ **DONE** — `hlt_int_pending_tb` triggers on HLT reaching the IR (the only window: a pending INT at the prior boundary rightfully preempts), releases the line after the pending FF latches, and asserts the stored interrupt wakes the CPU.
 15. ~~RST at SP wrap~~ **DONE** — `check_rst_wrap_test.sh` (dedicated program; wrapped-slot landing + clean-return-absent).
 
 ### Tier 3 — meta-gaps (harness would not fire)
@@ -283,10 +283,13 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 |--------|------|
 | COVERED-FORMAL | 23 |
 | COVERED-EXHAUSTIVE | 8 |
-| COVERED-DIRECTED | 59 |
-| COVERED-INCIDENTAL | 4 |
-| CLOSED-AS-CONSTRAINT | 1 |
-| GAP | 7 |
+| COVERED-DIRECTED | 66 |
+| COVERED-INCIDENTAL | 3 |
+| CLOSED-AS-CONSTRAINT | 2 |
+| GAP | 0 |
 
-(⚠ residual holes inside COVERED rows are enumerated in the tiers above; all 15 SPEC-QUESTIONs are RATIFIED — rulings in SPEC.md §6.)
+**Zero GAP rows.** Every spec claim is either machine-checked or closed
+as a documented constraint. (⚠ residual holes inside COVERED rows are
+enumerated in the tiers above; all 15 SPEC-QUESTIONs are RATIFIED —
+rulings in SPEC.md §6.)
 

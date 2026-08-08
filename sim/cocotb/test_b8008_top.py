@@ -18,6 +18,14 @@
 #
 #   - INP T4: the condition flip-flops on the bus, S->D0 Z->D1 P->D2
 #     C->D3 (DS72 p.37 "COND FF OUT" - FLG-13's bus half)
+#   - PCW T3: the write data on the bus - source register for MOV M,r,
+#     the fetched immediate for MVI M (BUS-05's write half)
+#   - READY is held high for the whole run, so WAIT must never appear
+#     (RDY-01)
+#
+# Together the T1/T2/T3/T4 full-byte checks also close BUS-04: every
+# CPU-driven state's D6/D7 are pinned to address/data/flag content -
+# the cycle code exists ONLY at T2.
 #
 # Known residuals (documented, not asserted): BUS-09 bus-float is not
 # modeled at this sim top; the
@@ -62,6 +70,7 @@ async def rom_server(dut, mem):
 async def boot(dut):
     dut.reset.value = 1
     dut.interrupt.value = 0
+    dut.ready_in.value = 1
     dut.int_instruction.value = 0x05
     dut.io_port_in.value = 0
     dut.io_port_in_select.value = 0
@@ -90,7 +99,7 @@ async def run_monitor(dut, rom_name, max_ms=40):
     await boot(dut)
 
     errors = []
-    checked = {"t1": 0, "t2": 0, "codes": 0, "flags": 0}
+    checked = {"t1": 0, "t2": 0, "codes": 0, "flags": 0, "wr": 0}
     prev_key = None
     settle = 0   # clks remaining until the current window's check fires
 
@@ -109,6 +118,12 @@ async def run_monitor(dut, rom_name, max_ms=40):
         if name == "STOPPED":
             break  # program finished (HLT)
 
+        if name == "WAIT":
+            # READY is tied high for the whole run (RDY-01)
+            errors.append("WAIT status observed with READY held high")
+            await NextTimeStep()
+            continue
+
         half = int(dut.debug_state_half.value)
         key = (name, half)
         if key != prev_key:
@@ -118,7 +133,7 @@ async def run_monitor(dut, rom_name, max_ms=40):
             # into the state) and the address-latch capture, well before
             # any second-half increment. T1I is skipped (jam mux masks
             # bus - see header).
-            settle = 60 if (half == 0 and name in ("T1", "T2", "T4")) else 0
+            settle = 60 if (half == 0 and name in ("T1", "T2", "T3", "T4")) else 0
             await NextTimeStep()
             continue
         if settle == 0:
@@ -202,6 +217,29 @@ async def run_monitor(dut, rom_name, max_ms=40):
                                   f"{data & 0x3F:02X} want PC high={want_h:02X}")
             checked["t2"] += 1
 
+        elif name == "T3":
+            if cyc == dcyc and cyc < len(types) and types[cyc] == PCW:
+                # PCW T3: the CPU drives the write data (BUS-05 write half)
+                if (ir & 0xF8) == 0xF8 and (ir & 7) != 7:
+                    # MOV M,r (LMr): source register SSS
+                    regs = [dut.debug_reg_a, dut.debug_reg_b, dut.debug_reg_c,
+                            dut.debug_reg_d, dut.debug_reg_e, dut.debug_reg_h,
+                            dut.debug_reg_l]
+                    want = int(regs[ir & 7].value)
+                    what = f"REG[{ir & 7}]"
+                elif ir == 0x3E:
+                    # MVI M (LMI): the immediate fetched in cycle 2 - PC
+                    # already points past it
+                    want = mem[(pc - 1) & 0x3FFF] if ((pc - 1) & 0x3FFF) < len(mem) else 0
+                    what = "imm byte"
+                else:
+                    want = None
+                if want is not None:
+                    if data != want:
+                        errors.append(f"PCW T3 IR={ir:02X}: D={data:02X} "
+                                      f"want {what}={want:02X}")
+                    checked["wr"] += 1
+
         elif name == "T4":
             if cyc < len(types) and types[cyc] == PCC and g["instr_writes_reg"]:
                 # INP T4: condition flip-flops out (DS72 p.37 order)
@@ -225,6 +263,7 @@ async def run_monitor(dut, rom_name, max_ms=40):
         dut._log.error(e)
     assert not errors, f"{len(errors)} bus-protocol violations (first 20 logged)"
     dut._log.info(f"bus monitor clean: {checked}")
+    return checked
 
 
 @cocotb.test()
@@ -237,3 +276,17 @@ async def bus_protocol_memory_alu(dut):
 async def bus_protocol_io(dut):
     """PCC coverage (INP/OUT): REG.A at T1, IR byte at T2."""
     await run_monitor(dut, "io_test_as.mem")
+
+
+@cocotb.test()
+async def bus_protocol_mem_write(dut):
+    """PCW T3 write-data coverage: MOV M,r source register."""
+    checked = await run_monitor(dut, "mov_mem_test_as.mem")
+    assert checked["wr"] > 0, "no PCW T3 write ever checked"
+
+
+@cocotb.test()
+async def bus_protocol_mem_write_imm(dut):
+    """PCW T3 write-data coverage: MVI M immediate byte."""
+    checked = await run_monitor(dut, "mvi_m_test_as.mem")
+    assert checked["wr"] > 0, "no PCW T3 write ever checked"

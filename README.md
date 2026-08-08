@@ -27,7 +27,7 @@ All period software below runs on the FPGA, loaded over serial through the monit
 
 ## Project Status
 
-**Silicon-validated on a Lattice ECP5-5G Versa.** 35/35 regression tests, 46/46 hardware ISA self-tests on the board, cycle-exact T-states verified against the datasheet for all 27 timing classes.
+**Silicon-validated on a Lattice ECP5-5G Versa.** 37/37 regression tests, 46/46 hardware ISA self-tests on the board, cycle-exact T-states verified against the datasheet for all 27 timing classes.
 
 | Component | Status |
 |-----------|--------|
@@ -73,7 +73,7 @@ Scorecard:
 | MCC+STG composition cluster | ✅ mutex + status bijection (bmc-120) | — | — |
 | full core (b8008) | — | ✅ regression suite with netlist core swap (CI, both cores) | ✅ external bus-protocol monitor |
 
-Every b8008 module has machine-checked verification. CI runs per push: the full 35-test assembly regression suite on both the RTL and round-trip-netlist cores, all unit testbenches, 11 SBY property suites (including the composition cluster), 7 SBY miters, 6 EQY equivalence checks, and 7 cocotb runs (including the whole-system bus-protocol monitor). Findings are tracked as repo issues.
+Every b8008 module has machine-checked verification. CI runs per push: the full 37-test assembly regression suite on both the RTL and round-trip-netlist cores, all unit testbenches, 11 SBY property suites (including the composition cluster), 7 SBY miters, 6 EQY equivalence checks, and 7 cocotb runs (including the whole-system bus-protocol monitor). Findings are tracked as repo issues.
 
 ## Architecture
 
@@ -162,7 +162,7 @@ make show-programs
 ### Verification Scripts
 
 ```bash
-# Run ALL verification tests (regression suite, 35/35)
+# Run ALL verification tests (regression suite, 37/37)
 ./test_programs/verification_scripts/run_all_tests.sh
 
 # Individual checks
