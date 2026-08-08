@@ -234,6 +234,45 @@ MAIN:
         JNC     FAIL            ; Fail if carry NOT set (A should be less)
 
         ;===========================================
+        ; TEST 11: ADD M - Add Memory (no carry in)
+        ; Memory[0x00F0] = 0x10
+        ; Carry deliberately set beforehand: ADD must ignore it
+        ; Expected: A = 0x20 + 0x10 = 0x30
+        ;===========================================
+        MVI     L,0F0h          ; H:L = 0x00F0
+        MVI     A,01h
+        MVI     B,0FFh
+        ADD     B               ; 0x01 + 0xFF = 0x100, sets carry
+        MVI     A,20h           ; A = 0x20 (carry still set)
+        ADD     M               ; A = 0x20 + 0x10 = 0x30 (carry ignored)
+        ; CHECKPOINT 12: Verify ADD M
+        MOV     E,A             ; Save result to E
+        MVI     A,0Ch
+        OUT     CHKPT           ; CP12: E=0x30
+        MOV     A,E
+        CPI     30h
+        JNZ     FAIL
+
+        ;===========================================
+        ; TEST 12: SUB M - Subtract Memory (no borrow in)
+        ; Memory[0x00F0] = 0x10
+        ; Carry deliberately set beforehand: SUB must ignore it
+        ; Expected: A = 0x50 - 0x10 = 0x40
+        ;===========================================
+        MVI     A,01h
+        MVI     B,0FFh
+        ADD     B               ; sets carry (borrow)
+        MVI     A,50h           ; A = 0x50 (carry still set)
+        SUB     M               ; A = 0x50 - 0x10 = 0x40 (borrow ignored)
+        ; CHECKPOINT 13: Verify SUB M
+        MOV     E,A             ; Save result to E
+        MVI     A,0Dh
+        OUT     CHKPT           ; CP13: E=0x40
+        MOV     A,E
+        CPI     40h
+        JNZ     FAIL
+
+        ;===========================================
         ; All tests passed! Set success markers
         ;===========================================
         MVI     L,0F0h          ; Reset L to 0xF0

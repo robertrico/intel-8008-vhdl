@@ -17,5 +17,9 @@ MAIN:
         MVI     A,01h
         OUT     CHKPT           ; CP1: About to execute HLT 0xFF
         db      0FFh            ; HLT opcode 0xFF
+        ; Sentinel: only reachable if the CPU sails through HLT.
+        ; The check script asserts this checkpoint is ABSENT.
+        MVI     A,02h
+        OUT     CHKPT           ; CP2: must never fire
 
         end

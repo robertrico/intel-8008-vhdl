@@ -101,6 +101,14 @@ echo ""
 echo "=== Final State ==="
 
 # CP11: Final success checkpoint
+# CP12: ADD M (carry-in deliberately set and ignored) - E=0x30
+assert_checkpoint 12 \
+    "E=0x30"
+
+# CP13: SUB M (borrow-in deliberately set and ignored) - E=0x40
+assert_checkpoint 13 \
+    "E=0x40"
+
 assert_checkpoint 11
 
 # Verify final state via traditional method

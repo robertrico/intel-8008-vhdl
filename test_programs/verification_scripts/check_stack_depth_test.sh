@@ -9,8 +9,9 @@
 #
 # The 8008 has an 8-level hardware stack for CALL/RET/RST
 # This test verifies:
-#   1. 6 nested CALLs work correctly (using stack levels 0-5)
-#   2. All 6 RETurns work correctly
+#   1. 7 nested CALLs work correctly (the spec-guaranteed depth:
+#      8 slots, one is the PC)
+#   2. All 7 RETurns work correctly
 #   3. Each level preserves the return address correctly
 #
 # Checkpoint Results:
@@ -19,11 +20,12 @@
 #   CP3: Entry SUB3 - L=0x03
 #   CP4: Entry SUB4 - L=0x04
 #   CP5: Entry SUB5 - L=0x05
-#   CP6: Entry SUB6 - L=0x06 (deepest)
-#   CP7: Final      - L=0x06
+#   CP6: Entry SUB6 - L=0x06
+#   CP7: Entry SUB7 - L=0x07 (deepest)
+#   CP8: Final      - L=0x07
 #
 # Final Register State:
-#   A: 0x00, B: 0x06, C: 0x06
+#   A: 0x00, B: 0x07, C: 0x07
 # ============================================================================
 
 # Source the checkpoint library
@@ -59,22 +61,26 @@ assert_checkpoint 4 \
 assert_checkpoint 5 \
     "L=0x05"
 
-# CP6: Entry SUB6 - deepest level (B = 6)
+# CP6: Entry SUB6 (B = 6)
 assert_checkpoint 6 \
     "L=0x06"
+
+# CP7: Entry SUB7 - deepest level (B = 7)
+assert_checkpoint 7 \
+    "L=0x07"
 
 echo ""
 echo "=== Final State ==="
 
-# CP7: Final success checkpoint (B = 6, C = 6)
-assert_checkpoint 7 \
-    "L=0x06"
+# CP8: Final success checkpoint (B = 7, C = 7)
+assert_checkpoint 8 \
+    "L=0x07"
 
 # Verify final state via traditional method
 assert_final_state \
     "A=0x00" \
-    "B=0x06" \
-    "C=0x06"
+    "B=0x07" \
+    "C=0x07"
 
 # Print summary and exit
 print_summary

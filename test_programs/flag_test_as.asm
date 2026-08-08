@@ -185,6 +185,53 @@ MAIN:
         JP      FAIL            ; Should NOT jump (S=1)
 
         ;===========================================
+        ; TEST 9: Loads preserve flags (VPLAN FLG-06)
+        ; Flag-preservation escaped twice historically (scars S2/S3):
+        ; set a dirty flag state, run a MOV/MVI storm, then verify
+        ; every flag survived. Three rounds cover both polarities.
+        ;===========================================
+        ; Round 1: C=1 Z=0 S=1 P=1  (0x00 - 0x01 = 0xFF)
+        MVI     A,00h
+        SUI     01h             ; A=0xFF: C=1 Z=0 S=1 P=1
+        MVI     B,55h           ; load storm begins
+        MOV     C,B
+        MOV     D,C
+        MVI     E,0AAh
+        MOV     B,E
+        MOV     C,D
+        JNC     FAIL            ; C must still be 1
+        JZ      FAIL            ; Z must still be 0
+        JP      FAIL            ; S must still be 1
+        JPO     FAIL            ; P must still be 1
+
+        ; Round 2: C=0 Z=0 S=0 P=0  (0x01 + 0x00 = 0x01)
+        MVI     A,01h
+        ADI     00h             ; A=0x01: C=0 Z=0 S=0 P=0
+        MVI     B,3Ch           ; load storm
+        MOV     D,B
+        MVI     E,0C3h
+        MOV     B,E
+        MOV     E,D
+        JC      FAIL            ; C must still be 0
+        JZ      FAIL            ; Z must still be 0
+        JM      FAIL            ; S must still be 0
+        JPE     FAIL            ; P must still be 0
+
+        ; Round 3: Z=1  (0x00 + 0x00 = 0x00)
+        MVI     A,00h
+        ADI     00h             ; A=0x00: Z=1
+        MVI     B,7Eh           ; load storm
+        MOV     C,B
+        MOV     B,C
+        JNZ     FAIL            ; Z must still be 1
+
+        MVI     B,08h           ; restore test counter (storm used B)
+
+        ; CHECKPOINT 10: Load storm preserved all flags
+        MVI     A,0Ah
+        OUT     CHKPT           ; CP10: loads preserve flags
+
+        ;===========================================
         ; All tests passed! Set success marker
         ;===========================================
         ; CHECKPOINT 9: Final success (flag tests complete)

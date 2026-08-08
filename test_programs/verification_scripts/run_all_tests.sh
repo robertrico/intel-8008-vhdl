@@ -47,19 +47,29 @@ for script in "$SCRIPT_DIR"/check_*.sh; do
 
     # Run the test and capture output
     OUTPUT=$("$script" 2>&1)
+    STATUS=$?
 
-    # Check if test passed (look for PASSED or SUCCESS in output)
-    if echo "$OUTPUT" | grep -q "ALL.*PASSED\|TESTS PASSED\|SUCCESS"; then
+    # Exit code is the primary signal; the banner is a cross-check.
+    # A script that dies after printing success-shaped text, or that
+    # exits 0 without the banner, is reported as a failure either way.
+    if [ $STATUS -eq 0 ] && echo "$OUTPUT" | grep -q "ALL.*PASSED\|TESTS PASSED\|SUCCESS"; then
         echo "[PASS] $TEST_NAME"
         PASSED=$((PASSED + 1))
     else
-        echo "[FAIL] $TEST_NAME"
+        echo "[FAIL] $TEST_NAME (exit=$STATUS)"
         FAILED=$((FAILED + 1))
         FAILED_TESTS="$FAILED_TESTS $TEST_NAME"
-        # Show relevant output for failed tests
+        # Show relevant output for failed tests (case-insensitive:
+        # GHDL prints lowercase 'error:'), fall back to the tail so a
+        # failure is never silent.
         echo ""
         echo "Test output:"
-        echo "$OUTPUT" | grep -E "FAIL|\[FAIL\]|expected|Error" | head -10
+        RELEVANT=$(echo "$OUTPUT" | grep -iE "fail|expected|error" | head -10)
+        if [ -n "$RELEVANT" ]; then
+            echo "$RELEVANT"
+        else
+            echo "$OUTPUT" | tail -10
+        fi
     fi
     echo ""
 done

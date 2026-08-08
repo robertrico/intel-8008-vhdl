@@ -87,6 +87,9 @@ echo ""
 echo "=== Final State ==="
 
 # CP9: Final success checkpoint
+# CP10: MOV/MVI storm preserved dirty flags in both polarities (FLG-06)
+assert_checkpoint 10
+
 assert_checkpoint 9
 
 # Verify final state via traditional method

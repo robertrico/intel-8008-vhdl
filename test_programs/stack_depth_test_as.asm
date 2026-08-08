@@ -1,12 +1,12 @@
 ; Intel 8008 Stack Depth Test Program (Simplified)
 ; For AS Macro Assembler
 ;
-; Test 6 nested CALLs (approaching limit)
+; Test 7 nested CALLs (the spec-guaranteed depth: 8 slots, PC uses one)
 ;
 ; Expected final state:
 ;   A = 0x00 (success)
-;   B = 0x06 (6 subroutine entries)
-;   C = 0x06 (6 subroutine exits)
+;   B = 0x07 (7 subroutine entries)
+;   C = 0x07 (7 subroutine exits)
 ;
 ; Checkpoint Results:
 ;   CP1: Entry SUB1 - B=0x01
@@ -14,8 +14,9 @@
 ;   CP3: Entry SUB3 - B=0x03
 ;   CP4: Entry SUB4 - B=0x04
 ;   CP5: Entry SUB5 - B=0x05
-;   CP6: Entry SUB6 - B=0x06 (deepest)
-;   CP7: Final      - B=0x06, C=0x06
+;   CP6: Entry SUB6 - B=0x06
+;   CP7: Entry SUB7 - B=0x07 (deepest)
+;   CP8: Final      - B=0x07, C=0x07
 
         cpu     8008new
         page    0
@@ -39,23 +40,23 @@ MAIN:
         MVI     B,00h           ; B = call counter
         MVI     C,00h           ; C = return counter
 
-        ; Start the chain of nested calls (3 levels only)
+        ; Start the chain of nested calls (7 levels)
         CALL    SUB1
 
         ; After all returns, verify counters
         MOV     A,B
-        CPI     06h             ; Should be 6
+        CPI     07h             ; Should be 7
         JNZ     FAIL
 
         MOV     A,C
-        CPI     06h             ; Should be 6
+        CPI     07h             ; Should be 7
         JNZ     FAIL
 
         ; Success!
-        ; CHECKPOINT 7: Final success
-        MOV     L,B             ; Save B to L (should be 0x06)
-        MVI     A,07h
-        OUT     CHKPT           ; CP7: B=0x06, C=0x06
+        ; CHECKPOINT 8: Final success
+        MOV     L,B             ; Save B to L (should be 0x07)
+        MVI     A,08h
+        OUT     CHKPT           ; CP8: B=0x07, C=0x07
 
         MVI     A,00h
         JMP     DONE
@@ -67,7 +68,7 @@ DONE:
         HLT
 
 ; ============================================
-; SUBROUTINES (6 levels)
+; SUBROUTINES (7 levels)
 ; ============================================
 
 SUB1:
@@ -77,7 +78,7 @@ SUB1:
         MVI     A,01h
         OUT     CHKPT           ; CP1: B=0x01
         CALL    SUB2
-        INR     C               ; C = 6 (last to return)
+        INR     C               ; C = 7 (last to return)
         RET
 
 SUB2:
@@ -87,7 +88,7 @@ SUB2:
         MVI     A,02h
         OUT     CHKPT           ; CP2: B=0x02
         CALL    SUB3
-        INR     C               ; C = 5
+        INR     C               ; C = 6
         RET
 
 SUB3:
@@ -97,7 +98,7 @@ SUB3:
         MVI     A,03h
         OUT     CHKPT           ; CP3: B=0x03
         CALL    SUB4
-        INR     C               ; C = 4
+        INR     C               ; C = 5
         RET
 
 SUB4:
@@ -107,7 +108,7 @@ SUB4:
         MVI     A,04h
         OUT     CHKPT           ; CP4: B=0x04
         CALL    SUB5
-        INR     C               ; C = 3
+        INR     C               ; C = 4
         RET
 
 SUB5:
@@ -117,15 +118,25 @@ SUB5:
         MVI     A,05h
         OUT     CHKPT           ; CP5: B=0x05
         CALL    SUB6
-        INR     C               ; C = 2
+        INR     C               ; C = 3
         RET
 
 SUB6:
-        INR     B               ; B = 6 (deepest)
-        ; CHECKPOINT 6: Entry SUB6 (deepest)
+        INR     B               ; B = 6
+        ; CHECKPOINT 6: Entry SUB6
         MOV     L,B             ; Save B to L
         MVI     A,06h
         OUT     CHKPT           ; CP6: B=0x06
+        CALL    SUB7
+        INR     C               ; C = 2
+        RET
+
+SUB7:
+        INR     B               ; B = 7 (deepest - spec-guaranteed depth)
+        ; CHECKPOINT 7: Entry SUB7 (deepest)
+        MOV     L,B             ; Save B to L
+        MVI     A,07h
+        OUT     CHKPT           ; CP7: B=0x07
         INR     C               ; C = 1 (first to return)
         RET
 
