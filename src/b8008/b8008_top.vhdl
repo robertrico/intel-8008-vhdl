@@ -51,6 +51,11 @@ entity b8008_top is
         run_enable  : in std_logic := '1';
         interrupt   : in std_logic;  -- Bootstrap interrupt (tie high after reset)
         int_vector  : in std_logic_vector(2 downto 0) := "000";  -- RST vector (0-7) to jam during T1I
+        -- Optional arbitrary jam byte (testbench use): when int_jam_en='1'
+        -- the T1I cycle jams int_jam_byte instead of the RST pattern -
+        -- the spec allows ANY instruction to be jammed (UM p.10).
+        int_jam_byte : in std_logic_vector(7 downto 0) := (others => '0');
+        int_jam_en   : in std_logic := '0';
         ready_in    : in std_logic := '1';  -- READY: '0' parks the CPU in WAIT after T2
 
         -- Debug outputs
@@ -213,6 +218,9 @@ architecture structural of b8008_top is
     signal address_bus : std_logic_vector(13 downto 0);
     signal data_bus    : std_logic_vector(7 downto 0);  -- Combined data bus (external bidirectional)
     signal cpu_data_in  : std_logic_vector(7 downto 0); -- Data TO CPU (no loop from cpu_data_out)
+    -- Byte jammed during T1I: RST pattern from int_vector, or the
+    -- arbitrary override when int_jam_en='1' (testbench use)
+    signal jam_byte_sel : std_logic_vector(7 downto 0);
     signal cpu_data_out : std_logic_vector(7 downto 0); -- Data from CPU
     signal cpu_data_oe  : std_logic;                    -- CPU output enable
     signal phi1        : std_logic;
@@ -646,7 +654,9 @@ begin
     --
     -- cpu_data_in: Data TO the CPU - does NOT include cpu_data_out to break combinational loop
     -- This is what the CPU reads during T3-T5 (instruction fetch, memory read, I/O read)
-    cpu_data_in <= ("00" & int_vector & "101") when (s2_int = '1' and s1_int = '1' and s0_int = '0') else  -- T1I: jam RST instruction
+    jam_byte_sel <= int_jam_byte when int_jam_en = '1' else ("00" & int_vector & "101");
+
+    cpu_data_in <= jam_byte_sel when (s2_int = '1' and s1_int = '1' and s0_int = '0') else  -- T1I: jam instruction
                    io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1') and
                                        latched_address(13 downto 12) = "00") else  -- INP: I/O input during T3/T4/T5
                    rom_d when (is_io = '0' and rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- External ROM during T3/T4/T5

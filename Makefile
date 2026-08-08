@@ -191,6 +191,26 @@ test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb -gROM_FILE=$(ROM_FILE) -gREADY_STRESS=$(READY_STRESS) --stop-time=$(SIM_TIME)
 
 # ============================================================================
+# INTERRUPT JAM GENERALITY TEST (VPLAN INT-04/05, XP-03, XP-14)
+# ============================================================================
+# Jams NOP/HLT/3-byte JMP during T1I and exercises INT-during-WAIT.
+# Usage: make test-interrupt-jam   (checked by check_jam_test.sh)
+test-interrupt-jam: $(BUILD_DIR) $(PROG_DIR)/jam_test_as.mem
+	@echo "========================================="
+	@echo "Testing Interrupt Jam Generality"
+	@echo "Program: test_programs/jam_test_as.mem"
+	@echo "========================================="
+	@echo ""
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(B8008_SRCS)
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/b8008/ram_sync.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/address_decoder.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_8kx8.vhdl
+	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/interrupt_jam_tb.vhdl
+	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_jam_tb
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_jam_tb -gROM_FILE=test_programs/jam_test_as.mem --stop-time=25ms
+
+# ============================================================================
 # EXTERNAL_RAM EQUIVALENCE TEST
 # ============================================================================
 # Runs two b8008_top instances side by side (internal ram_sync vs

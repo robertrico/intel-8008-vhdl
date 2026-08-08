@@ -74,9 +74,9 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 |----|-----------|-----------|------------|------------|----------------|--------|
 | INT-01 | UM p.10 §V.A.1 | INT=1 → next instruction fetch runs T1I (011) in place of T1 | INT during any prior T-state | formal (module) + directed | `state_timing_generator.sby` boundary-only arcs; `check_interrupt_test.sh` (4 runtime RST7 jams serviced) | COVERED-DIRECTED |
 | INT-02 | UM p.10-11 | T1I: PC driven, NOT incremented → same address emitted twice | — | incidental | interrupt_test loop integrity implies resumed PC correct | COVERED-INCIDENTAL ⚠ no check observes the double-address emission or the un-incremented PC directly |
-| INT-03 | UM p.10 | Byte on bus at T3 of T1I cycle enters IR and executes | any opcode | directed | `check_interrupt_test.sh` — jammed RST7 executes (vector reached) | COVERED-DIRECTED ⚠ only RST ever jammed |
-| INT-04 | DS72 p.10 | Multi-cycle/multi-byte jam: only first cycle is T1I, rest normal | jam 3-byte instr | — | none — no test jams anything but RST | GAP |
-| INT-05 | UM p.10 | Jam HLT → STOPPED; jam NOP → sequential at un-advanced PC; jam JMP 0 → run from 0 | 3 scenarios | partial directed | interrupt_test bootstrap uses jam; HLT-wake checked; NOP/JMP-0 jams never exercised | COVERED-INCIDENTAL ⚠ 2 of 3 scenarios GAP |
+| INT-03 | UM p.10 | Byte on bus at T3 of T1I cycle enters IR and executes | any opcode | directed | `check_interrupt_test.sh` (RST); `check_jam_test.sh` (NOP, HLT, 3-byte JMP via int_jam_byte override) | COVERED-DIRECTED |
+| INT-04 | DS72 p.10 | Multi-cycle/multi-byte jam: only first cycle is T1I, rest normal | jam 3-byte instr | directed | `check_jam_test.sh` S3 — 3-byte JMP jammed (TB supplies B2/B3 as interrupt controller), landing checkpointed, exactly one T1I asserted | COVERED-DIRECTED |
+| INT-05 | UM p.10 | Jam HLT → STOPPED; jam NOP → sequential at un-advanced PC; jam JMP → run from target | 3 scenarios | directed | `check_jam_test.sh` — NOP jam (loop count exact), HLT jam (STOPPED persists, RST7 wake resumes exactly), jammed JMP (landing pad checkpoint) | COVERED-DIRECTED |
 | INT-06 | UM p.11 Fig5 | Jam RST at PC=N: N pushed; RET resumes at N; instr at N executes exactly once | — | directed | `check_interrupt_test.sh` C=0x30 loop-count integrity despite 3 mid-loop interrupts | COVERED-DIRECTED |
 | INT-07 | DS72 p.10 Fig4 | One T1I per INT pulse (deasserted before next PCI) | — | formal (module) + directed | `int_button_tb` no-spurious-request; `formal/interrupt_ready_ff` clear-beats-set/set/hold by k-induction; `interrupt_ready_ff_tb` | COVERED-FORMAL ⚠ module-level; system-level double-service unchecked |
 | INT-08 | DS72 p.5 Fig2 | STOPPED + INT → T1I exit | — | formal + directed | `state_timing_generator.sby`; interrupt_test HLT-wake | COVERED-FORMAL |
@@ -164,7 +164,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 |----|-----------|------------|------------|----------------|--------|
 | XP-01 | INT during any cycle/T-state of multi-cycle instr: T1I only after instr completes | arrival per cycle | directed | `check_interrupt_test.sh` — 3 jams into running jump loop | COVERED-DIRECTED ⚠ arrival timing not systematically swept per T-state |
 | XP-02 | INT already pending when HLT executes → STOPPED then immediate T1I wake (Fig 20 HLT·INT arc) | — | — | none | GAP |
-| XP-03 | INT during WAIT: no T1I until READY releases + instr completes | — | — | none | GAP |
+| XP-03 | INT during WAIT: no T1I until READY releases + instr completes | — | directed | `check_jam_test.sh` S4 — INT asserted while parked, no-T1I-during-WAIT asserted, service after release, loop count exact | COVERED-DIRECTED |
 | XP-04 | Not-ready per cycle type ×6: WAIT inserted; final arch state equals no-wait run | 6 variants | directed | `check_ready_wait_test.sh` (statistical coverage: ~300 drops of varied length across all cycle types of memory_alu_test) | COVERED-DIRECTED |
 | XP-05 | In-flight data (reg.a/reg.b) survives arbitrary-length WAIT mid-instruction | long wait | directed | `check_ready_wait_test.sh` 100 µs park mid-program + checkpoint equality | COVERED-DIRECTED |
 | XP-06 | Push/pop SP wrap: CAL & RST at SP=7; RET at SP=0 | ×3 | formal + directed | `stack_pointer.sby` wraps; `check_stackwrap_test.sh`; `check_rst_wrap_test.sh` (RST as the 8th push, wrapped-slot landing asserted) | COVERED-FORMAL |
@@ -175,7 +175,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | XP-11 | ALU boundary operands (carry chain, zero, sign, parity, C_in) | — | exhaustive | `alu_exhaustive_tb` (all 8 ops) | COVERED-EXHAUSTIVE |
 | XP-12 | Fetch page-cross + 14-bit wrap 0x3FFF→0 | 2 boundaries | formal + directed (page) | stack_memory carry props; pc_carry_call_test | COVERED-DIRECTED ⚠ top-of-memory wrap (0x3FFF→0) never executed |
 | XP-13 | M ops with H[7:6]=11 alias to H[5:0] address | — | — | none | GAP |
-| XP-14 | Jam 3-byte instr (JMP/CAL) at interrupt; B2/B3 fetched from un-advanced PC stream | — | — | none | GAP (same as INT-04) |
+| XP-14 | Jam 3-byte instr (JMP/CAL) at interrupt; B2/B3 supplied by the interrupting controller | — | directed | `check_jam_test.sh` S3 | COVERED-DIRECTED |
 | XP-15 | Single-step whole program via READY pulses ≡ free run | — | — | none | GAP |
 
 ---
@@ -252,7 +252,7 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 
 1. ~~READY/WAIT at system level~~ **DONE** (XP-04, XP-05, RDY-02) — `READY_STRESS` TB generic + `check_ready_wait_test.sh`: varied drops + long park over memory_alu_test, checkpoints byte-identical to free run, WAIT observation asserted. Mutation-tested (WAIT-resume-to-T1 caught). Residual: RDY-03/XP-15 READY single-stepping (one machine cycle per pulse) still GAP.
 2. ~~HLT never actually verified to halt~~ **DONE** — post-HLT sentinel asserted absent + rtl s_stopped grep in both scripts.
-3. **Interrupt jam generality** (INT-04, INT-05⚠, XP-14). Only RST is ever jammed. Spec explicitly defines multi-byte jam, NOP jam, HLT jam, JMP-0 jam. **Propose:** extend `interrupt_test_tb` jam table to inject NOP (0xC0), HLT, and a 3-byte JMP/CAL at interrupt; verify via checkpoints that (a) 3-byte jam consumes B2/B3 correctly, (b) NOP jam resumes at un-advanced PC, (c) only cycle 1 is T1I. Script asserts resulting control flow.
+3. ~~Interrupt jam generality~~ **DONE** — dedicated `interrupt_jam_tb` + `jam_test_as.asm` + `check_jam_test.sh`: NOP/HLT/3-byte-JMP jams via the new int_jam_byte override on b8008_top, single-T1I assertion, INT-during-WAIT scenario. Mutation-tested (early ir_loaded_from_interrupt clear caught).
 4. **External bus per-T-state contract** (BUS-01, BUS-02, BUS-04, BUS-06, D6/D7 encodings of BUS-03). The design claims cycle-accuracy; nothing checks what is on the bus at T1/T2/T4/T5. **Propose:** cocotb bus-protocol monitor on `b8008_top` (matches decoder-sweep idiom): at every SYNC-qualified T-state, assert T1=PCL/L, T2={cycle-code, high addr}, code∈{PCI,PCR,PCC,PCW} per instruction class, cycle 1 always PCI; run over an existing program ROM. This single monitor closes 5 rows.
 5. **14-bit PC wrap 0x3FFF→0** (STK-07, XP-12⚠). Never executed. **Propose:** tiny program placed at top of memory (assembler ORG 0x3FFC), sequential fetch + JMP across the wrap; checkpoint at 0x0000-side landing. Needs sim memory ≥16K or address-mask check in TB.
 6. ~~7-level nesting off-by-one~~ **DONE** — `stack_depth_test` nests 7 with per-level checkpoints.
@@ -266,7 +266,7 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 11. ~~Load-preserves-flags never directly asserted~~ **DONE** — `flag_test` load-storm rounds, both polarities.
 12. **INP protocol details** (FLG-13⚠, I-INP-01⚠): flags-on-bus at T4, port number at T2. Fold into the Tier-1 #4 bus monitor. Blocked partly on SQ-04/SQ-05 answers.
 13. **Double-address emission on T1I** (INT-02, PWR-03⚠): the visible signature of the PC-not-incremented rule. Fold into bus monitor (assert cycle-N and cycle-N+1 addresses equal around T1I).
-14. **XP-02 HLT with INT pending; XP-03 INT during WAIT.** Two directed scenarios in `interrupt_test_tb`.
+14. XP-03 ~~INT during WAIT~~ **DONE** (`check_jam_test.sh` S4). XP-02 (INT already pending at the instant HLT executes) remains: the arrival window is a few states wide and timing-fragile to hit deterministically; the observable (STOPPED+pending→T1I wake) is covered by ST-06/INT-08 and the jam test's stop/wake path.
 15. ~~RST at SP wrap~~ **DONE** — `check_rst_wrap_test.sh` (dedicated program; wrapped-slot landing + clean-return-absent).
 
 ### Tier 3 — meta-gaps (harness would not fire)
