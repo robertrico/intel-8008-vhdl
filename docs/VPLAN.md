@@ -20,8 +20,8 @@ Spec ambiguities were SPEC-QUESTION rows (§ SQ); all 15 are RATIFIED as of 2026
 
 | ID | Spec cite | Assertion | Conditions | Check type | Check artifact | Status |
 |----|-----------|-----------|------------|------------|----------------|--------|
-| CLK-01 | DS72 p.16 waveform | φ1 and φ2 never simultaneously high at any sim time | continuous | directed | `sim/units/phase_clocks_tb` (1000-iteration non-overlap loop); `b8008_tb` phi-overlap sanity error | COVERED-DIRECTED ⚠ phase_clocks_tb has stale 5-port component decl (entity now 11 ports) |
-| CLK-02 | DS72 p.16 §VI A.C. | Clock ratios (tφ1, tφ2, tD1, tD2 relative to tCY) match datasheet table (scaled) | phase_clocks | — | none — TB checks SYNC cadence, not φ pulse-width/delay ratios | GAP |
+| CLK-01 | DS72 p.16 waveform | φ1 and φ2 never simultaneously high at any sim time | continuous | directed | `sim/units/phase_clocks_tb` (1000-iteration non-overlap loop); `b8008_tb` phi-overlap sanity error | COVERED-DIRECTED |
+| CLK-02 | DS72 p.16 §VI A.C. | Clock ratios (tφ1, tφ2, tD1, tD2 relative to tCY) match datasheet table (scaled) | phase_clocks | directed | `phase_clocks_tb` Test 3 — measures 80/40/60/40 ticks, cycle 220, and the datasheet min/max bounds; mutation-tested | COVERED-DIRECTED |
 | CLK-03 | DS72 p.10 Fig4; UM p.47 | Every T-state lasts exactly 2 clock periods (φ11 φ21 φ12 φ22) | all states | formal (module) | `formal/state_timing_generator.sby` state_half toggle assertion | COVERED-FORMAL ⚠ module-level; no core-level check that states advance once per 2 clocks |
 | CLK-04 | DS72 p.4 Fig1; UM p.47 | SYNC = φ2 ÷ 2; one full SYNC cycle per T-state | continuous | directed | `sim/units/phase_clocks_tb` SYNC cadence checks | COVERED-DIRECTED |
 
@@ -274,8 +274,8 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 16. ~~`run_all_tests.sh` trusts banner-grep over exit codes~~ **DONE** — exit code primary, banner cross-check, case-insensitive failure excerpt with tail fallback.
 17. ~~Assembly regression suite not in CI~~ **DONE** — regression job in verification.yml, matrix rtl|netlist; ASL built from pinned source (setup-asl action), .mem stays uncommitted (auto-assemble; cold-checkout verified 28/28).
 18. ~~`stack_memory` + `stack_memory_miter` not in CI sby matrix~~ **DONE** — both in the sby matrix; miter completes clean (bmc depth 15, CI job has a 60-min timeout override; induction unanchorable — 113 hidden gate bits).
-19. **Stale collateral:** `machine_cycle_control_tb` red at HEAD (excluded from test-units); `phase_clocks_tb` stale component declaration masks 6 new ports (CLK-01⚠); `docs/instruction_coverage.md` stale by its own header — mark superseded by this vplan.
-20. **CLK-02 clock-ratio conformance** unchecked — low risk (phase_clocks is stable), one-time TB addition.
+19. **Stale collateral:** `machine_cycle_control_tb` red at HEAD (excluded from test-units); ~~phase_clocks_tb stale component declaration~~ fixed; `docs/instruction_coverage.md` stale by its own header — mark superseded by this vplan.
+20. ~~CLK-02 clock-ratio conformance~~ **DONE** — ratio measurement in phase_clocks_tb, mutation-tested.
 
 ### Row-count summary
 

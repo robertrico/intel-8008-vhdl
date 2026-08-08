@@ -28,7 +28,6 @@ entity state_timing_props is
         cycle_done            : in std_logic;
         interrupt_pending     : in std_logic;
         ready                 : in std_logic;
-        instr_is_hlt_flag     : in std_logic;
         transition_to_stopped : in std_logic
     );
 end entity state_timing_props;
@@ -53,7 +52,6 @@ begin
             clk => clk, phi2_falling => phi2_falling, reset => reset,
             advance_state => advance_state, cycle_done => cycle_done,
             interrupt_pending => interrupt_pending, ready => ready,
-            instr_is_hlt_flag => instr_is_hlt_flag,
             transition_to_stopped => transition_to_stopped,
             state_t1 => t1, state_t2 => t2, state_t3 => t3,
             state_t4 => t4, state_t5 => t5, state_t1i => t1i,

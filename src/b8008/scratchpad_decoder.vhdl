@@ -38,7 +38,11 @@ entity scratchpad_decoder is
         enable_e : out std_logic;  -- 100
         enable_h : out std_logic;  -- 101
         enable_l : out std_logic;  -- 110
-        enable_m : out std_logic;  -- 111 (memory indirect)
+        -- 111 (memory indirect). Deliberately unconnected at the core
+        -- level: a select of 111 enables no register, which is the
+        -- ratified implementation-defined behavior of the undefined
+        -- opcodes 0x38/0x39 (SPEC SQ-12, check_undef_opcode_test.sh).
+        enable_m : out std_logic;
 
         -- Read/Write control outputs (same for all registers)
         read_out  : out std_logic;

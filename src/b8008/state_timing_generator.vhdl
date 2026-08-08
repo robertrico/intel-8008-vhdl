@@ -32,7 +32,6 @@ entity state_timing_generator is
         cycle_done            : in std_logic;  -- Machine cycle over mid-instruction: next T1 continues it
         interrupt_pending     : in std_logic;  -- Interrupt waiting to be serviced
         ready                 : in std_logic;  -- Ready signal (1=ready, 0=wait)
-        instr_is_hlt_flag     : in std_logic;  -- Latched HLT flag (for interrupt wake)
         transition_to_stopped : in std_logic;  -- From decoder: transition to STOPPED at T3
 
         -- State outputs (one-hot)
@@ -93,7 +92,7 @@ begin
     status_s2 <= '1' when (current_state = S_T2 or current_state = S_T4 or current_state = S_T5 or current_state = S_T1I) else '0';
 
     -- State advancement logic (combinational)
-    process(current_state, advance_state, cycle_done, interrupt_pending, instr_is_hlt_flag, transition_to_stopped, cycle_count, ready)
+    process(current_state, advance_state, cycle_done, interrupt_pending, transition_to_stopped, cycle_count, ready)
     begin
         -- Default: stay in current state
         next_state <= current_state;

@@ -145,7 +145,6 @@ architecture structural of b8008 is
             cycle_done            : in std_logic;
             interrupt_pending     : in std_logic;
             ready                 : in std_logic;
-            instr_is_hlt_flag     : in std_logic;
             transition_to_stopped : in std_logic;
             state_t1              : out std_logic;
             state_t2              : out std_logic;
@@ -188,7 +187,6 @@ architecture structural of b8008 is
             condition_met         : in std_logic;
             advance_state         : out std_logic;
             cycle_done            : out std_logic;
-            instr_is_hlt_flag     : out std_logic;
             cycle_type            : out std_logic_vector(1 downto 0);
             current_cycle         : out integer range 0 to 3;
             next_cycle            : out integer range 0 to 3
@@ -245,7 +243,6 @@ architecture structural of b8008 is
             current_cycle         : in integer range 0 to 3;
             next_cycle            : in integer range 0 to 3;
             advance_state         : in std_logic;
-            instr_is_hlt_flag     : in std_logic;
             instr_needs_immediate : in std_logic;
             instr_needs_address   : in std_logic;
             instr_is_io           : in std_logic;
@@ -267,33 +264,21 @@ architecture structural of b8008 is
             ir_output_enable      : out std_logic;
             io_buffer_enable      : out std_logic;
             io_buffer_direction   : out std_logic;
-            addr_select_sss       : out std_logic_vector(2 downto 0);
-            addr_select_ddd       : out std_logic_vector(2 downto 0);
             scratchpad_select     : out std_logic_vector(2 downto 0);
             scratchpad_read       : out std_logic;
             scratchpad_write      : out std_logic;
             memory_read           : out std_logic;
             memory_write          : out std_logic;
-            memory_refresh        : out std_logic;
             regfile_to_bus        : out std_logic;
             bus_to_regfile        : out std_logic;
-            select_pc             : out std_logic;
-            select_stack          : out std_logic;
             pc_load_from_regs     : out std_logic;
-            pc_load_from_stack    : out std_logic;
             pc_load_from_rst      : out std_logic;
-            refresh_increment     : out std_logic;
-            stack_addr_select     : out std_logic;
             stack_push            : out std_logic;
             stack_pop             : out std_logic;
-            stack_read            : out std_logic;
-            stack_write           : out std_logic;
             pc_increment_lower    : out std_logic;
             pc_increment_upper    : out std_logic;
             pc_load               : out std_logic;
-            pc_hold               : out std_logic;
-            pc_carry_in           : in std_logic;
-            pc_lower_byte         : in std_logic_vector(7 downto 0)
+            pc_carry_in           : in std_logic
         );
     end component;
 
@@ -332,8 +317,6 @@ architecture structural of b8008 is
 
     component mem_mux_refresh is
         port (
-            pc_addr            : in address_t;
-            stack_addr         : in address_t;
             reg_a              : in std_logic_vector(7 downto 0);
             reg_b              : in std_logic_vector(7 downto 0);
             rst_vector         : in std_logic_vector(2 downto 0);
@@ -342,10 +325,7 @@ architecture structural of b8008 is
             internal_bus_in    : in  std_logic_vector(7 downto 0);
             internal_bus_out   : out std_logic_vector(7 downto 0);
             internal_bus_oe    : out std_logic;
-            select_pc          : in std_logic;
-            select_stack       : in std_logic;
             pc_load_from_regs  : in std_logic;
-            pc_load_from_stack : in std_logic;
             pc_load_from_rst   : in std_logic;
             regfile_to_bus     : in std_logic;
             bus_to_regfile     : in std_logic;
@@ -458,7 +438,6 @@ architecture structural of b8008 is
             instr_is_io           : in std_logic;
             current_cycle         : in integer range 0 to 3;
             state_half            : in std_logic;
-            interrupt             : in std_logic;
             load_reg_a            : out std_logic;
             load_reg_b            : out std_logic;
             alu_enable            : out std_logic;
@@ -602,7 +581,6 @@ architecture structural of b8008 is
     signal next_cycle       : integer range 0 to 3;  -- Predicted next cycle (valid at T1 start)
     signal advance_state    : std_logic;
     signal cycle_done       : std_logic;
-    signal instr_is_hlt_flag : std_logic;  -- Latched HLT flag from machine_cycle_control
 
     -- Instruction decoder outputs
     signal instr_byte           : std_logic_vector(7 downto 0);
@@ -650,7 +628,6 @@ architecture structural of b8008 is
     signal pc_carry   : std_logic;  -- Carry flag from PC lower byte increment
 
     -- Address signals (sources for multiplexer)
-    signal stack_addr        : address_t;
     signal selected_address  : address_t;  -- Multiplexed address (PC/Stack only - H:L come from regfile)
 
     -- Register file signals
@@ -705,36 +682,25 @@ architecture structural of b8008 is
     signal io_buffer_direction  : std_logic;
     signal io_buffer_data_out   : std_logic_vector(7 downto 0);  -- Data from io_buffer to external
     signal io_buffer_oe         : std_logic;                     -- io_buffer output enable
-    signal addr_select_sss      : std_logic_vector(2 downto 0);
-    signal addr_select_ddd      : std_logic_vector(2 downto 0);
     signal scratchpad_select    : std_logic_vector(2 downto 0);
     signal scratchpad_read      : std_logic;
     signal scratchpad_write     : std_logic;
     signal memory_read          : std_logic;
     signal memory_write         : std_logic;
-    signal memory_refresh       : std_logic;
     signal regfile_to_bus       : std_logic;
     signal bus_to_regfile       : std_logic;
-    signal select_pc            : std_logic;
-    signal select_stack         : std_logic;
 
     -- AHL scratchpad address selection signals
     signal ahl_scratchpad_addr  : std_logic_vector(2 downto 0);  -- From AHL module
     signal ahl_active           : std_logic;  -- AHL overrides SSS/DDD
     signal final_scratchpad_addr : std_logic_vector(2 downto 0);  -- Muxed scratchpad address
     signal pc_load_from_regs    : std_logic;
-    signal pc_load_from_stack   : std_logic;
     signal pc_load_from_rst     : std_logic;
-    signal refresh_increment    : std_logic;
-    signal stack_addr_select    : std_logic;
     signal stack_push           : std_logic;
     signal stack_pop            : std_logic;
-    signal stack_read           : std_logic;
-    signal stack_write          : std_logic;
     signal pc_increment_lower   : std_logic;
     signal pc_increment_upper   : std_logic;
     signal pc_load              : std_logic;
-    signal pc_hold              : std_logic;
 
     -- ========================================================================
     -- CONTROL SIGNALS (from register_alu_control)
@@ -774,7 +740,7 @@ begin
     -- T2: Output address high byte [13:8] on D[5:0], cycle type on D[7:6]
     -- Address multiplexer: Only PC and Stack (H:L addressed via register file)
     -- During memory operations, H and L are read from regfile and output on data bus
-    selected_address <= stack_addr when select_stack = '1' else pc_addr;
+    selected_address <= pc_addr;
 
     -- Scratchpad address multiplexer: AHL overrides SSS/DDD during cycle 2 T1/T2 of memory ops
     final_scratchpad_addr <= ahl_scratchpad_addr when ahl_active = '1' else scratchpad_select;
@@ -829,7 +795,6 @@ begin
     pc_control.increment_lower <= pc_increment_lower;
     pc_control.increment_upper <= pc_increment_upper;
     pc_control.load            <= pc_load;
-    pc_control.hold            <= pc_hold;
 
     -- ALU opcode selection:
     -- For regular ALU ops (10PPPSSS): opcode from bits 5:3 (PPP field)
@@ -891,7 +856,6 @@ begin
             cycle_done            => cycle_done,
             interrupt_pending     => interrupt_pending,
             ready                 => ready_status,
-            instr_is_hlt_flag     => instr_is_hlt_flag,
             transition_to_stopped => transition_to_stopped,
             state_t1              => state_t1,
             state_t2              => state_t2,
@@ -945,7 +909,6 @@ begin
             condition_met         => condition_met,
             advance_state         => advance_state,
             cycle_done            => cycle_done,
-            instr_is_hlt_flag     => instr_is_hlt_flag,
             cycle_type            => cycle_type,
             current_cycle         => current_cycle,
             next_cycle            => next_cycle
@@ -1000,7 +963,6 @@ begin
             current_cycle         => current_cycle,
             next_cycle            => next_cycle,
             advance_state         => advance_state,
-            instr_is_hlt_flag     => instr_is_hlt_flag,
             instr_needs_immediate => instr_needs_immediate,
             instr_needs_address   => instr_needs_address,
             instr_is_io           => instr_is_io,
@@ -1022,33 +984,21 @@ begin
             ir_output_enable      => ir_output_enable,
             io_buffer_enable      => io_buffer_enable,
             io_buffer_direction   => io_buffer_direction,
-            addr_select_sss       => addr_select_sss,
-            addr_select_ddd       => addr_select_ddd,
             scratchpad_select     => scratchpad_select,
             scratchpad_read       => scratchpad_read,
             scratchpad_write      => scratchpad_write,
             memory_read           => memory_read,
             memory_write          => memory_write,
-            memory_refresh        => memory_refresh,
             regfile_to_bus        => regfile_to_bus,
             bus_to_regfile        => bus_to_regfile,
-            select_pc             => select_pc,
-            select_stack          => select_stack,
             pc_load_from_regs     => pc_load_from_regs,
-            pc_load_from_stack    => pc_load_from_stack,
             pc_load_from_rst      => pc_load_from_rst,
-            refresh_increment     => refresh_increment,
-            stack_addr_select     => stack_addr_select,
             stack_push            => stack_push,
             stack_pop             => stack_pop,
-            stack_read            => stack_read,
-            stack_write           => stack_write,
             pc_increment_lower    => pc_increment_lower,
             pc_increment_upper    => pc_increment_upper,
             pc_carry_in           => pc_carry,
-            pc_lower_byte         => std_logic_vector(pc_addr(7 downto 0)),
-            pc_load               => pc_load,
-            pc_hold               => pc_hold
+            pc_load               => pc_load
         );
 
 
@@ -1074,8 +1024,6 @@ begin
 
     u_mem_mux_refresh : mem_mux_refresh
         port map (
-            pc_addr            => pc_addr,
-            stack_addr         => stack_addr,
             reg_a              => reg_a_out,
             reg_b              => reg_b_out,
             rst_vector         => rst_vector,
@@ -1084,10 +1032,7 @@ begin
             internal_bus_in    => internal_bus,
             internal_bus_out   => mem_mux_bus_out,
             internal_bus_oe    => mem_mux_bus_oe,
-            select_pc          => select_pc,
-            select_stack       => select_stack,
             pc_load_from_regs  => pc_load_from_regs,
-            pc_load_from_stack => pc_load_from_stack,
             pc_load_from_rst   => pc_load_from_rst,
             regfile_to_bus     => regfile_to_bus,
             bus_to_regfile     => bus_to_regfile,
@@ -1121,9 +1066,6 @@ begin
             carry_out   => pc_carry
         );
 
-    -- Legacy alias: some consumers still take a "stack_addr" - it is the
-    -- same live slot now (RET pops SP and the address is simply there).
-    stack_addr <= pc_addr;
 
     -- ------------------------------------------------------------------------
     -- PHASE 6: REGISTER FILE SYSTEM (Low Risk)
@@ -1191,7 +1133,6 @@ begin
             instr_is_io           => instr_is_io,
             current_cycle         => current_cycle,
             state_half            => state_half,
-            interrupt             => interrupt_pending,
             load_reg_a            => load_reg_a,
             load_reg_b            => load_reg_b,
             alu_enable            => alu_enable,

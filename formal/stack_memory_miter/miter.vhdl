@@ -24,7 +24,6 @@ entity stack_memory_miter is
         ctl_inc_lower : in std_logic;
         ctl_inc_upper : in std_logic;
         ctl_load      : in std_logic;
-        ctl_hold      : in std_logic;
         data_in       : in address_t
     );
 end entity stack_memory_miter;
@@ -39,7 +38,6 @@ begin
     control.increment_lower <= ctl_inc_lower;
     control.increment_upper <= ctl_inc_upper;
     control.load            <= ctl_load;
-    control.hold            <= ctl_hold;
 
     gold: entity work.stack_memory
         port map (
@@ -54,7 +52,6 @@ begin
             \control[increment_lower]\ => ctl_inc_lower,
             \control[increment_upper]\ => ctl_inc_upper,
             \control[load]\ => ctl_load,
-            \control[hold]\ => ctl_hold,
             data_in => std_logic_vector(data_in),
             addr_out => addr_gate, carry_out => carry_gate);
 

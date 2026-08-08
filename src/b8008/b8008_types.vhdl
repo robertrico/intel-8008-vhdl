@@ -21,36 +21,33 @@ package b8008_types is
         increment_lower : std_logic;  -- Increment lower byte (PCL) during T1
         increment_upper : std_logic;  -- Increment upper byte (PCH) during T2 if carry
         load            : std_logic;  -- Load new value into PC
-        hold            : std_logic;  -- Hold current value (no change)
     end record;
+    -- (No 'hold' member: absence of any op IS hold - every slot keeps
+    -- its value when no increment/load fires.)
 
-    -- Default PC control: hold
+    -- Default PC control: no operation (slot holds)
     constant PC_HOLD : pc_control_t := (
         increment_lower => '0',
         increment_upper => '0',
-        load            => '0',
-        hold            => '1'
+        load            => '0'
     );
 
     constant PC_INCREMENT_LOWER : pc_control_t := (
         increment_lower => '1',
         increment_upper => '0',
-        load            => '0',
-        hold            => '0'
+        load            => '0'
     );
 
     constant PC_INCREMENT_UPPER : pc_control_t := (
         increment_lower => '0',
         increment_upper => '1',
-        load            => '0',
-        hold            => '0'
+        load            => '0'
     );
 
     constant PC_LOAD : pc_control_t := (
         increment_lower => '0',
         increment_upper => '0',
-        load            => '1',
-        hold            => '0'
+        load            => '1'
     );
 
 end package b8008_types;

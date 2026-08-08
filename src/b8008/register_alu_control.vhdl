@@ -45,7 +45,6 @@ entity register_alu_control is
         state_half : in std_logic;
 
         -- Interrupt input
-        interrupt : in std_logic;
 
         -- Control outputs (load signals)
         load_reg_a   : out std_logic;  -- Latch data into temp Reg.a

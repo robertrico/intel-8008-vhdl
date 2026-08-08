@@ -428,7 +428,7 @@ STOP_test-address-decoder     := 1us
 STOP_test-alu-exhaustive      := 100ms
 STOP_test-debug-clock-control := 100us
 STOP_test-int-button          := 20ms
-STOP_test-phase-clocks        := 30us
+STOP_test-phase-clocks        := 45us
 STOP_test-stack-pointer       := 20us
 STOP_test-state-timing        := 20us
 

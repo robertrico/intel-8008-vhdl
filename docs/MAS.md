@@ -83,7 +83,7 @@ Internal bus: priority mux of six drivers (§6). External bus: T1/T2 address-and
 | STOPPED exits only on interrupt → T1I; T2/WAIT park on READY | state_timing_generator.vhdl:102-138 | `(PSL: state_timing arcs)` |
 | Scratchpad address: ahl_active override beats scratchpad_select | b8008.vhdl:780 | `TODO-prop` |
 | Register-file read priority A>B>…>L (one-hot input makes it moot) | register_file.vhdl:114-121 | `(PSL: register_file mux priority)` |
-| PC-load source: stack > RST vector > temp regs | mem_mux_refresh.vhdl:69-71 | `TODO-prop (module has no props yet)` |
+| PC-load source: RST vector > temp regs (RET loads nothing - the pop IS the return; the stack arm was dead and is deleted) | mem_mux_refresh.vhdl | `TODO-prop (module has no props yet)` |
 | condition_met defaults '1' unconditional; conditional = flag XNOR sense | condition_flags.vhdl:132-176 | `(PSL: condition_flags P6)` |
 
 ## 7. Clocking, CDC & reset (scar-S7 section)

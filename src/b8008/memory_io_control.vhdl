@@ -62,7 +62,6 @@ entity memory_io_control is
         current_cycle     : in integer range 0 to 3;  -- 0=cycle1, 1=cycle2, 2=cycle3
         next_cycle        : in integer range 0 to 3;  -- Predicted next cycle (valid at T1 start)
         advance_state     : in std_logic;
-        instr_is_hlt_flag : in std_logic;
 
         -- From Instruction Decoder
         instr_needs_immediate : in std_logic;
@@ -95,54 +94,32 @@ entity memory_io_control is
         io_buffer_enable    : out std_logic;
         io_buffer_direction : out std_logic;  -- 0=read, 1=write
 
-        -- To Address Generation (SSS/DDD register selection)
-        addr_select_sss : out std_logic_vector(2 downto 0);  -- Source register for address
-        addr_select_ddd : out std_logic_vector(2 downto 0);  -- Destination register
-
         -- To Scratchpad Multiplexer (Register File)
         scratchpad_select : out std_logic_vector(2 downto 0);  -- Which register to access
         scratchpad_read   : out std_logic;  -- Read from register
         scratchpad_write  : out std_logic;  -- Write to register
 
-        -- To Memory Multiplexer and Refresh Amplifiers
+        -- To Memory Multiplexer
         memory_read    : out std_logic;  -- Read from memory
         memory_write   : out std_logic;  -- Write to memory
-        memory_refresh : out std_logic;  -- DRAM refresh cycle
 
         -- To Memory Multiplexer - Register File routing
         regfile_to_bus : out std_logic;  -- Register file drives internal bus
         bus_to_regfile : out std_logic;  -- Internal bus drives register file
 
-        -- To Memory Multiplexer - Address selection
-        select_pc    : out std_logic;  -- Use PC for address bus
-        select_stack : out std_logic;  -- Use Stack for address bus
-
         -- To Memory Multiplexer - PC load source selection
         pc_load_from_regs  : out std_logic;  -- Load PC from temp regs (JMP/CALL)
-        pc_load_from_stack : out std_logic;  -- Load PC from stack (RET)
         pc_load_from_rst   : out std_logic;  -- Load PC from RST vector
-
-        -- To Refresh Counter
-        refresh_increment : out std_logic;  -- Increment refresh address
-
-        -- To Stack Address Multiplexer
-        stack_addr_select : out std_logic;  -- 0=PC, 1=stack
 
         -- To Stack Pointer
         stack_push : out std_logic;  -- Push to stack
         stack_pop  : out std_logic;  -- Pop from stack
 
-        -- To Stack Address Decoder
-        stack_read  : out std_logic;  -- Read from stack (RET)
-        stack_write : out std_logic;  -- Write to stack (CALL, RST)
-
         -- To Program Counter
         pc_increment_lower : out std_logic;  -- Increment PC lower byte (T1)
         pc_increment_upper : out std_logic;  -- Increment PC upper byte (T2 if carry)
         pc_carry_in        : in  std_logic;  -- Carry flag from PC
-        pc_lower_byte      : in  std_logic_vector(7 downto 0);  -- PC lower byte for carry prediction
-        pc_load            : out std_logic;  -- Load PC from data_in
-        pc_hold            : out std_logic   -- Hold PC (wait states)
+        pc_load            : out std_logic   -- Load PC from data_in
     );
 end entity memory_io_control;
 
@@ -273,38 +250,27 @@ begin
             instr_sss_field, instr_ddd_field, instr_is_alu, ir_loaded_from_interrupt,
             instr_is_call, instr_is_ret, instr_is_rst,
             instr_writes_reg, instr_reads_reg, suppress_pc_inc_next_cycle,
-            pc_lower_byte, pc_carry_in)
+            pc_carry_in)
     begin
         -- Defaults: all outputs inactive
         ir_load               <= '0';
         ir_output_enable      <= '0';
         io_buffer_enable      <= '0';
         io_buffer_direction   <= '0';
-        addr_select_sss       <= (others => '0');
-        addr_select_ddd       <= (others => '0');
         scratchpad_select     <= (others => '0');
         scratchpad_read       <= '0';
         scratchpad_write      <= '0';
         memory_read           <= '0';
         memory_write          <= '0';
-        memory_refresh        <= '0';
         regfile_to_bus        <= '0';
         bus_to_regfile        <= '0';
-        select_pc             <= '1';  -- Default to PC
-        select_stack          <= '0';
         pc_load_from_regs     <= '0';
-        pc_load_from_stack    <= '0';
         pc_load_from_rst      <= '0';
-        refresh_increment     <= '0';
-        stack_addr_select     <= '0';
         stack_push            <= '0';
         stack_pop              <= '0';
-        stack_read             <= '0';
-        stack_write            <= '0';
         pc_increment_lower     <= '0';
         pc_increment_upper     <= '0';
         pc_load                <= '0';
-        pc_hold                <= '0';
 
         -- PC Control Logic (Two-stage increment per 1972 datasheet)
         -- T1: Increment lower byte after address bits sent out
@@ -386,11 +352,8 @@ begin
 
         -- State-based control
         if state_t1 = '1' then
-            -- T1: Output address low byte (from PC or stack)
-            -- S2=0, S1=1, S0=0: Address low from PC or stack
-            -- For normal instructions: use PC
-            -- For RET: use stack (will implement when we decode instruction)
-            stack_addr_select <= '0';  -- Default to PC
+            -- T1: Output address low byte
+            -- S2=0, S1=1, S0=0
 
             -- Special case: During cycle 2/3 T1/T2 of memory indirect operations,
             -- output H/L registers to data bus for external address latch

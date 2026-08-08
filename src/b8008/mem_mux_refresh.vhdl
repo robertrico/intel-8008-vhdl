@@ -22,11 +22,7 @@ use work.b8008_types.all;
 
 entity mem_mux_refresh is
     port (
-        -- Address inputs (14-bit sources) - only used for PC loading
-        pc_addr    : in address_t;  -- From Program Counter
-        stack_addr : in address_t;  -- From Stack Memory
-
-        -- PC load data sources (for JMP, CALL, RET, RST)
+        -- PC load data sources (for JMP, CALL, RST)
         reg_a      : in std_logic_vector(7 downto 0);   -- From Temp Register A (high byte)
         reg_b      : in std_logic_vector(7 downto 0);   -- From Temp Register B (low byte)
         rst_vector : in std_logic_vector(2 downto 0);   -- RST instruction AAA field
@@ -41,11 +37,7 @@ entity mem_mux_refresh is
         internal_bus_oe  : out std_logic;
 
         -- Control signals from Memory/I/O Control
-        select_pc    : in std_logic;  -- Use PC address
-        select_stack : in std_logic;  -- Use Stack address
-
         pc_load_from_regs  : in std_logic;  -- Load PC from Reg.a + Reg.b (JMP/CALL)
-        pc_load_from_stack : in std_logic;  -- Load PC from stack (RET)
         pc_load_from_rst   : in std_logic;  -- Load PC from RST vector
 
         regfile_to_bus : in std_logic;  -- Register file drives internal bus
@@ -62,12 +54,11 @@ architecture rtl of mem_mux_refresh is
 
 begin
 
-    -- PC data input - select source based on control signals
-    -- The actual load is controlled by pc_control.load in the PC module
-    -- RST vector: AAA field specifies address AAA * 8 = 00000000_AAA_000
-    -- The 14-bit address is: 00000000 (8 bits) & AAA (3 bits) & 000 (3 bits)
-    pc_data_in <= stack_addr when pc_load_from_stack = '1' else
-                  to_unsigned(0, 8) & unsigned(rst_vector) & to_unsigned(0, 3) when pc_load_from_rst = '1' else
+    -- PC data input - select source based on control signals.
+    -- The actual load is controlled by pc_control.load in the PC module.
+    -- RET loads nothing (PC-in-stack: the pop IS the return), so the
+    -- sources are the RST vector (00000000_AAA_000) or the temp regs.
+    pc_data_in <= to_unsigned(0, 8) & unsigned(rst_vector) & to_unsigned(0, 3) when pc_load_from_rst = '1' else
                   unsigned(reg_a(5 downto 0) & reg_b);  -- Default: from temp registers (JMP/CALL)
 
     -- Register file to internal bus routing

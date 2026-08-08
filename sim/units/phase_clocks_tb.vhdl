@@ -15,12 +15,20 @@ end entity phase_clocks_tb;
 architecture test of phase_clocks_tb is
 
     component phase_clocks is
+        generic (
+            CLK_FREQ_HZ : integer := 100_000_000
+        );
         port (
-            clk_in : in  std_logic;
-            reset  : in  std_logic;
-            phi1   : out std_logic;
-            phi2   : out std_logic;
-            sync   : out std_logic
+            clk_in       : in  std_logic;
+            reset        : in  std_logic;
+            run_enable   : in  std_logic := '1';
+            phi1         : out std_logic;
+            phi2         : out std_logic;
+            sync         : out std_logic;
+            phi1_rising  : out std_logic;
+            phi1_falling : out std_logic;
+            phi2_rising  : out std_logic;
+            phi2_falling : out std_logic
         );
     end component;
 
@@ -61,6 +69,8 @@ begin
     process
         variable errors : integer := 0;
         variable prev_sync : std_logic;
+        variable m_t0, m_t1 : time;
+        variable m_phi1, m_phi2, m_dead1, m_dead2, m_cycle : integer;
     begin
         report "========================================";
         report "Phase Clocks with SYNC Test";
@@ -127,6 +137,54 @@ begin
         end loop;
 
         report "  PASS: No overlap detected in 1000 input clock cycles";
+
+        report "";
+        report "Test 3: Clock ratios vs DS72 p.16 (scaled)";
+        -- Measure one full phase cycle in input-clock ticks:
+        -- phi1 width, dead1 (phi1 fall -> phi2 rise), phi2 width,
+        -- dead2 (phi2 fall -> phi1 rise). Targets @100 MHz:
+        -- 80 / 40 / 60 / 40 ticks (0.8/0.4/0.6/0.4 us), cycle 220.
+        wait until rising_edge(phi1);
+        m_t0 := now;
+        wait until falling_edge(phi1);
+        m_phi1 := (now - m_t0) / CLK_PERIOD;
+        m_t1 := now;
+        wait until rising_edge(phi2);
+        m_dead1 := (now - m_t1) / CLK_PERIOD;
+        m_t1 := now;
+        wait until falling_edge(phi2);
+        m_phi2 := (now - m_t1) / CLK_PERIOD;
+        m_t1 := now;
+        wait until rising_edge(phi1);
+        m_dead2 := (now - m_t1) / CLK_PERIOD;
+        m_cycle := (now - m_t0) / CLK_PERIOD;
+
+        report "  phi1=" & integer'image(m_phi1) & " dead1=" & integer'image(m_dead1) &
+               " phi2=" & integer'image(m_phi2) & " dead2=" & integer'image(m_dead2) &
+               " cycle=" & integer'image(m_cycle) & " (ticks)";
+
+        if m_phi1 /= 80 then
+            report "  ERROR: phi1 width " & integer'image(m_phi1) & " ticks, expected 80" severity error;
+            errors := errors + 1;
+        end if;
+        if m_phi2 /= 60 then
+            report "  ERROR: phi2 width " & integer'image(m_phi2) & " ticks, expected 60" severity error;
+            errors := errors + 1;
+        end if;
+        if m_dead1 /= 40 or m_dead2 /= 40 then
+            report "  ERROR: dead times " & integer'image(m_dead1) & "/" & integer'image(m_dead2) &
+                   " ticks, expected 40/40" severity error;
+            errors := errors + 1;
+        end if;
+        -- Datasheet minima/maxima (scaled): phi1 >= 70 (0.7 us),
+        -- phi2 >= 55 (0.55 us), full cycle <= 300 (tCY max 3 us)
+        if m_phi1 < 70 or m_phi2 < 55 or m_cycle > 300 then
+            report "  ERROR: datasheet timing bounds violated" severity error;
+            errors := errors + 1;
+        end if;
+        if errors = 0 then
+            report "  PASS: ratios match DS72 p.16 and respect min/max bounds";
+        end if;
 
         report "";
         report "========================================";

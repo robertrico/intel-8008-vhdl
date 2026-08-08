@@ -47,7 +47,6 @@ end entity machine_cycle_props;
 architecture formal of machine_cycle_props is
     signal advance_state     : std_logic;
     signal cycle_done        : std_logic;
-    signal instr_is_hlt_flag : std_logic;
     signal cycle_type        : std_logic_vector(1 downto 0);
     signal current_cycle     : integer range 0 to 3;
     signal next_cycle        : integer range 0 to 3;
@@ -78,7 +77,7 @@ begin
             instr_is_mem_indirect => instr_is_mem_indirect,
             eval_condition => eval_condition, condition_met => condition_met,
             advance_state => advance_state, cycle_done => cycle_done,
-            instr_is_hlt_flag => instr_is_hlt_flag, cycle_type => cycle_type,
+            cycle_type => cycle_type,
             current_cycle => current_cycle, next_cycle => next_cycle);
 
     svec <= state_t1i & state_t5 & state_t4 & state_t3 & state_t2 & state_t1;
@@ -120,8 +119,7 @@ begin
 
     -- P1: reset clears the observable state
     assert always (reset = '1') ->
-        (current_cycle = 0 and advance_state = '0' and cycle_type = "00"
-         and instr_is_hlt_flag = '0');
+        (current_cycle = 0 and advance_state = '0' and cycle_type = "00");
 
     -- P2: the cycle counter only ever takes values 0, 1, 2
     assert always (current_cycle /= 3);
@@ -169,10 +167,11 @@ begin
     assert (always ((phi1_rising and t1ir) = '1') ->
             next (current_cycle = 0)) abort (reset = '1');
 
-    -- P7: HLT at T3 entry of cycle 0 raises advance and the latched flag
+    -- P7: HLT at T3 entry of cycle 0 raises advance
+    -- (the latched flag output was removed with its dead consumers)
     assert (always (((phi1_rising and t3r and instr_is_hlt) = '1')
                     and (current_cycle = 0))
-            -> next ((advance_state = '1') and (instr_is_hlt_flag = '1')))
+            -> next (advance_state = '1'))
         abort (reset = '1');
 
     -- Reachability

@@ -49,7 +49,6 @@ entity machine_cycle_control is
         -- Outputs to State Timing Generator
         advance_state     : out std_logic;  -- Signal to skip to next instruction
         cycle_done        : out std_logic;  -- Machine cycle over mid-instruction (skip empty T4/T5)
-        instr_is_hlt_flag : out std_logic;  -- Latched HLT flag for state machine
 
         -- Outputs to Memory & I/O Control (cycle type)
         cycle_type : out std_logic_vector(1 downto 0);  -- D6, D7 (only valid during T2)
@@ -87,7 +86,6 @@ architecture rtl of machine_cycle_control is
     signal cycle_type_latch : std_logic_vector(1 downto 0) := "00";
 
     -- Latched HLT signal (captured at T3 for state machine)
-    signal instr_is_hlt_latch : std_logic := '0';
 
     -- Determine if current cycle needs T4/T5 (computed based on instruction and cycle)
     signal needs_t4t5_this_cycle : std_logic;
@@ -141,7 +139,6 @@ begin
     cycle_type <= cycle_type_latch;
     advance_state <= advance_latch;
     cycle_done <= cycle_done_latch;
-    instr_is_hlt_flag <= instr_is_hlt_latch;
 
     -- Edge detection (combinational)
     t1_rising  <= state_t1  and not prev_state_t1;
@@ -158,7 +155,6 @@ begin
             cycle_count <= 0;
             advance_latch <= '0';
             cycle_type_latch <= "00";
-            instr_is_hlt_latch <= '0';
             prev_state_t1 <= '0';
             prev_state_t2 <= '0';
             prev_state_t3 <= '0';
@@ -198,13 +194,11 @@ begin
                 -- Clear when entering interrupt acknowledge
                 advance_latch <= '0';
                 cycle_done_latch <= '0';
-                instr_is_hlt_latch <= '0';
 
             elsif t1_rising = '1' then
                 -- Clear at start of new cycle
                 advance_latch <= '0';
                 cycle_done_latch <= '0';
-                instr_is_hlt_latch <= '0';
 
             elsif t3_rising = '1' then
                 -- Instruction complete at T3
@@ -215,7 +209,6 @@ begin
                     report "MCycle: Setting advance_latch at T3 (short cycle complete)";
                 elsif instr_is_hlt = '1' and cycle_count = 0 then
                     advance_latch <= '1';
-                    instr_is_hlt_latch <= '1';
                     report "MCycle: Setting advance_latch at T3 for HLT";
                 elsif cycle_count = 1 and needs_cycle_3 = '1' then
                     -- Middle cycle of a 3-cycle instruction: T4/T5 skip

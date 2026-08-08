@@ -128,14 +128,13 @@ class Driver:
             "state_t1", "state_t2", "state_t3", "state_t4", "state_t5",
             "state_t1i", "state_stopped", "state_half",
             "status_s0", "status_s1", "status_s2",
-            "advance_state", "instr_is_hlt_flag",
+            "advance_state",
             "interrupt_pending", "ready_status", "pc_carry_in",
         ):
             getattr(d, name).value = 0
         d.cycle_type.value = 0
         d.current_cycle.value = 0
         d.next_cycle.value = 0
-        d.pc_lower_byte.value = 0
         for _ in range(2):
             await RisingEdge(d.clk)
         d.reset.value = 0
@@ -217,10 +216,10 @@ async def run_instruction(dut, drv, op, cond_met=True, label=""):
 OUT_STROBES = [
     "ir_load", "ir_output_enable", "io_buffer_enable", "io_buffer_direction",
     "scratchpad_read", "scratchpad_write", "memory_read", "memory_write",
-    "regfile_to_bus", "bus_to_regfile", "select_pc", "select_stack",
-    "pc_load_from_regs", "pc_load_from_stack", "pc_load_from_rst",
-    "stack_push", "stack_pop", "stack_read", "stack_write",
-    "pc_increment_lower", "pc_increment_upper", "pc_load", "pc_hold",
+    "regfile_to_bus", "bus_to_regfile",
+    "pc_load_from_regs", "pc_load_from_rst",
+    "stack_push", "stack_pop",
+    "pc_increment_lower", "pc_increment_upper", "pc_load",
 ]
 
 

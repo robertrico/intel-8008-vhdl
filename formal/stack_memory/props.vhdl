@@ -31,7 +31,6 @@ entity stack_memory_props is
         ctl_inc_lower : in std_logic;
         ctl_inc_upper : in std_logic;
         ctl_load      : in std_logic;
-        ctl_hold      : in std_logic;
         data_in       : in address_t
     );
 end entity stack_memory_props;
@@ -56,7 +55,6 @@ begin
     control.increment_lower <= ctl_inc_lower;
     control.increment_upper <= ctl_inc_upper;
     control.load            <= ctl_load;
-    control.hold            <= ctl_hold;
 
     dut: entity work.stack_memory
         port map (

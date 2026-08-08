@@ -44,7 +44,6 @@ architecture test of register_alu_control_tb is
             state_half : in std_logic;
 
             -- Interrupt input
-            interrupt : in std_logic;
 
             -- Control outputs (load signals)
             load_reg_a   : out std_logic;
@@ -77,7 +76,6 @@ architecture test of register_alu_control_tb is
     signal instr_is_io           : std_logic := '0';
     signal current_cycle : integer range 0 to 3 := 0;
     signal state_half    : std_logic := '0';
-    signal interrupt : std_logic := '0';
 
     -- Outputs
     signal load_reg_a   : std_logic;
@@ -136,7 +134,6 @@ begin
             instr_is_io           => instr_is_io,
             current_cycle         => current_cycle,
             state_half            => state_half,
-            interrupt             => interrupt,
             load_reg_a            => load_reg_a,
             load_reg_b            => load_reg_b,
             alu_enable            => alu_enable,
@@ -179,7 +176,6 @@ begin
         instr_uses_temp_regs <= '1';
         instr_needs_immediate <= '0';
         current_cycle <= 0;
-        interrupt <= '0';
 
         -- T1: Address output (not relevant to ALU)
         set_state(status_s0, status_s1, status_s2, "T1 ");

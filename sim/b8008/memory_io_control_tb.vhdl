@@ -36,7 +36,6 @@ architecture test of memory_io_control_tb is
             current_cycle         : in integer range 0 to 3;
             next_cycle            : in integer range 0 to 3;
             advance_state         : in std_logic;
-            instr_is_hlt_flag     : in std_logic;
             instr_needs_immediate : in std_logic;
             instr_needs_address   : in std_logic;
             instr_is_io           : in std_logic;
@@ -58,33 +57,21 @@ architecture test of memory_io_control_tb is
             ir_output_enable      : out std_logic;
             io_buffer_enable      : out std_logic;
             io_buffer_direction   : out std_logic;
-            addr_select_sss       : out std_logic_vector(2 downto 0);
-            addr_select_ddd       : out std_logic_vector(2 downto 0);
             scratchpad_select     : out std_logic_vector(2 downto 0);
             scratchpad_read       : out std_logic;
             scratchpad_write      : out std_logic;
             memory_read           : out std_logic;
             memory_write          : out std_logic;
-            memory_refresh        : out std_logic;
             regfile_to_bus        : out std_logic;
             bus_to_regfile        : out std_logic;
-            select_pc             : out std_logic;
-            select_stack          : out std_logic;
             pc_load_from_regs     : out std_logic;
-            pc_load_from_stack    : out std_logic;
             pc_load_from_rst      : out std_logic;
-            refresh_increment     : out std_logic;
-            stack_addr_select     : out std_logic;
             stack_push            : out std_logic;
             stack_pop             : out std_logic;
-            stack_read            : out std_logic;
-            stack_write           : out std_logic;
             pc_increment_lower    : out std_logic;
             pc_increment_upper    : out std_logic;
             pc_carry_in           : in  std_logic;
-            pc_lower_byte         : in  std_logic_vector(7 downto 0);
-            pc_load               : out std_logic;
-            pc_hold               : out std_logic
+            pc_load               : out std_logic
         );
     end component;
 
@@ -110,7 +97,6 @@ architecture test of memory_io_control_tb is
     signal current_cycle         : integer range 0 to 3 := 0;
     signal next_cycle            : integer range 0 to 3 := 0;
     signal advance_state         : std_logic := '0';
-    signal instr_is_hlt_flag     : std_logic := '0';
     signal instr_needs_immediate : std_logic := '0';
     signal instr_needs_address   : std_logic := '0';
     signal instr_is_io           : std_logic := '0';
@@ -129,38 +115,26 @@ architecture test of memory_io_control_tb is
     signal interrupt_pending     : std_logic := '0';
     signal ready_status          : std_logic := '1';
     signal pc_carry_in           : std_logic := '0';
-    signal pc_lower_byte         : std_logic_vector(7 downto 0) := (others => '0');
 
     -- Outputs
     signal ir_load             : std_logic;
     signal ir_output_enable    : std_logic;
     signal io_buffer_enable    : std_logic;
     signal io_buffer_direction : std_logic;
-    signal addr_select_sss     : std_logic_vector(2 downto 0);
-    signal addr_select_ddd     : std_logic_vector(2 downto 0);
     signal scratchpad_select   : std_logic_vector(2 downto 0);
     signal scratchpad_read     : std_logic;
     signal scratchpad_write    : std_logic;
     signal memory_read         : std_logic;
     signal memory_write        : std_logic;
-    signal memory_refresh      : std_logic;
     signal regfile_to_bus      : std_logic;
     signal bus_to_regfile      : std_logic;
-    signal select_pc           : std_logic;
-    signal select_stack        : std_logic;
     signal pc_load_from_regs   : std_logic;
-    signal pc_load_from_stack  : std_logic;
     signal pc_load_from_rst    : std_logic;
-    signal refresh_increment   : std_logic;
-    signal stack_addr_select   : std_logic;
     signal stack_push          : std_logic;
     signal stack_pop           : std_logic;
-    signal stack_read          : std_logic;
-    signal stack_write         : std_logic;
     signal pc_increment_lower  : std_logic;
     signal pc_increment_upper  : std_logic;
     signal pc_load             : std_logic;
-    signal pc_hold             : std_logic;
 
 begin
 
@@ -187,7 +161,6 @@ begin
             current_cycle         => current_cycle,
             next_cycle            => next_cycle,
             advance_state         => advance_state,
-            instr_is_hlt_flag     => instr_is_hlt_flag,
             instr_needs_immediate => instr_needs_immediate,
             instr_needs_address   => instr_needs_address,
             instr_is_io           => instr_is_io,
@@ -209,33 +182,21 @@ begin
             ir_output_enable      => ir_output_enable,
             io_buffer_enable      => io_buffer_enable,
             io_buffer_direction   => io_buffer_direction,
-            addr_select_sss       => addr_select_sss,
-            addr_select_ddd       => addr_select_ddd,
             scratchpad_select     => scratchpad_select,
             scratchpad_read       => scratchpad_read,
             scratchpad_write      => scratchpad_write,
             memory_read           => memory_read,
             memory_write          => memory_write,
-            memory_refresh        => memory_refresh,
             regfile_to_bus        => regfile_to_bus,
             bus_to_regfile        => bus_to_regfile,
-            select_pc             => select_pc,
-            select_stack          => select_stack,
             pc_load_from_regs     => pc_load_from_regs,
-            pc_load_from_stack    => pc_load_from_stack,
             pc_load_from_rst      => pc_load_from_rst,
-            refresh_increment     => refresh_increment,
-            stack_addr_select     => stack_addr_select,
             stack_push            => stack_push,
             stack_pop             => stack_pop,
-            stack_read            => stack_read,
-            stack_write           => stack_write,
             pc_increment_lower    => pc_increment_lower,
             pc_increment_upper    => pc_increment_upper,
             pc_carry_in           => pc_carry_in,
-            pc_lower_byte         => pc_lower_byte,
-            pc_load               => pc_load,
-            pc_hold               => pc_hold
+            pc_load               => pc_load
         );
 
     test_process : process
@@ -363,12 +324,7 @@ begin
         state_t1 <= '1';
         wait for 50 ns;
 
-        if stack_addr_select /= '0' then
-            report "  ERROR: Should select PC for address" severity error;
-            errors := errors + 1;
-        else
-            report "  PASS: T1 selects PC for address output";
-        end if;
+        -- (stack_addr_select check removed with the dead output)
 
         state_t1 <= '0';
         wait for 50 ns;
@@ -436,7 +392,7 @@ begin
         wait for 50 ns;
 
         -- Test 9: T4 - Stack pop (RET instruction)
-        -- RET pops stack during T4 (T5 keeps pc_load_from_stack set)
+        -- RET pops stack during T4 (pop is the whole return - PC-in-stack)
         report "";
         report "Test 9: T4 - Stack pop for RET";
 

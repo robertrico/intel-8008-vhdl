@@ -26,7 +26,6 @@ architecture test of state_timing_generator_tb is
             cycle_done            : in  std_logic;
             interrupt_pending     : in  std_logic;
             ready                 : in  std_logic;
-            instr_is_hlt_flag     : in  std_logic;
             transition_to_stopped : in  std_logic;
             state_t1              : out std_logic;
             state_t2              : out std_logic;
@@ -52,7 +51,6 @@ architecture test of state_timing_generator_tb is
     signal cycle_done            : std_logic := '0';
     signal interrupt_pending     : std_logic := '0';
     signal ready                 : std_logic := '1';
-    signal instr_is_hlt_flag     : std_logic := '0';
     signal transition_to_stopped : std_logic := '0';
     signal state_t1              : std_logic;
     signal state_t2              : std_logic;
@@ -84,7 +82,6 @@ begin
             cycle_done            => cycle_done,
             interrupt_pending     => interrupt_pending,
             ready                 => ready,
-            instr_is_hlt_flag     => instr_is_hlt_flag,
             transition_to_stopped => transition_to_stopped,
             state_t1              => state_t1,
             state_t2              => state_t2,
