@@ -59,14 +59,21 @@ Scorecard:
 | state_timing_generator | ✅ k-induction (21 arcs + status table) | — | — |
 | machine_cycle_control | ✅ bmc | — | — |
 | condition_flags | ✅ k-induction | — | — |
+| register_file | ✅ k-induction | ✅ miter (k-induction) | — |
+| stack_memory (PC-in-stack) | ✅ k-induction | ✅ miter (bmc) | — |
+| memory_io_control | — | — | ✅ 21 instruction scenarios, rtl + netlist |
+| instruction_register | ✅ k-induction | ✅ miter (k-induction) | — |
+| temp_registers | ✅ k-induction | ✅ miter (k-induction) | — |
+| interrupt_ready_ff | ✅ k-induction | ✅ miter (k-induction) | — |
+| ahl_pointer | ✅ bmc | ✅ EQY | — |
 | alu (+ carry_lookahead) | — | ✅ miter (bmc) | exhaustive sweep in sim |
 | carry_lookahead | — | ✅ EQY | — |
-| sss_ddd_selector | — | ✅ EQY | — |
-| scratchpad_decoder | — | ✅ EQY | — |
 | instruction_decoder | — | ✅ EQY | ✅ 256-opcode sweep, rtl + netlist |
+| sss_ddd_selector, scratchpad_decoder | — | ✅ EQY | — |
+| io_buffer, mem_mux_refresh, addr muxes | — | ✅ EQY | — |
 | full core (b8008) | — | ✅ regression suite with netlist core swap (local) | — |
 
-CI runs 20 jobs per push: all unit testbenches, 6 SBY proof suites, 4 EQY equivalence checks, and 4 cocotb runs. Remaining modules are being added; findings are tracked as repo issues.
+Every b8008 module has machine-checked verification. CI runs 33 jobs per push: all unit testbenches, 10 SBY property suites, 7 SBY miters, 9 EQY equivalence checks, and 6 cocotb runs. Findings are tracked as repo issues.
 
 ## Architecture
 
