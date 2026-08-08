@@ -1,0 +1,29 @@
+# bmc + cover only: k-induction cannot close here. The properties need
+# mirror registers for T-state edge detection, and at an arbitrary
+# induction start those can diverge from the DUT's internal prev_state_*
+# registers (resyncing requires a phi1 pulse the solver need not grant).
+# The fix would be a strengthening invariant equating mirror and DUT
+# registers, but the ghdl plugin does not support VHDL-2008 external
+# names, so DUT internals are unreachable. BMC depth 50 stands in.
+[tasks]
+bmc
+cover
+
+[options]
+bmc: mode bmc
+bmc: depth 50
+cover: mode cover
+cover: depth 30
+
+[engines]
+smtbmc
+
+[script]
+plugin -i ghdl
+ghdl --std=08 b8008_types.vhdl machine_cycle_control.vhdl props.vhdl -e machine_cycle_props
+prep -top machine_cycle_props
+
+[files]
+../../src/b8008/b8008_types.vhdl
+../../src/b8008/machine_cycle_control.vhdl
+props.vhdl
