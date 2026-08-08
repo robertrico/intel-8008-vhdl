@@ -566,9 +566,12 @@ formal-%:
 
 # Per-module write_vhdl round trip: make netlist-vhdl-stack_pointer
 # emits build/synth/<module>_netlist.vhdl (entity name preserved).
+# Modules with submodule dependencies list them in NETLIST_DEPS_<module>.
+NETLIST_DEPS_alu := $(SRC_DIR)/carry_lookahead.vhdl
+
 netlist-vhdl-%: | $(SYNTH_DIR)
 	GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl \
-	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(SRC_DIR)/b8008_types.vhdl $(SRC_DIR)/$*.vhdl -e $*; synth -top $*; write_vhdl $(SYNTH_DIR)/$*_netlist.vhdl"
+	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(SRC_DIR)/b8008_types.vhdl $(NETLIST_DEPS_$*) $(SRC_DIR)/$*.vhdl -e $*; synth -top $*; write_vhdl $(SYNTH_DIR)/$*_netlist.vhdl"
 
 # EQY equivalence: original module vs its write_vhdl round trip.
 # Config in formal/eqy/<module>.eqy, workdir build/eqy/<module>.
@@ -583,7 +586,7 @@ eqy-%: netlist-vhdl-%
 # swallow the target with stem "gate-<module>".)
 netlist-gate-%: | $(SYNTH_DIR)
 	GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl \
-	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(SRC_DIR)/b8008_types.vhdl $(SRC_DIR)/$*.vhdl -e $*; synth -top $*; rename $* $*_gate; write_vhdl $(SYNTH_DIR)/$*_gate.vhdl"
+	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(SRC_DIR)/b8008_types.vhdl $(NETLIST_DEPS_$*) $(SRC_DIR)/$*.vhdl -e $*; synth -top $*; rename $* $*_gate; write_vhdl $(SYNTH_DIR)/$*_gate.vhdl"
 
 # cocotb python testbench for one module: make cocotb-stack_pointer
 # [DUT_VARIANT=rtl|netlist]. Test code in sim/cocotb/test_<module>.py.

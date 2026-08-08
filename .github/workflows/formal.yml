@@ -24,10 +24,14 @@ jobs:
         include:
           - module: stack_pointer
           - module: state_timing_generator
+          - module: machine_cycle_control
+          - module: condition_flags
           # Miter proves RTL == gate netlist; needs the gate-renamed
           # write_vhdl netlist in build/synth first.
           - module: stack_pointer_miter
             prep: netlist-gate-stack_pointer
+          - module: alu_miter
+            prep: netlist-gate-alu
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-oss-cad-suite
