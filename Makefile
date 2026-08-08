@@ -117,6 +117,8 @@ help:
 	@echo "  make formal-<module>      - SBY property/miter suite (formal/<module>)"
 	@echo "  make eqy-<module>         - write_vhdl round-trip equivalence"
 	@echo "  make cocotb-<module>      - cocotb testbench (DUT_VARIANT=rtl|netlist)"
+	@echo "  make fuzz-b8008           - differential fuzzer (DUT_VARIANT=rtl|netlist-core)"
+	@echo "  make fuzz-compare         - diff rtl vs netlist-core fuzz traces"
 	@echo "  make test-serial PROG=x   - Test serial I/O programs (bitbang UART capture)"
 	@echo ""
 	@echo "Module Tests:"
@@ -590,6 +592,20 @@ netlist-gate-%: | $(SYNTH_DIR)
 # [DUT_VARIANT=rtl|netlist]. Test code in sim/cocotb/test_<module>.py.
 cocotb-%:
 	PATH="$(OSS_CAD_SUITE):$$PATH" $(MAKE) -C sim/cocotb TOPLEVEL=$* DUT_VARIANT=$(DUT_VARIANT)
+
+# ============================================================================
+# DIFFERENTIAL FUZZER (random legal 8008 programs, three oracles)
+# ============================================================================
+# make fuzz-b8008                          - fuzz the rtl core
+# make fuzz-b8008 DUT_VARIANT=netlist-core - fuzz the netlist core
+#   (needs `make netlist-vhdl-b8008` first; same seeds -> same programs)
+# make fuzz-compare                        - diff the two trace sets
+# Knobs: FUZZ_BASE, FUZZ_COUNT, FUZZ_LEN, FUZZ_SHRINK_SEED (env)
+fuzz-b8008:
+	PATH="$(OSS_CAD_SUITE):$$PATH" $(MAKE) -C sim/cocotb TOPLEVEL=b8008_top MODULE=test_b8008_fuzz DUT_VARIANT=$(DUT_VARIANT)
+
+fuzz-compare:
+	python3 sim/cocotb/fuzz_compare.py
 
 # Place and route with nextpnr
 pnr: $(CFG)

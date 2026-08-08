@@ -168,6 +168,8 @@ architecture testbench of b8008_top_tb is
     signal in_wait_s    : boolean;  -- 000
     signal in_stopped_s : boolean;  -- 110
     signal in_t1_s      : boolean;  -- T1 (010) or T1I (011)
+    signal in_wait_q    : boolean := false;
+    signal in_stopped_q : boolean := false;
     -- Machine-cycle counter: rising edges into T1/T1I
     signal t1_entries : natural := 0;
 
@@ -176,6 +178,19 @@ begin
     in_wait_s    <= (s0_out = '0' and s1_out = '0' and s2_out = '0');
     in_stopped_s <= (s0_out = '1' and s1_out = '1' and s2_out = '0');
     in_t1_s      <= (s0_out = '0' and s1_out = '1');
+
+    -- Clock-sampled copies for the step driver: the netlist core's
+    -- status bits skew across delta cycles mid-transition, so an
+    -- event-driven "wait until in_stopped_s" can catch a transient
+    -- 110 and exit the step loop early. Sampling at the clock edge
+    -- only ever sees settled values.
+    status_sample : process(clk_in)
+    begin
+        if rising_edge(clk_in) then
+            in_wait_q    <= in_wait_s;
+            in_stopped_q <= in_stopped_s;
+        end if;
+    end process;
 
     t1_counter : process(clk_in)
         variable prev : boolean := false;
@@ -349,11 +364,11 @@ begin
             ready_in <= '0';
             report "READY step: single-step mode engaged";
             step_loop : loop
-                wait until in_wait_s or in_stopped_s for 2 ms;
-                if in_stopped_s then
+                wait until in_wait_q or in_stopped_q for 2 ms;
+                if in_stopped_q then
                     exit step_loop;   -- program done (HLT)
                 end if;
-                if not in_wait_s then
+                if not in_wait_q then
                     report "ERROR: READY step: CPU neither WAIT nor STOPPED within 2 ms"
                         severity error;
                     exit step_loop;
@@ -362,7 +377,8 @@ begin
                 -- outlast a single T-state: a WAIT that "expires" after
                 -- one visit instead of holding would otherwise pass.
                 wait for 20 us;
-                assert in_wait_s
+                wait until rising_edge(clk_in);
+                assert in_wait_q
                     report "ERROR: READY step: CPU left WAIT while READY low"
                     severity error;
                 -- Exactly one machine cycle per pulse (skip the first
@@ -376,8 +392,8 @@ begin
                 end if;
                 t1_before := t1_entries;
                 ready_in <= '1';
-                wait until not in_wait_s for 1 ms;
-                assert not in_wait_s
+                wait until not in_wait_q for 1 ms;
+                assert not in_wait_q
                     report "ERROR: READY step: CPU failed to resume on READY"
                     severity error;
                 ready_in <= '0';

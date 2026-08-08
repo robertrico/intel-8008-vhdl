@@ -289,7 +289,12 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 | GAP | 0 |
 
 **Zero GAP rows.** Every spec claim is either machine-checked or closed
-as a documented constraint. (⚠ residual holes inside COVERED rows are
+as a documented constraint. Beyond the row grid, a differential fuzzer
+(`make fuzz-b8008`, CI) runs seeded random legal instruction streams on
+both cores under the bus-protocol monitor, an isa.json per-instruction
+timing oracle (outcome-aware) with a PC-advance check, and an
+rtl-vs-netlist trace diff — continuous cross-cutting coverage no
+enumerated row provides. (⚠ residual holes inside COVERED rows are
 enumerated in the tiers above; all 15 SPEC-QUESTIONs are RATIFIED —
 rulings in SPEC.md §6.)
 

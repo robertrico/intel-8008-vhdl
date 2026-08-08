@@ -71,9 +71,9 @@ Scorecard:
 | instruction_decoder | — | ✅ EQY | ✅ 256-opcode sweep, rtl + netlist |
 | scratchpad_decoder, io_buffer, mem_mux_refresh | — | ✅ EQY | — |
 | MCC+STG composition cluster | ✅ mutex + status bijection (bmc-120) | — | — |
-| full core (b8008) | — | ✅ regression suite with netlist core swap (CI, both cores) | ✅ external bus-protocol monitor |
+| full core (b8008) | — | ✅ regression suite with netlist core swap (CI, both cores) | ✅ external bus-protocol monitor + differential fuzzer |
 
-Every b8008 module has machine-checked verification. CI runs per push: the full 37-test assembly regression suite on both the RTL and round-trip-netlist cores, all unit testbenches, 11 SBY property suites (including the composition cluster), 7 SBY miters, 6 EQY equivalence checks, and 7 cocotb runs (including the whole-system bus-protocol monitor). Findings are tracked as repo issues.
+Every b8008 module has machine-checked verification. CI runs per push: the full 37-test assembly regression suite on both the RTL and round-trip-netlist cores, all unit testbenches, 11 SBY property suites (including the composition cluster), 7 SBY miters, 6 EQY equivalence checks, 7 cocotb runs (including the whole-system bus-protocol monitor), and a differential fuzzer — seeded random legal 8008 programs run on both cores under three oracles at once (bus-protocol monitor, per-instruction datasheet timing, and an rtl-vs-netlist trace diff). Findings are tracked as repo issues.
 
 ## Architecture
 

@@ -80,5 +80,7 @@ formal/*/*_cover/
 sim/cocotb/*
 !sim/cocotb/Makefile
 !sim/cocotb/test_*.py
+!sim/cocotb/fuzz_gen.py
+!sim/cocotb/fuzz_compare.py
 formal/*/status.sqlite
 formal/*/*/

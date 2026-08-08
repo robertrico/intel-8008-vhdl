@@ -155,7 +155,11 @@ jobs:
         if: matrix.module == 'b8008_top'
       - name: Assemble monitor program ROMs
         if: matrix.module == 'b8008_top'
-        run: make assemble PROG=memory_alu_test_as.asm && make assemble PROG=io_test_as.asm
+        run: |
+          make assemble PROG=memory_alu_test_as.asm
+          make assemble PROG=io_test_as.asm
+          make assemble PROG=mov_mem_test_as.asm
+          make assemble PROG=mvi_m_test_as.asm
       - name: Build round-trip netlist DUT
         if: matrix.variant == 'netlist'
         run: make netlist-vhdl-${{ matrix.module }}
@@ -171,3 +175,50 @@ jobs:
             sim/cocotb/*.ghw
             sim/cocotb/sim_build
           if-no-files-found: ignore
+
+  fuzz:
+    name: differential fuzz (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [rtl, netlist-core]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oss-cad-suite
+      - name: Build round-trip core netlist
+        if: matrix.variant == 'netlist-core'
+        run: make netlist-vhdl
+      - name: Run fuzzer (seeded, deterministic)
+        run: make fuzz-b8008 DUT_VARIANT=${{ matrix.variant }}
+        env:
+          FUZZ_COUNT: "10"
+          FUZZ_LEN: "150"
+      - name: Upload traces
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-traces-${{ matrix.variant }}
+          path: sim/cocotb/fuzz_out/trace_*.jsonl
+      - name: Upload failure listings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failures-${{ matrix.variant }}
+          path: sim/cocotb/fuzz_out/fail_*.txt
+          if-no-files-found: ignore
+
+  fuzz-compare:
+    name: differential fuzz compare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: fuzz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fuzz-traces-*
+          path: sim/cocotb/fuzz_out
+          merge-multiple: true
+      - name: Compare rtl vs netlist-core traces
+        run: python3 sim/cocotb/fuzz_compare.py

@@ -13,6 +13,15 @@ REPO := $(abspath ../..)
 
 ifeq ($(DUT_VARIANT),netlist)
 VHDL_SOURCES = $(REPO)/build/synth/$(TOPLEVEL)_netlist.vhdl
+else ifeq ($(DUT_VARIANT),netlist-core)
+# Whole-system DUT with the write_vhdl round-trip CORE swapped in (same
+# swap the regression suite's B8008_CORE=netlist does): b8008_top RTL +
+# netlist core + shim. Used by the differential fuzzer.
+VHDL_SOURCES = $(REPO)/src/b8008/b8008_types.vhdl \
+	$(REPO)/build/synth/b8008_netlist.vhdl \
+	$(REPO)/sim/b8008/b8008_netlist_shim.vhdl \
+	$(REPO)/src/components/phase_clocks.vhdl \
+	$(foreach m,ram_sync address_decoder b8008_top,$(REPO)/src/b8008/$(m).vhdl)
 else ifeq ($(TOPLEVEL),b8008_top)
 # Whole-system DUT (bus-protocol monitor): full core + system glue.
 # The ROM is served by the Python testbench through the external ROM
@@ -29,6 +38,9 @@ VHDL_SOURCES = $(REPO)/src/components/phase_clocks.vhdl \
 else
 VHDL_SOURCES = $(REPO)/src/b8008/b8008_types.vhdl $(REPO)/src/b8008/$(TOPLEVEL).vhdl
 endif
+
+# Per-DUT build dirs: variants must not share a GHDL work library
+SIM_BUILD = sim_build/$(TOPLEVEL)_$(DUT_VARIANT)
 
 COMPILE_ARGS = --std=08
 SIM_ARGS = --wave=$(TOPLEVEL)_$(DUT_VARIANT).ghw
