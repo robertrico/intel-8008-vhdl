@@ -55,7 +55,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | BUS-07 | DS72 p.5 §II.C | Cycle 1 always PCI; cycles 2/3 ∈ {PCR,PCW,PCC} | every instr | formal (internal) | `machine_cycle_control.sby` latch rules + advance contract | COVERED-FORMAL ⚠ same external-bus caveat as BUS-03 |
 | BUS-08 | DS72 p.40-41 | Cycle-type sequence per class (PCI-only / PCI+PCR / PCI+PCW / PCI+PCR+PCW / PCI+PCR+PCR / PCI+PCC) | each class | directed | `check_cycle_count_test.sh` MCycle: parsing per class | COVERED-DIRECTED |
 | BUS-09 | DS72 p.13; UM p.13 | Data bus floats during WAIT and STOPPED | — | directed (module) | `io_buffer_tb` ZZ checks | COVERED-DIRECTED ⚠ module only; no system-level check that CPU tri-states in WAIT/STOPPED |
-| BUS-10 | DS72 p.7; UM p.49 | H:L cycles drive L at T1, H[5:0] at T2; H[7:6] masked from address | incl. H[7:6]=11 | incidental | mov_mem/mvi_m/memory_alu tests read/write correct locations (address must be H:L) | COVERED-INCIDENTAL ⚠ H[7:6] masking never exercised — no test sets H[7:6]≠00 |
+| BUS-10 | DS72 p.7; UM p.49 | H:L cycles drive L at T1, H[5:0] at T2; H[7:6] masked from address | incl. H[7:6]=11 | incidental | mov_mem/mvi_m/memory_alu tests read/write correct locations (address must be H:L) | COVERED-DIRECTED (`check_hl_mask_test.sh` quadrant aliasing) |
 | BUS-11 | UM p.49 | Immediate/operand cycles address the PC (T1=PCL, T2=PCH) | MVI/ALUI/J/C cyc 2-3 | incidental | immediates land in right registers in all tests | COVERED-INCIDENTAL |
 
 ### D. READY / WAIT
@@ -99,7 +99,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | STK-04 | UM p.7 | RET: SP retreats; PC = stored addr; LIFO | nesting | directed | `check_stack_depth_test.sh` (7 nested CALL/RET) | COVERED-DIRECTED |
 | STK-05 | DS72 p.36; UM p.45 | 7 nested CALLs + 7 RETs all return correctly | depth 7 | directed | `check_stack_depth_test.sh` (7 levels, per-level checkpoints) | COVERED-DIRECTED |
 | STK-06 | UM p.7 | 8th nested CALL: SP recycles, oldest return destroyed, newer 7 intact, no trap | — | directed | `check_stackwrap_test.sh` (8th CALL overwrites oldest; includes negative assertion `assert_checkpoint_absent 3`) | COVERED-DIRECTED (also SQ-06) |
-| STK-07 | UM p.3, p.7 | 14-bit PC/address space; PC increment wraps 0x3FFF→0 | wrap | — | none — no program executes near top of memory | GAP (wrap case) |
+| STK-07 | UM p.3, p.7 | 14-bit PC/address space; PC increment wraps 0x3FFF→0 | wrap | directed | `check_pc_wrap_test.sh` — NOPs planted at 0x3FFC-0x3FFF (RAM), sequential fetch wraps to the reset vector, sentinel-routed checkpoint | COVERED-DIRECTED |
 | STK-08 | UM p.7; DS72 p.7 | PC low incremented after T1; high driven at T2 then carry applied | page cross | formal + directed | `stack_memory.sby` lower/upper-increment carry semantics; `stack_memory_tb` 0x01FF→0x0200; `check_pc_carry_call_test.sh` (CALL at 0x00FC → return 0x0100) | COVERED-DIRECTED (T2-visible-value artifact is SQ-07) |
 | STK-09 | DS72 p.36; UM p.45-46 | Pushed value = addr after CAL (3 bytes) / after RST (1 byte) | — | directed | `check_pc_carry_call_test.sh` KEY TEST; `check_rst_test.sh` / `check_rst_full_test.sh` (RET resumes correctly) | COVERED-DIRECTED |
 
@@ -109,7 +109,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 |----|-----------|-----------|------------|------------|----------------|--------|
 | REG-01 | UM p.3, p.7 | 7 independent 8-bit registers; write one, others unchanged | pairwise | formal | `register_file.sby` per-register write ×7 + hold ×7 (k-induction) + fully-proven `register_file_miter` | COVERED-FORMAL |
 | REG-02 | UM p.9 n.1 | SSS/DDD encodings A..L, 111=M | all codes | exhaustive | `sss_ddd_selector_tb` exhaustive sweeps; cocotb decoder sweep (256 opcodes vs independent Python model) | COVERED-EXHAUSTIVE |
-| REG-03 | UM p.7, p.9 n.2 | M address = {H[5:0], L}; changing H/L redirects next access | — | directed | `check_mov_mem_test.sh` self-modifying H/L pointer cases | COVERED-DIRECTED ⚠ H[7:6] mask untested (BUS-10) |
+| REG-03 | UM p.7, p.9 n.2 | M address = {H[5:0], L}; changing H/L redirects next access | — | directed | `check_mov_mem_test.sh` self-modifying H/L pointer cases; `check_hl_mask_test.sh` | COVERED-DIRECTED |
 | REG-04 | UM p.7 §III.C | Temp a/b invisible; no partial arch-state mid-instruction | whitebox | formal (module) + directed | `formal/temp_registers` load/hold/mux by k-induction + miter; `temp_registers_tb`; `register_alu_control_tb` negative checks (load_reg_a NOT asserted at wrong cycles) | COVERED-DIRECTED |
 
 ### I. Flags
@@ -173,8 +173,8 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | XP-09 | MOV 49-pair sweep | 49 | directed | `check_mov_rr_test.sh` | COVERED-DIRECTED |
 | XP-10 | Write H/L then M-op uses new H:L | — | directed | mov_mem self-modifying pointers | COVERED-DIRECTED |
 | XP-11 | ALU boundary operands (carry chain, zero, sign, parity, C_in) | — | exhaustive | `alu_exhaustive_tb` (all 8 ops) | COVERED-EXHAUSTIVE |
-| XP-12 | Fetch page-cross + 14-bit wrap 0x3FFF→0 | 2 boundaries | formal + directed (page) | stack_memory carry props; pc_carry_call_test | COVERED-DIRECTED ⚠ top-of-memory wrap (0x3FFF→0) never executed |
-| XP-13 | M ops with H[7:6]=11 alias to H[5:0] address | — | — | none | GAP |
+| XP-12 | Fetch page-cross + 14-bit wrap 0x3FFF→0 | 2 boundaries | formal + directed | stack_memory carry props; pc_carry_call_test; `check_pc_wrap_test.sh` | COVERED-DIRECTED |
+| XP-13 | M ops with H[7:6]=11 alias to H[5:0] address | — | directed | `check_hl_mask_test.sh` — all four H quadrants (00/01/10/11) alias one RAM byte, cross write/read | COVERED-DIRECTED |
 | XP-14 | Jam 3-byte instr (JMP/CAL) at interrupt; B2/B3 supplied by the interrupting controller | — | directed | `check_jam_test.sh` S3 | COVERED-DIRECTED |
 | XP-15 | Single-step whole program via READY pulses ≡ free run | — | — | none | GAP |
 
@@ -254,9 +254,9 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 2. ~~HLT never actually verified to halt~~ **DONE** — post-HLT sentinel asserted absent + rtl s_stopped grep in both scripts.
 3. ~~Interrupt jam generality~~ **DONE** — dedicated `interrupt_jam_tb` + `jam_test_as.asm` + `check_jam_test.sh`: NOP/HLT/3-byte-JMP jams via the new int_jam_byte override on b8008_top, single-T1I assertion, INT-during-WAIT scenario. Mutation-tested (early ir_loaded_from_interrupt clear caught).
 4. **External bus per-T-state contract** (BUS-01, BUS-02, BUS-04, BUS-06, D6/D7 encodings of BUS-03). The design claims cycle-accuracy; nothing checks what is on the bus at T1/T2/T4/T5. **Propose:** cocotb bus-protocol monitor on `b8008_top` (matches decoder-sweep idiom): at every SYNC-qualified T-state, assert T1=PCL/L, T2={cycle-code, high addr}, code∈{PCI,PCR,PCC,PCW} per instruction class, cycle 1 always PCI; run over an existing program ROM. This single monitor closes 5 rows.
-5. **14-bit PC wrap 0x3FFF→0** (STK-07, XP-12⚠). Never executed. **Propose:** tiny program placed at top of memory (assembler ORG 0x3FFC), sequential fetch + JMP across the wrap; checkpoint at 0x0000-side landing. Needs sim memory ≥16K or address-mask check in TB.
+5. ~~14-bit PC wrap 0x3FFF→0~~ **DONE** — `pc_wrap_test` plants NOPs in top-of-memory RAM at runtime, fetch wraps into the reset vector, sentinel-routed checkpoint. Mutation-tested (upper-increment saturation caught).
 6. ~~7-level nesting off-by-one~~ **DONE** — `stack_depth_test` nests 7 with per-level checkpoints.
-7. **H[7:6] don't-care masking** (BUS-10⚠, XP-13). No test sets H[7:6]≠00. **Propose:** extend `mov_mem_test`: set H=0xC1 vs H=0x01, verify both hit the same physical byte (write via one, read via other).
+7. ~~H[7:6] don't-care masking~~ **DONE** — `hl_mask_test`: all four H quadrants alias one physical byte, cross write/read. Mutation-tested (latch slice shift caught).
 
 ### Tier 2 — covered weakly / incidentally
 
