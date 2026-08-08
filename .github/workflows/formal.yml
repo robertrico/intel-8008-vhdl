@@ -1,0 +1,96 @@
+# Formal verification + cocotb CI for b8008.
+# Everything runs through the top-level Makefile pattern rules:
+#   formal-<module>       -> sby (all tasks in formal/<module>/<module>.sby)
+#   eqy-<module>          -> write_vhdl round trip vs RTL equivalence
+#   cocotb-<module>       -> python testbench under sim/cocotb
+# Toolchain comes from one oss-cad-suite bundle installed to $HOME/oss-cad-suite
+# (see .github/actions/setup-oss-cad-suite), matching the Makefile's paths.
+name: formal
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  sby:
+    name: sby ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: stack_pointer
+          - module: state_timing_generator
+          # Miter proves RTL == gate netlist; needs the gate-renamed
+          # write_vhdl netlist in build/synth first.
+          - module: stack_pointer_miter
+            prep: netlist-gate-stack_pointer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oss-cad-suite
+      - name: Build prerequisite netlist
+        if: matrix.prep
+        run: make ${{ matrix.prep }}
+      - name: Run sby proofs
+        run: make formal-${{ matrix.module }}
+      - name: Upload sby workdirs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sby-${{ matrix.module }}
+          path: formal/${{ matrix.module }}
+          if-no-files-found: ignore
+
+  eqy:
+    name: eqy ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [stack_pointer]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oss-cad-suite
+      # eqy-% depends on netlist-vhdl-%, so the round-trip netlist
+      # is built automatically.
+      - name: Run eqy equivalence check
+        run: make eqy-${{ matrix.module }}
+      - name: Upload eqy workdir on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eqy-${{ matrix.module }}
+          path: build/eqy/${{ matrix.module }}
+          if-no-files-found: ignore
+
+  cocotb:
+    name: cocotb ${{ matrix.module }} (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [stack_pointer]
+        variant: [rtl, netlist]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oss-cad-suite
+      - name: Build round-trip netlist DUT
+        if: matrix.variant == 'netlist'
+        run: make netlist-vhdl-${{ matrix.module }}
+      - name: Run cocotb testbench
+        run: make cocotb-${{ matrix.module }} DUT_VARIANT=${{ matrix.variant }}
+      - name: Upload cocotb results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cocotb-${{ matrix.module }}-${{ matrix.variant }}
+          path: |
+            sim/cocotb/results.xml
+            sim/cocotb/*.ghw
+            sim/cocotb/sim_build
+          if-no-files-found: ignore

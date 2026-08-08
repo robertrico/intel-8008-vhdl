@@ -1,0 +1,36 @@
+# Installs the YosysHQ oss-cad-suite nightly to $HOME/oss-cad-suite, the
+# exact path the top-level Makefile hardcodes (OSS_CAD_SUITE, GHDL_PREFIX).
+# The bundle ships everything CI needs: yosys + ghdl plugin, ghdl, sby,
+# eqy, smt solvers, and a python with cocotb / cocotb-config.
+name: setup-oss-cad-suite
+description: Install oss-cad-suite (yosys, ghdl, sby, eqy, cocotb) to $HOME/oss-cad-suite
+
+inputs:
+  version:
+    description: oss-cad-suite release tag (YYYY-MM-DD)
+    default: "2026-08-07"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache oss-cad-suite
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/oss-cad-suite
+        key: oss-cad-suite-linux-x64-${{ inputs.version }}
+
+    - name: Download and extract oss-cad-suite
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="${{ inputs.version }}"
+        FILE="oss-cad-suite-linux-x64-${VERSION//-/}.tgz"
+        URL="https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${VERSION}/${FILE}"
+        echo "Fetching ${URL}"
+        curl -fsSL "${URL}" | tar xz -C "${HOME}"
+
+    - name: Add oss-cad-suite to PATH
+      shell: bash
+      run: echo "${HOME}/oss-cad-suite/bin" >> "${GITHUB_PATH}"
