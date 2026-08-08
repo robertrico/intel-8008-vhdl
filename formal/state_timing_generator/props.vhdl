@@ -92,6 +92,21 @@ begin
     assert always (t1i = '1') -> (stat = "110");
     assert always (in_wait = '1') -> (stat = "000");
 
+    -- P3b: the REVERSE implications - each status code maps back to
+    -- exactly its state. With P2 (one-hot-or-zero) and P3 this makes
+    -- the status/one-hot encodings a bijection, so consumers that
+    -- re-derive T-states from S-codes (register_alu_control) can never
+    -- drift from consumers using the one-hots (MAS section 9.5
+    -- TODO-prop: S-code <-> one-hot consistency).
+    assert always (stat = "011") -> (stopped = '1');
+    assert always (stat = "010") -> (t1  = '1');
+    assert always (stat = "100") -> (t2  = '1');
+    assert always (stat = "001") -> (t3  = '1');
+    assert always (stat = "111") -> (t4  = '1');
+    assert always (stat = "101") -> (t5  = '1');
+    assert always (stat = "110") -> (t1i = '1');
+    assert always (stat = "000") -> (in_wait = '1');
+
     -- P4: transition arcs, one property per (source, condition) pair.
     -- Condition sampled at the advance edge, target checked next sample.
 

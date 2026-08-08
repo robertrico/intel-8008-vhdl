@@ -71,6 +71,7 @@ jobs:
           - module: temp_registers
           - module: interrupt_ready_ff
           - module: ahl_pointer
+          - module: mcc_stg_cluster
           # Miter proves RTL == gate netlist; needs the gate-renamed
           # write_vhdl netlist in build/synth first.
           - module: stack_pointer_miter

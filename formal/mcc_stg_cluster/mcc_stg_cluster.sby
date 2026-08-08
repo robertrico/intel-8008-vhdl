@@ -1,0 +1,29 @@
+# Composition proof: machine_cycle_control + state_timing_generator in
+# their real feedback loop. bmc only: the cluster carries both modules'
+# unanchorable internal latches, so induction does not close; depth 50
+# spans several instructions' worth of state traffic.
+[tasks]
+bmc
+cover
+
+[options]
+bmc: mode bmc
+bmc: depth 120
+cover: mode cover
+cover: depth 30
+
+[engines]
+smtbmc
+
+[script]
+plugin -i ghdl
+ghdl --std=08 b8008_types.vhdl instruction_register.vhdl instruction_decoder.vhdl state_timing_generator.vhdl machine_cycle_control.vhdl props.vhdl -e mcc_stg_cluster_props
+prep -top mcc_stg_cluster_props
+
+[files]
+../../src/b8008/b8008_types.vhdl
+../../src/b8008/instruction_register.vhdl
+../../src/b8008/instruction_decoder.vhdl
+../../src/b8008/state_timing_generator.vhdl
+../../src/b8008/machine_cycle_control.vhdl
+props.vhdl

@@ -53,6 +53,7 @@ bcd_len =   65536-(dec_len/2)
 unrollc =   (bin_len/4)+1   ; the number of 4x unrolled loop is deterministic
 
 cr  =   0Dh             ; ASCII CR
+lf  =   0Ah             ; ASCII LF
 
 
 ;; start of global macros/functions
@@ -424,12 +425,6 @@ ptr_a:  db  0, 0    ; D-E, pointer to array used by atan_mp
 sqrtbl: db  0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100
     db  121, 144, 169, 196, 225
 pitext: db  "\r50 DIGITS OF PI = \0"
-
-    org 2038h       ; crout - rst 7 forwards here via the monitor RAM slot
-crout:  lai cr      ; A <- CR
-    cal cout        ; print it
-    ret
-
 
 ;; START of execution
 
@@ -1345,6 +1340,15 @@ print_mp1:          ; main loop
     rtz         ; if zero, done, otherwise
     lmb         ;   M <- B, store hi from B
     jmp print_mp1   ;   and keep going
+
+
+; Description:  Print CR+LF (rst 7 forwards here via the monitor RAM slot,
+;               installed from lo(crout)/hi(crout) at main)
+; Registers:    A
+crout:  lai cr      ; A <- CR
+    cal cout        ; print it
+    lai lf          ; A <- LF
+    jmp cout        ; tail call - cout's ret returns to the rst 7 caller
 
             cpu 8008new             ; use "new" 8008 mnemonics
 
