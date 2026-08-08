@@ -382,6 +382,12 @@ UNIT_TESTS := \
 
 .PHONY: $(UNIT_TESTS)
 
+# All unit testbenches except test-machine-cycle (stale tb, red at HEAD:
+# unbound state_half/instr_is_mem_indirect ports; the module's contract
+# is covered by formal/machine_cycle_control instead). CI runs this.
+.PHONY: test-units
+test-units: $(filter-out test-machine-cycle,$(UNIT_TESTS))
+
 # Testbench-name exceptions (target name abbreviates the module name)
 TB_test-instr-decoder   := instruction_decoder_tb
 TB_test-instr-reg       := instruction_register_tb

@@ -14,6 +14,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Classic GHDL unit testbenches (no .mem programs needed; the asm
+  # regression suite is NOT here: it requires the ASL assembler and
+  # assembled .mem artifacts that are not committed).
+  unit:
+    name: unit testbenches
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oss-cad-suite
+      - name: Run all unit testbenches
+        run: make test-units
+
   sby:
     name: sby ${{ matrix.module }}
     runs-on: ubuntu-latest

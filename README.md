@@ -48,10 +48,10 @@ b8008 follows the Intel 8008 block diagram with explicit, simple modules:
 
 ```
 ┌─────────────────────────────────────────┐
-│         Timing & Control Unit            │
+│         Timing & Control Unit           │
 │  (State Machine: T1→T2→T3→T4→T5)        │
-│  Cycle-exact: cycles end where the       │
-│  datasheet says (T3 for fetches, etc.)   │
+│  Cycle-exact: cycles end where the      │
+│  datasheet says (T3 for fetches, etc.)  │
 └──────────┬──────────────────────────────┘
            │ control signals
            ↓
