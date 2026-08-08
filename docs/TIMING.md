@@ -13,7 +13,7 @@
                  T-state = 2 φ-cycles = 4.4 µs  →  ~455 kHz effective 8008 clock
 ```
 
-Style rule (post scar-S7 refactor): **derived enables, never derived clocks**. `phase_clocks` emits `phi1_rising/falling`, `phi2_rising/falling` pulses in the clk_sys domain; `run_enable` freezes the phase FSM in place rather than gating a clock. Known exception: `src/b8008/b8008_uart_top.vhdl:333,360,621` still uses `rising_edge(phi1)` as a clock edge — the last live instance of the scar class (`b8008_top.vhdl` is the fixed equivalent). Budget rule: no new `rising_edge(phi*)` anywhere; retire or refactor b8008_uart_top.
+Style rule (post scar-S7 refactor): **derived enables, never derived clocks**. `phase_clocks` emits `phi1_rising/falling`, `phi2_rising/falling` pulses in the clk_sys domain; `run_enable` freezes the phase FSM in place rather than gating a clock. The last live instance of the scar class (`b8008_uart_top.vhdl`) is retired. Budget rule: no new `rising_edge(phi*)` anywhere.
 
 ## 2. Budget table
 

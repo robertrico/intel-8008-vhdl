@@ -108,7 +108,7 @@ Spec ambiguities were SPEC-QUESTION rows (§ SQ); all 15 are RATIFIED as of 2026
 | ID | Spec cite | Assertion | Conditions | Check type | Check artifact | Status |
 |----|-----------|-----------|------------|------------|----------------|--------|
 | REG-01 | UM p.3, p.7 | 7 independent 8-bit registers; write one, others unchanged | pairwise | formal | `register_file.sby` per-register write ×7 + hold ×7 (k-induction) + fully-proven `register_file_miter` | COVERED-FORMAL |
-| REG-02 | UM p.9 n.1 | SSS/DDD encodings A..L, 111=M | all codes | exhaustive | `sss_ddd_selector_tb` exhaustive sweeps; cocotb decoder sweep (256 opcodes vs independent Python model) | COVERED-EXHAUSTIVE |
+| REG-02 | UM p.9 n.1 | SSS/DDD encodings A..L, 111=M | all codes | exhaustive | cocotb decoder sweep (256 opcodes vs independent Python model); `scratchpad_decoder_tb` | COVERED-EXHAUSTIVE (sss_ddd_selector was an orphan module, deleted with its TB — decode paths live in instruction_decoder/scratchpad_decoder) |
 | REG-03 | UM p.7, p.9 n.2 | M address = {H[5:0], L}; changing H/L redirects next access | — | directed | `check_mov_mem_test.sh` self-modifying H/L pointer cases; `check_hl_mask_test.sh` | COVERED-DIRECTED |
 | REG-04 | UM p.7 §III.C | Temp a/b invisible; no partial arch-state mid-instruction | whitebox | formal (module) + directed | `formal/temp_registers` load/hold/mux by k-induction + miter; `temp_registers_tb`; `register_alu_control_tb` negative checks (load_reg_a NOT asserted at wrong cycles) | COVERED-DIRECTED |
 

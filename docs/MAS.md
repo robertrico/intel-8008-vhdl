@@ -8,7 +8,7 @@
 Block-based per the Intel 8008 block diagram. Two module classes:
 
 - **Smart (instruction/timing knowledge allowed):** `instruction_decoder`, `machine_cycle_control`, `memory_io_control`, `register_alu_control`, `ahl_pointer` (borderline: knows mem-indirect cycle mapping).
-- **Dumb datapath (no instruction knowledge):** `stack_pointer`, `stack_memory`, `register_file`, `scratchpad_decoder`, `temp_registers`, `alu`, `carry_lookahead`, `condition_flags`, `instruction_register`, `io_buffer`, `mem_mux_refresh`, `interrupt_ready_ff`.
+- **Dumb datapath (no instruction knowledge):** `stack_pointer`, `stack_memory`, `register_file`, `scratchpad_decoder`, `temp_registers`, `alu`, `carry_lookahead`, `condition_flags`, `instruction_register`, `io_buffer`, `mem_mux_refresh`, `interrupt_ready_ff`. (Former orphans `sss_ddd_selector`, `scratchpad_addr_mux`, `stack_addr_mux` deleted — never instantiated.)
 
 Known violations of the split are catalogued in §9 — they are debts, not precedent.
 
@@ -90,7 +90,7 @@ Internal bus: priority mux of six drivers (§6). External bus: T1/T2 address-and
 
 **Clock architecture:** single clock domain. 100 MHz osc → (monitor/basic: PLL → 25 MHz) → clk_sys; every CPU flop clocks on clk_sys. φ1/φ2/SYNC are *data* signals from `phase_clocks`, which also emits one-clk enable pulses (`phi1_rising/falling`, `phi2_rising/falling`). **Rule: derived enables, never derived clocks.** `run_enable` freezes the phase FSM (a hold, not a gated clock) — `debug_clock_control` header documents why.
 
-**Live violation:** `src/b8008/b8008_uart_top.vhdl:333,360,621` clocks flops on `rising_edge(phi1)` — the exact class behind the historic "years of address-dependent flakiness" (VPLAN scar S7). `b8008_top.vhdl` is the fixed equivalent. **Action: refactor or retire b8008_uart_top; forbid new `rising_edge(phi*)`.**
+**Resolved:** `b8008_uart_top.vhdl` (the last `rising_edge(phi1)` clocking, scar-S7 class) is retired — deleted, unreferenced by any project; `b8008_top.vhdl` is the equivalent. Standing rule: no new `rising_edge(phi*)` anywhere.
 
 **Reset tree (monitor board):** POR = PLL-unlock hold + ~21 ms counter, generated synchronously in clk_sys; `reset_int = por OR sw-reset(3-FF sync) OR debug-stop pulse`; debouncers reset by POR only (breaks reset feedback loop). Core style: uniformly **async active-high** — with exceptions: `alu` and `register_alu_control` have **no reset term** (acceptable only because ALU result is re-latched before use each instruction — worth a one-line justification in RTL comments); `debouncer.vhdl` is async active-**low** (opposite polarity; callers invert — harmonize or prominently comment). No reset-deassertion synchronizer on async-reset flops; safe only because reset_int is clk_sys-synchronous — record as a standing assumption.
 
@@ -112,6 +112,6 @@ Internal bus: priority mux of six drivers (§6). External bus: T1/T2 address-and
 3. **Instruction knowledge outside decoder/control:** structural top conditions bus mux on `instr_is_io` and picks alu_opcode from instr flags (b8008.vhdl:795-807, 838); machine_cycle_control reconstructs LMr identity by flag algebra (:137). Move into decoder outputs.
 4. **Hidden state in a "no state" module:** alu's `result_latched`/`enable_prev` edge-detect adds a second timing convention beneath register_alu_control's level-based one.
 5. **Duplicate state decode:** register_alu_control re-derives T-states from S0-S2 while everyone else gets one-hots — two encodings that can drift. `TODO-prop: S-code ↔ one-hot consistency (cheap SBY).`
-6. **Dead/vestigial fabric:** orphan modules (`sss_ddd_selector`, `scratchpad_addr_mux`, `stack_addr_mux`); dead memory_io_control outputs (addr_select_sss/ddd, memory_refresh, refresh_increment, stack_addr_select, stack_read/write); unused ports (register_alu_control.interrupt — repo issue #2, memory_io_control.pc_lower_byte); `stack_addr <= pc_addr` alias makes select_stack/pc_load_from_stack degenerate; `pc_control_t.hold` never read; scratchpad_decoder.enable_m dangles; condition_flags bus output permanently disabled. Delete or justify each.
+6. **Dead/vestigial fabric:** ~~orphan modules~~ (deleted); dead memory_io_control outputs (addr_select_sss/ddd, memory_refresh, refresh_increment, stack_addr_select, stack_read/write); unused ports (register_alu_control.interrupt — repo issue #2, memory_io_control.pc_lower_byte); `stack_addr <= pc_addr` alias makes select_stack/pc_load_from_stack degenerate; `pc_control_t.hold` never read; scratchpad_decoder.enable_m dangles; condition_flags bus output permanently disabled. Delete or justify each.
 7. **Record-type erosion:** only `pc_control_t` survives as a record; memory_io_control's contract is ~28 scalar strobes. Consider re-grouping into records per consumer (readability + fewer wiring bugs).
 8. **Composition obligations:** machine_cycle proof assumes state_timing's one-hot P2 (assume-guarantee); advance/cycle_done mutex proven nowhere. Core-level formal wrapper is the top of the property queue.

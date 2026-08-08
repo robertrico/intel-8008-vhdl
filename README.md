@@ -69,11 +69,10 @@ Scorecard:
 | alu (+ carry_lookahead) | — | ✅ miter (bmc) | exhaustive sweep in sim |
 | carry_lookahead | — | ✅ EQY | — |
 | instruction_decoder | — | ✅ EQY | ✅ 256-opcode sweep, rtl + netlist |
-| sss_ddd_selector, scratchpad_decoder | — | ✅ EQY | — |
-| io_buffer, mem_mux_refresh, addr muxes | — | ✅ EQY | — |
+| scratchpad_decoder, io_buffer, mem_mux_refresh | — | ✅ EQY | — |
 | full core (b8008) | — | ✅ regression suite with netlist core swap (local) | — |
 
-Every b8008 module has machine-checked verification. CI runs 33 jobs per push: all unit testbenches, 10 SBY property suites, 7 SBY miters, 9 EQY equivalence checks, and 6 cocotb runs. Findings are tracked as repo issues.
+Every b8008 module has machine-checked verification. CI runs per push: the full assembly regression suite on both the RTL and round-trip-netlist cores, all unit testbenches, 10 SBY property suites, 7 SBY miters, 6 EQY equivalence checks, and 6 cocotb runs. Findings are tracked as repo issues.
 
 ## Architecture
 

@@ -116,9 +116,8 @@ jobs:
         # splitting, which breaks EQY state matching and yields spurious
         # partition FAILs (verified 2026-08-07, splitnets does not help);
         # those are proven by the SBY miter in the sby job instead.
-        module: [carry_lookahead, sss_ddd_selector, scratchpad_decoder,
-                 instruction_decoder, ahl_pointer, io_buffer, mem_mux_refresh,
-                 scratchpad_addr_mux, stack_addr_mux]
+        module: [carry_lookahead, scratchpad_decoder, instruction_decoder,
+                 ahl_pointer, io_buffer, mem_mux_refresh]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-oss-cad-suite

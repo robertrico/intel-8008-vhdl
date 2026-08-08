@@ -40,14 +40,11 @@ B8008_SRCS = \
 	$(SRC_DIR)/b8008_types.vhdl \
 	$(SRC_DIR)/stack_pointer.vhdl \
 	$(SRC_DIR)/stack_memory.vhdl \
-	$(SRC_DIR)/stack_addr_mux.vhdl \
 	$(SRC_DIR)/instruction_register.vhdl \
 	$(SRC_DIR)/instruction_decoder.vhdl \
 	$(SRC_DIR)/condition_flags.vhdl \
 	$(SRC_DIR)/register_file.vhdl \
 	$(SRC_DIR)/scratchpad_decoder.vhdl \
-	$(SRC_DIR)/scratchpad_addr_mux.vhdl \
-	$(SRC_DIR)/sss_ddd_selector.vhdl \
 	$(SRC_DIR)/ahl_pointer.vhdl \
 	$(SRC_DIR)/temp_registers.vhdl \
 	$(SRC_DIR)/carry_lookahead.vhdl \
@@ -130,7 +127,6 @@ help:
 	@echo "  make test-ahl-pointer     - Test AHL address pointer"
 	@echo "  make test-scratchpad-decoder - Test scratchpad decoder"
 	@echo "  make test-register-file   - Test register file"
-	@echo "  make test-sss-ddd-selector - Test SSS/DDD register selector"
 	@echo "  make test-stack-pointer   - Test stack pointer"
 	@echo "  make test-stack-memory    - Test stack memory"
 	@echo "  make test-int-button      - Test front-panel interrupt button"
@@ -402,7 +398,6 @@ UNIT_TESTS := \
 	test-reg-alu-control \
 	test-register-file \
 	test-scratchpad-decoder \
-	test-sss-ddd-selector \
 	test-stack-memory \
 	test-stack-pointer \
 	test-state-timing \
