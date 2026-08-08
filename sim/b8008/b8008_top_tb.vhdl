@@ -344,8 +344,17 @@ begin
                 elsif address_out = x"003C" then
                     report "  ** Calling INCR subroutine at 0x003C";
                 elsif unsigned(address_out) >= 200 and unsigned(address_out) <= 220 then
-                    report "  ** Reading string data at 0x" & to_hstring(unsigned(address_out)) &
-                           " = '" & character'val(to_integer(unsigned(data_out))) & "'";
+                    -- Print the byte as a character only when printable:
+                    -- raw control bytes (NUL etc.) in the log make GNU grep
+                    -- treat the whole file as binary, blinding the
+                    -- verification scripts.
+                    if unsigned(data_out) >= 32 and unsigned(data_out) <= 126 then
+                        report "  ** Reading string data at 0x" & to_hstring(unsigned(address_out)) &
+                               " = '" & character'val(to_integer(unsigned(data_out))) & "'";
+                    else
+                        report "  ** Reading string data at 0x" & to_hstring(unsigned(address_out)) &
+                               " = 0x" & to_hstring(unsigned(data_out));
+                    end if;
                 end if;
             end if;
 

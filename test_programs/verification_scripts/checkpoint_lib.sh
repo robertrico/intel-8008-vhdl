@@ -61,7 +61,7 @@ run_test() {
     fi
 
     # Count checkpoints found
-    local cp_count=$(grep -c "CHECKPOINT:" "$LOG_FILE" 2>/dev/null || echo "0")
+    local cp_count=$(grep -ac "CHECKPOINT:" "$LOG_FILE" 2>/dev/null || echo "0")
     echo "Found $cp_count checkpoint(s) in simulation output"
     echo ""
 
@@ -83,7 +83,7 @@ run_test() {
 # ============================================================================
 get_checkpoint() {
     local id="$1"
-    grep "CHECKPOINT: ID=$id " "$LOG_FILE" | head -1
+    grep -a "CHECKPOINT: ID=$id " "$LOG_FILE" | head -1
 }
 
 # ============================================================================
@@ -220,25 +220,25 @@ assert_final_state() {
 
         case "$reg" in
             A)
-                actual=$(tail -100 "$LOG_FILE" | grep "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-Fa-f]+).*/\1/')
+                actual=$(tail -100 "$LOG_FILE" | grep -a "Reg\.A = " | tail -1 | sed -E 's/.*Reg\.A = (0x[0-9A-Fa-f]+).*/\1/')
                 ;;
             B)
-                actual=$(tail -100 "$LOG_FILE" | grep "Reg\.B = " | tail -1 | sed -E 's/.*Reg\.B = (0x[0-9A-Fa-f]+).*/\1/')
+                actual=$(tail -100 "$LOG_FILE" | grep -a "Reg\.B = " | tail -1 | sed -E 's/.*Reg\.B = (0x[0-9A-Fa-f]+).*/\1/')
                 ;;
             C)
-                actual=$(tail -100 "$LOG_FILE" | grep "Reg\.C = " | tail -1 | sed -E 's/.*Reg\.C = (0x[0-9A-Fa-f]+).*/\1/')
+                actual=$(tail -100 "$LOG_FILE" | grep -a "Reg\.C = " | tail -1 | sed -E 's/.*Reg\.C = (0x[0-9A-Fa-f]+).*/\1/')
                 ;;
             D)
-                actual=$(tail -100 "$LOG_FILE" | grep "Reg\.D = " | tail -1 | sed -E 's/.*Reg\.D = (0x[0-9A-Fa-f]+).*/\1/')
+                actual=$(tail -100 "$LOG_FILE" | grep -a "Reg\.D = " | tail -1 | sed -E 's/.*Reg\.D = (0x[0-9A-Fa-f]+).*/\1/')
                 ;;
             E)
-                actual=$(tail -100 "$LOG_FILE" | grep "Reg\.E = " | tail -1 | sed -E 's/.*Reg\.E = (0x[0-9A-Fa-f]+).*/\1/')
+                actual=$(tail -100 "$LOG_FILE" | grep -a "Reg\.E = " | tail -1 | sed -E 's/.*Reg\.E = (0x[0-9A-Fa-f]+).*/\1/')
                 ;;
             H)
-                actual=$(tail -100 "$LOG_FILE" | grep "Reg\.H = " | tail -1 | sed -E 's/.*Reg\.H = (0x[0-9A-Fa-f]+).*/\1/')
+                actual=$(tail -100 "$LOG_FILE" | grep -a "Reg\.H = " | tail -1 | sed -E 's/.*Reg\.H = (0x[0-9A-Fa-f]+).*/\1/')
                 ;;
             L)
-                actual=$(tail -100 "$LOG_FILE" | grep "Reg\.L = " | tail -1 | sed -E 's/.*Reg\.L = (0x[0-9A-Fa-f]+).*/\1/')
+                actual=$(tail -100 "$LOG_FILE" | grep -a "Reg\.L = " | tail -1 | sed -E 's/.*Reg\.L = (0x[0-9A-Fa-f]+).*/\1/')
                 ;;
             *)
                 echo -e "  ${YELLOW}[WARN] Unknown register: $reg${NC}"
@@ -265,7 +265,7 @@ assert_final_state() {
 # ============================================================================
 list_checkpoints() {
     echo "--- Checkpoints Found ---"
-    grep "CHECKPOINT:" "$LOG_FILE" | while read -r line; do
+    grep -a "CHECKPOINT:" "$LOG_FILE" | while read -r line; do
         echo "  $line"
     done
     echo ""
