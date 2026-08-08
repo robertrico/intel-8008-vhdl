@@ -258,10 +258,10 @@ bitbang path is retired; original notes kept below for history.
 
 ## Low Priority
 
-### [x] Cross-Validate with Reference Simulator - DONE (different tool)
-A faithful Python oracle emulator (PC-in-stack, post-increment model)
-runs every port before silicon; calc's FP output artifacts match it
-bit-for-bit. Oracle-first debugging became the project methodology.
+### [ ] Cross-Validate with Reference Simulator
+No committed reference simulator exists. Planned as the golden model
+for the JSONL trace-differential harness (see `.git/sdd` phase-4 plan);
+the model must be derived from the spec, never from the RTL.
 
 ### [x] Cycle-Accurate Timing Tests - DONE
 `check_cycle_count_test.sh` runs one instruction per timing class,

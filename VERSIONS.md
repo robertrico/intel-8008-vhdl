@@ -28,8 +28,8 @@ period software, culminating in a boot-to-BASIC personality:
   warm-returns with the program intact.
 
 Verification: 28/28 regression, interrupt suite 10/10, state-timing 12/12,
-cycle-count 27/27, full-RTL boot-to-BASIC ceremony testbench, Python oracle
-emulator cross-validation, and the silicon sessions themselves.
+cycle-count 27/27, full-RTL boot-to-BASIC ceremony testbench, and the
+silicon sessions themselves.
 
 ---
 

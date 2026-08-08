@@ -61,7 +61,6 @@ Minimal-change ports of historical 8008 software (see below for original authors
 - 28-test regression suite with verification scripts (`test_programs/verification_scripts/`)
 - Dedicated interrupt, state-timing, and cycle-count testbenches (`sim/b8008/`)
 - Cycle-exactness regression diffing simulated T-states against `docs/isa.json`
-- Python oracle emulator methodology (faithful PC-in-stack, post-increment model) for pre-silicon validation of ports
 
 ---
 

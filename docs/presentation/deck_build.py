@@ -636,7 +636,6 @@ bullets(s, 0.6, 1.9, 6.9, 4.6, [
     'It worked because **I could tell when it was wrong**.',
     '- I had to learn the 8008 cold: T-states, machine cycles, every ISA quirk',
     '- Built `isa.json` — every opcode mapped to its documented T-state sequence — as ground truth',
-    '- Wrote a Python "oracle" emulator to cross-check behavior before touching hardware',
     '- 28-test regression suite; cycle counts diffed against the datasheet automatically',
     '**The AI multiplied effort. The verification was the job.**',
 ], size=16.5, space=11)
