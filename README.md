@@ -1,28 +1,27 @@
 # b8008 - Block-Based Intel 8008 in VHDL
 
-A modular VHDL implementation of the Intel 8008 microprocessor (1972) following the original block diagram architecture — cycle-exact, silicon-validated, and running real 1970s software.
+A modular VHDL implementation of the Intel 8008 microprocessor (1972) following the original block diagram architecture. Cycle-exact, validated on FPGA hardware, runs period software.
 
-[![Status](https://img.shields.io/badge/status-silicon%20validated-brightgreen)]()
-[![Tests](https://img.shields.io/badge/regression-28%2F28%20passing-green)]()
-[![Timing](https://img.shields.io/badge/T--states-cycle--exact%2027%2F27-green)]()
+[![verification](https://github.com/robertrico/intel-8008-vhdl/actions/workflows/verification.yml/badge.svg)](https://github.com/robertrico/intel-8008-vhdl/actions/workflows/verification.yml)
+[![Status](https://img.shields.io/badge/status-Runs%20SCELBAL%20BASIC-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE.txt)
 
 ## It boots into BASIC
 
 ![SCELBAL booting on b8008 — the tiny OS](docs/images/tiny_os_scelbal.png)
 
-That's the board powering on straight into Jim Loos's SCELBAL (SCELBI BASIC, 1976) from ROM, running a FOR/NEXT loop, dropping to a machine monitor with `MON` (dumping the tokenized BASIC program straight out of RAM), and warm-returning with `G 1FB6` — program intact. Apple II workflow, five years early, on the world's first 8-bit microprocessor.
+The board powers on into Jim Loos's SCELBAL (SCELBI BASIC, 1976) from ROM. Shown above: a FOR/NEXT loop, `MON` dropping to the machine monitor (dumping the tokenized BASIC program from RAM), and `G 1FB6` warm-returning to BASIC with the program intact.
 
 ## What runs on it
 
-All period software below runs on the FPGA, loaded over serial through the monitor or resident in ROM — each ported with a minimal, documented change ledger (see the commit history):
+All period software below runs on the FPGA, loaded over serial through the monitor or resident in ROM. Each port's changes are documented in the commit history.
 
 | Program | Year | Notes |
 |---------|------|-------|
 | SCELBAL (SCELBI BASIC) | 1976 | ROM-resident with `MON` escape to monitor, or RAM-loaded |
-| Mandelbrot renderer | — | Correct anatomy at full resolution |
+| Mandelbrot renderer | — | Renders correctly at full resolution |
 | Pi digit generator | — | 49/50 digits (the 50th is the original's guard-byte truncation) |
-| HEXPAWN | 1973 | Self-modifying learning game — plays, learns, improves |
+| HEXPAWN | 1973 | Self-modifying learning game |
 | SCELBI FP Calculator | 1974 | 23-bit floating point; `12.2 X 2.2 = 26.84` |
 | STARS | Byte 5/1976 | Interactive game via RST-vector I/O |
 
@@ -41,6 +40,33 @@ All period software below runs on the FPGA, loaded over serial through the monit
 | Runtime interrupts (front-panel switch, selectable RST vector) | ✅ Silicon validated |
 | Interactive monitor (D/W/L/G/H, Intel HEX loading) | ✅ Silicon validated |
 | SCELBAL — RAM-resident and ROM-resident (boot-to-BASIC) | ✅ Silicon validated |
+
+## Verification
+
+Module contracts are machine-checked in CI on every push (`verification` badge above):
+
+- **SBY property proofs** — module contracts as PSL/VHDL assertions; k-induction where possible, bounded model checking otherwise. Cover checks confirm the properties are reachable.
+- **Synthesis round-trip equivalence** — each module is synthesized with Yosys, written back to VHDL (`write_vhdl`), and checked equivalent to the original RTL: EQY for combinational modules, SBY miters for sequential ones (write_vhdl splits vector flops, which breaks EQY's partition matching).
+- **Exhaustive sweeps against independent models** — instruction decoder: all 256 opcodes against a Python model written from the datasheet (found issue #4). ALU: all 656,384 arithmetic cases against a reference model.
+- **Mutation-tested checkers** — each property suite and sweep was validated by planting a bug in the RTL, confirming the checker fails, then reverting.
+- **cocotb testbenches** — Python random-walk tests that run against both the RTL and the round-tripped netlist (`DUT_VARIANT=rtl|netlist`).
+
+Scorecard:
+
+| Module | SBY properties | Round-trip equivalence | cocotb |
+|--------|---------------|------------------------|--------|
+| stack_pointer | ✅ k-induction | ✅ miter (k-induction) | ✅ rtl + netlist |
+| state_timing_generator | ✅ k-induction (21 arcs + status table) | — | — |
+| machine_cycle_control | ✅ bmc | — | — |
+| condition_flags | ✅ k-induction | — | — |
+| alu (+ carry_lookahead) | — | ✅ miter (bmc) | exhaustive sweep in sim |
+| carry_lookahead | — | ✅ EQY | — |
+| sss_ddd_selector | — | ✅ EQY | — |
+| scratchpad_decoder | — | ✅ EQY | — |
+| instruction_decoder | — | ✅ EQY | ✅ 256-opcode sweep, rtl + netlist |
+| full core (b8008) | — | ✅ regression suite with netlist core swap (local) | — |
+
+CI runs 20 jobs per push: all unit testbenches, 6 SBY proof suites, 4 EQY equivalence checks, and 4 cocotb runs. Remaining modules are being added; findings are tracked as repo issues.
 
 ## Architecture
 
@@ -92,11 +118,11 @@ Two complete system builds share the CPU core via memory-map generics:
 
 ```bash
 cd projects/b8008_basic
-make build        # synthesize + place & route + bitstream (with real error gates)
-make prog-flash   # persist to SPI flash — the board becomes a BASIC machine
+make build        # synthesize + place & route + bitstream
+make prog-flash   # persist to SPI flash
 ```
 
-Serial: 115200 8N1, local echo off, DEL (not BS) for rubout — it's 1976 over there.
+Serial: 115200 8N1, local echo off, DEL (not BS) for rubout.
 
 ## Building and Testing
 

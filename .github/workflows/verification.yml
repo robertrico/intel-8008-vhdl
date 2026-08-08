@@ -5,7 +5,7 @@
 #   cocotb-<module>       -> python testbench under sim/cocotb
 # Toolchain comes from one oss-cad-suite bundle installed to $HOME/oss-cad-suite
 # (see .github/actions/setup-oss-cad-suite), matching the Makefile's paths.
-name: formal
+name: verification
 
 on:
   push:
