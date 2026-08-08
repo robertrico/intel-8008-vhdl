@@ -585,6 +585,11 @@ netlist-gate-%: | $(SYNTH_DIR)
 	GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl \
 	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(SRC_DIR)/b8008_types.vhdl $(SRC_DIR)/$*.vhdl -e $*; synth -top $*; rename $* $*_gate; write_vhdl $(SYNTH_DIR)/$*_gate.vhdl"
 
+# cocotb python testbench for one module: make cocotb-stack_pointer
+# [DUT_VARIANT=rtl|netlist]. Test code in sim/cocotb/test_<module>.py.
+cocotb-%:
+	PATH="$(OSS_CAD_SUITE):$$PATH" $(MAKE) -C sim/cocotb TOPLEVEL=$* DUT_VARIANT=$(DUT_VARIANT)
+
 # Place and route with nextpnr
 pnr: $(CFG)
 

@@ -67,3 +67,9 @@ ram_test.log
 formal/*/*_bmc/
 formal/*/*_prove/
 formal/*/*_cover/
+
+# cocotb build artifacts
+sim/cocotb/sim_build/
+sim/cocotb/results.xml
+sim/cocotb/*.ghw
+sim/cocotb/__pycache__/
