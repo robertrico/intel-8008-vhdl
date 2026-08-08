@@ -142,9 +142,19 @@ jobs:
       matrix:
         module: [stack_pointer, instruction_decoder, memory_io_control]
         variant: [rtl, netlist]
+        include:
+          # Whole-system bus-protocol monitor (rtl only; needs its two
+          # program ROMs assembled)
+          - module: b8008_top
+            variant: rtl
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-oss-cad-suite
+      - uses: ./.github/actions/setup-asl
+        if: matrix.module == 'b8008_top'
+      - name: Assemble monitor program ROMs
+        if: matrix.module == 'b8008_top'
+        run: make assemble PROG=memory_alu_test_as.asm && make assemble PROG=io_test_as.asm
       - name: Build round-trip netlist DUT
         if: matrix.variant == 'netlist'
         run: make netlist-vhdl-${{ matrix.module }}

@@ -577,6 +577,8 @@ architecture structural of b8008 is
 
     -- Machine cycle control signals
     -- Note: cycle_type is now an output port, not an internal signal
+    -- (readable under --std=08 for the external cycle-code emission)
+    signal cycle_code_ext : std_logic_vector(1 downto 0);  -- datasheet D7&D6 order
     signal current_cycle    : integer range 0 to 3;
     signal next_cycle       : integer range 0 to 3;  -- Predicted next cycle (valid at T1 start)
     signal advance_state    : std_logic;
@@ -757,11 +759,23 @@ begin
     -- For synthesis: separate output data and output enable signals instead of tri-state
     -- CPU drives during T1, T2 (address output), or when io_buffer outputs (T3 write)
 
+    -- Cycle code on the external bus, in the DATASHEET's bit order
+    -- (UM p.5: D6/D7 with PCI=00, PCR: D6=0 D7=1, PCC: D6=1 D7=0,
+    -- PCW=11). The internal cycle_type encoding maps to (D7,D6)
+    -- REVERSED, so the emission swaps the bits; found by the cocotb
+    -- bus-protocol monitor - PCR and PCC read transposed externally.
+    cycle_code_ext <= cycle_type(0) & cycle_type(1);
+
     -- Data bus output multiplexer
     data_bus_out <= std_logic_vector(selected_address(7 downto 0)) when (state_t1 = '1' and not (ahl_active = '1') and
                                                                           not (instr_is_io = '1' and next_cycle = 1)) else
-                    (cycle_type & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (ahl_active = '1') and
+                    (cycle_code_ext & std_logic_vector(selected_address(13 downto 8))) when (state_t2 = '1' and not (ahl_active = '1') and
                                                                                           not (instr_is_io = '1' and current_cycle = 1)) else
+                    -- H:L cycle T2: REG.H's meaningful 6 bits with the
+                    -- cycle code on D6/D7 (UM p.5: the code is present at
+                    -- T2 of EVERY cycle; H[7:6] are don't-cares exactly
+                    -- because the code owns those bus bits)
+                    (cycle_code_ext & io_buffer_data_out(5 downto 0)) when (state_t2 = '1' and ahl_active = '1') else
                     -- During io_buffer output enabled, use io_buffer's output data
                     io_buffer_data_out when io_buffer_oe = '1' else
                     -- Default: output zeros (will be masked by OE anyway)
