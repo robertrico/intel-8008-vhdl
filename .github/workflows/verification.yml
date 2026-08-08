@@ -105,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [stack_pointer, instruction_decoder]
+        module: [stack_pointer, instruction_decoder, memory_io_control]
         variant: [rtl, netlist]
     steps:
       - uses: actions/checkout@v4
