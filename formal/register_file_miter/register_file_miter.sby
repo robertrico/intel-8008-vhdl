@@ -1,0 +1,23 @@
+[tasks]
+bmc
+prove
+
+[options]
+bmc: mode bmc
+bmc: depth 20
+prove: mode prove
+prove: depth 4
+
+[engines]
+smtbmc
+
+[script]
+plugin -i ghdl
+ghdl --std=08 b8008_types.vhdl register_file.vhdl register_file_gate.vhdl miter.vhdl -e register_file_miter
+prep -top register_file_miter
+
+[files]
+../../src/b8008/b8008_types.vhdl
+../../src/b8008/register_file.vhdl
+../../build/synth/register_file_gate.vhdl
+miter.vhdl
