@@ -575,6 +575,16 @@ netlist-vhdl-%: | $(SYNTH_DIR)
 eqy-%: netlist-vhdl-%
 	$(FORMAL_ENV) $(OSS_CAD_SUITE)/eqy -f -d build/eqy/$* formal/eqy/$*.eqy
 
+# Gate-named per-module netlist for hand-built SBY miters: yosys renames
+# the module before write_vhdl, so entity <module>_gate can share the work
+# library with the RTL original. No text munging of generated files.
+# (Named netlist-gate-%, not netlist-vhdl-gate-%: this make is GNU 3.81,
+# where the first matching pattern rule wins and netlist-vhdl-% would
+# swallow the target with stem "gate-<module>".)
+netlist-gate-%: | $(SYNTH_DIR)
+	GHDL_PREFIX=$(HOME)/oss-cad-suite/lib/ghdl \
+	$(YOSYS) -m ghdl -p "ghdl $(GHDL_FLAGS) --workdir=$(SYNTH_DIR) $(SRC_DIR)/b8008_types.vhdl $(SRC_DIR)/$*.vhdl -e $*; synth -top $*; rename $* $*_gate; write_vhdl $(SYNTH_DIR)/$*_gate.vhdl"
+
 # Place and route with nextpnr
 pnr: $(CFG)
 
