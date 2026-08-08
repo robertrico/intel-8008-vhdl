@@ -16,9 +16,11 @@
 #     REG.H[5:0] for H:L cycles; PCC T2 drives the instruction register
 #     byte (whose top bits ARE the PCC code)
 #
-# Known residuals (documented, not asserted): FLG-13's flags-on-bus at
-# INP T4 is unimplemented in the RTL (condition_flags' bus path is
-# never enabled); BUS-09 bus-float is not modeled at this sim top; the
+#   - INP T4: the condition flip-flops on the bus, S->D0 Z->D1 P->D2
+#     C->D3 (DS72 p.37 "COND FF OUT" - FLG-13's bus half)
+#
+# Known residuals (documented, not asserted): BUS-09 bus-float is not
+# modeled at this sim top; the
 # T1I address emission (INT-02 double-address) is masked here because
 # the top-level jam mux drives the interrupt byte onto the bus for the
 # whole T1I cycle - covered behaviorally by check_jam_test.sh instead.
@@ -88,7 +90,7 @@ async def run_monitor(dut, rom_name, max_ms=40):
     await boot(dut)
 
     errors = []
-    checked = {"t1": 0, "t2": 0, "codes": 0}
+    checked = {"t1": 0, "t2": 0, "codes": 0, "flags": 0}
     prev_key = None
     settle = 0   # clks remaining until the current window's check fires
 
@@ -116,7 +118,7 @@ async def run_monitor(dut, rom_name, max_ms=40):
             # into the state) and the address-latch capture, well before
             # any second-half increment. T1I is skipped (jam mux masks
             # bus - see header).
-            settle = 60 if (half == 0 and name in ("T1", "T2")) else 0
+            settle = 60 if (half == 0 and name in ("T1", "T2", "T4")) else 0
             await NextTimeStep()
             continue
         if settle == 0:
@@ -199,6 +201,21 @@ async def run_monitor(dut, rom_name, max_ms=40):
                     errors.append(f"T2 cyc{cyc} IR={ir:02X}: D[5:0]="
                                   f"{data & 0x3F:02X} want PC high={want_h:02X}")
             checked["t2"] += 1
+
+        elif name == "T4":
+            if cyc < len(types) and types[cyc] == PCC and g["instr_writes_reg"]:
+                # INP T4: condition flip-flops out (DS72 p.37 order)
+                want = ((int(dut.debug_flag_carry.value) << 3)
+                        | (int(dut.debug_flag_parity.value) << 2)
+                        | (int(dut.debug_flag_zero.value) << 1)
+                        | int(dut.debug_flag_sign.value))
+                if data != want:
+                    errors.append(f"INP T4 flags: D={data:02X} want {want:02X} "
+                                  f"(C={int(dut.debug_flag_carry.value)}"
+                                  f"Z={int(dut.debug_flag_zero.value)}"
+                                  f"S={int(dut.debug_flag_sign.value)}"
+                                  f"P={int(dut.debug_flag_parity.value)})")
+                checked["flags"] += 1
 
         await NextTimeStep()
 

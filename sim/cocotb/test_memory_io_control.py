@@ -272,6 +272,11 @@ def check_expectations(o, g, c, st, half, ctype, dcyc, taken):
         elif ctype == PCC:
             assert o["io_buffer_enable"], f"{where}: PCC must enable I/O buffer"
 
+    # --- INP T4: flags driven out (buffer open, outward)
+    if st == T4 and c == dcyc and g["instr_is_io"] and g["instr_writes_reg"]:
+        assert o["io_buffer_enable"] and o["io_buffer_direction"] == 1, (
+            f"{where}: INP T4 must open the buffer outward (COND FF OUT)")
+
     # --- stack pointer motion
     want_push = 1 if (
         (g["instr_is_rst"] and c == 0 and st == T4 and half == 0)

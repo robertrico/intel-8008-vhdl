@@ -125,7 +125,7 @@ Spec ambiguities were SPEC-QUESTION rows (§ SQ); all 15 are RATIFIED as of 2026
 | FLG-10 | DS72 p.36; UM p.45 | Rotates change only C | — | directed | `check_rotate_flags_test.sh` (rotates update Carry ONLY); `condition_flags.sby` carry_only property | COVERED-FORMAL |
 | FLG-11 | UM p.44, p.59 | CMP: flags from A−op, A unchanged, C=1 iff A<op | polarity | exhaustive + directed | `alu_exhaustive_tb` (CMP in sweep); `alu_tb` borrow-polarity suite (A>/=/<B) | COVERED-EXHAUSTIVE |
 | FLG-12 | UM p.9 n.5 | C4C3: 00=C 01=Z 10=S 11=P, both senses | 8 combos | formal + directed | `condition_flags.sby` condition_met eval; `condition_flags_tb` (5 of 8 combos); system tests hit all 4 flags × both senses across check_conditional_call/sign_parity/rotate_carry scripts | COVERED-FORMAL |
-| FLG-13 | UM p.46 | INP drives S→D0, Z→D1, P→D2, C→D3 on bus at PCC T4 | — | formal (packing only) | `condition_flags.sby` bus packing `0000&P&S&Z&C` | COVERED-FORMAL ⚠ that the packed byte actually appears on the external bus at INP T4 unchecked; flag-preservation across INP is SQ-05 |
+| FLG-13 | UM p.46 | INP drives S→D0, Z→D1, P→D2, C→D3 on bus at PCC T4 | — | formal + monitor | `condition_flags.sby` packing proven in datasheet order (`0000&C&P&Z&S`); feature implemented (register_alu_control asserts output_flags at INP T4, memory_io_control opens the buffer outward); `test_b8008_top.py` asserts the byte on the external bus, mutation-tested | COVERED-DIRECTED ⚠ io_test's flag states at the INP samples are all-zero - richer vectors would strengthen it |
 
 ### J. Instruction semantics
 

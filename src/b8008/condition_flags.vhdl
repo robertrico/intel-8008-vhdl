@@ -123,13 +123,10 @@ begin
     flag_sign   <= sign_ff;
     flag_parity <= parity_ff;
 
-    -- Drive internal bus with flags when output_flags is enabled.
-    -- NOT dead code even though the core never asserts output_flags
-    -- today: the real 8008 outputs S,Z,P,C on D0-D3 at INP's T4
-    -- (DS72 p.37; VPLAN FLG-13 residual) - this is the path that
-    -- feature would use. Keep until FLG-13 is closed or waived.
-    -- Format: bit 0=carry, bit 1=zero, bit 2=sign, bit 3=parity, bits 7:4=0
-    internal_bus_out <= "0000" & parity_ff & sign_ff & zero_ff & carry_ff;
+    -- Drive internal bus with flags when output_flags is enabled
+    -- (register_alu_control asserts it at INP's PCC T4 - "COND FF OUT").
+    -- Datasheet bit order (DS72 p.37): S->D0, Z->D1, P->D2, C->D3
+    internal_bus_out <= "0000" & carry_ff & parity_ff & zero_ff & sign_ff;
     internal_bus_oe  <= output_flags;
 
     -- Condition evaluation (pure combinational)

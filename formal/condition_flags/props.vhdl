@@ -6,7 +6,8 @@
 --   P2  full update: phi2+update (carry_only=0) loads all four inputs
 --   P3  carry_only update: carry loads, Z/S/P hold
 --   P4  no update: all four hold
---   P5  bus format is "0000" & P & S & Z & C, oe mirrors output_flags
+--   P5  bus format is "0000" & C & P & Z & S (DS72 p.37 INP T4 order:
+--       S->D0 Z->D1 P->D2 C->D3), oe mirrors output_flags
 --   P6  condition_met truth table: 1 when unconditional; otherwise
 --       selected flag (cc: 00=C 01=Z 10=S 11=P) xnor'd with test sense
 ------------------------------------------------------------------
@@ -97,7 +98,7 @@ begin
         abort (reset = '1');
 
     -- P5: bus format and output enable
-    assert always (bus_out = ("0000" & fp & fs & fz & fc));
+    assert always (bus_out = ("0000" & fc & fp & fz & fs));
     assert always (bus_oe = output_flags);
 
     -- P6: condition evaluation truth table (combinational)

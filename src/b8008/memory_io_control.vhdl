@@ -546,8 +546,14 @@ begin
                 end if;
 
             elsif current_cycle = 1 then
-                -- Second cycle T4: Per isa.json, T4 = "X" (hold/no-op) for LrI, LrM, INP
-                -- Register write happens at T5, not T4!
+                -- Second cycle T4: per isa.json, T4 = "X" for LrI/LrM;
+                -- INP outputs the condition flip-flops here ("COND FF
+                -- OUT" - register_alu_control enables the flags onto
+                -- the internal bus; this opens the buffer outward)
+                if instr_is_io = '1' and instr_writes_reg = '1' then
+                    io_buffer_enable    <= '1';
+                    io_buffer_direction <= '1';  -- internal bus -> external
+                end if;
                 -- Only ALU immediate ops use T4 to read accumulator for ALU input
 
                 -- For ALU immediate operations (CPI, ADI, etc.), read accumulator to internal bus

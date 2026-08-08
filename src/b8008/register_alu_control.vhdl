@@ -192,9 +192,12 @@ begin
     -- Keep it on the bus for the entire T5 state so it's stable when register samples
     output_result <= state_is_t5 and instr_is_alu_op;
 
-    -- Flags never drive the internal bus in Intel 8008
-    -- Flags are tested internally by condition_flags module
-    -- They don't need to be read onto the bus
-    output_flags  <= '0';
+    -- INP drives the condition flip-flops onto the bus at T4 of the
+    -- PCC cycle (DS72 p.37: S->D0 Z->D1 P->D2 C->D3; isa.json INP
+    -- cycle-2 T4 = "COND FF OUT"). OUT has no T4, so is_io + writes_reg
+    -- (INP's signature) gates it.
+    output_flags  <= '1' when (state_is_t4 = '1' and current_cycle = 1 and
+                               instr_is_io = '1' and instr_writes_reg = '1')
+                     else '0';
 
 end architecture rtl;
