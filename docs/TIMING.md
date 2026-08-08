@@ -29,8 +29,8 @@ Beware quoting 218 MHz for the current design — that number predates the full 
 
 ## 3. Constraint gaps
 
-- `FREQUENCY PORT "clk" 100 MHz` exists only in b8008_monitor and b8008_basic LPFs; **no constraint anywhere on the 25 MHz PLL output** — nextpnr infers it from `FREQUENCY_PIN_CLKOP="25"` inside pll_25mhz.v. Fragile: a PLL swap silently unconstrains the system. Action: add explicit 25 MHz FREQUENCY/clock constraint per project.
-- `projects/b8008_monitor/reports/timing.txt` (the 41.61 MHz evidence) no longer exists — reports are not retained. Action: keep the latest timing report per project under version control or CI artifact so budget rows stay backed by evidence.
+- ~~No constraint on the 25 MHz PLL output~~ **CLOSED**: both b8008 project LPFs carry `FREQUENCY NET "clk_sys" 25 MHz;` explicitly; nextpnr logs "constraining clock net 'clk_sys' to 25.00 MHz" (verified, Fmax 95.00 MHz PASS).
+- ~~Timing reports not retained~~ **CLOSED**: `projects/*/reports/timing.txt` is exempted from .gitignore and committed, so budget rows stay backed by evidence.
 
 ## 4. Re-check rules
 

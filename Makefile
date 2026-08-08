@@ -112,7 +112,6 @@ help:
 	@echo "Module Tests:"
 	@echo "  make test-phase-clocks    - Test phase clocks with SYNC"
 	@echo "  make test-state-timing    - Test state timing generator"
-	@echo "  make test-machine-cycle   - Test machine cycle control"
 	@echo "  make test-instr-decoder   - Test instruction decoder"
 	@echo "  make test-reg-alu-control - Test register and ALU control"
 	@echo "  make test-temp-regs       - Test temporary registers"
@@ -391,7 +390,6 @@ UNIT_TESTS := \
 	test-int-button \
 	test-interrupt-ready \
 	test-io-buffer \
-	test-machine-cycle \
 	test-memory-io-control \
 	test-phase-clocks \
 	test-ram-sync \
@@ -405,17 +403,16 @@ UNIT_TESTS := \
 
 .PHONY: $(UNIT_TESTS)
 
-# All unit testbenches except test-machine-cycle (stale tb, red at HEAD:
-# unbound state_half/instr_is_mem_indirect ports; the module's contract
-# is covered by formal/machine_cycle_control instead). CI runs this.
+# All unit testbenches. (machine_cycle_control has no unit TB: the
+# stale one was retired; the module's contract is covered by
+# formal/machine_cycle_control, bmc+cover, mutation-tested.) CI runs this.
 .PHONY: test-units
-test-units: $(filter-out test-machine-cycle,$(UNIT_TESTS))
+test-units: $(UNIT_TESTS)
 
 # Testbench-name exceptions (target name abbreviates the module name)
 TB_test-instr-decoder   := instruction_decoder_tb
 TB_test-instr-reg       := instruction_register_tb
 TB_test-interrupt-ready := interrupt_ready_ff_tb
-TB_test-machine-cycle   := machine_cycle_control_tb
 TB_test-reg-alu-control := register_alu_control_tb
 TB_test-state-timing    := state_timing_generator_tb
 TB_test-temp-regs       := temp_registers_tb

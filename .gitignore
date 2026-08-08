@@ -10,7 +10,12 @@ TODO_*.txt
 # FPGA Build Artifacts
 build/
 work/
+# Build reports are transient EXCEPT the timing report: docs/TIMING.md
+# rows must stay backed by evidence (the 41.61 MHz report was lost).
 reports/
+!projects/*/reports/
+projects/*/reports/*
+!projects/*/reports/timing.txt
 
 # GHDL work files
 *.cf

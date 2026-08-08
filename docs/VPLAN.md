@@ -274,7 +274,7 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 16. ~~`run_all_tests.sh` trusts banner-grep over exit codes~~ **DONE** — exit code primary, banner cross-check, case-insensitive failure excerpt with tail fallback.
 17. ~~Assembly regression suite not in CI~~ **DONE** — regression job in verification.yml, matrix rtl|netlist; ASL built from pinned source (setup-asl action), .mem stays uncommitted (auto-assemble; cold-checkout verified 28/28).
 18. ~~`stack_memory` + `stack_memory_miter` not in CI sby matrix~~ **DONE** — both in the sby matrix; miter completes clean (bmc depth 15, CI job has a 60-min timeout override; induction unanchorable — 113 hidden gate bits).
-19. **Stale collateral:** `machine_cycle_control_tb` red at HEAD (excluded from test-units); ~~phase_clocks_tb stale component declaration~~ fixed; `docs/instruction_coverage.md` stale by its own header — mark superseded by this vplan.
+19. ~~Stale collateral~~ **DONE** — machine_cycle_control_tb retired (module covered by its mutation-tested formal suite); phase_clocks_tb declaration fixed; instruction_coverage.md marked superseded by this vplan.
 20. ~~CLK-02 clock-ratio conformance~~ **DONE** — ratio measurement in phase_clocks_tb, mutation-tested.
 
 ### Row-count summary

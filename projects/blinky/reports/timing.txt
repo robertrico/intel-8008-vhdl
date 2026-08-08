@@ -1,0 +1,272 @@
+Info: Critical path report for clock '$glbnet$phi2' (negedge -> posedge):
+Info:       type curr  total name
+Info:   clk-to-q  0.31  0.31 Source u_system.u_cpu.u_state_timing.n8218_o_TRELLIS_FF_DI_Q_TRELLIS_FF_Q_2.Q
+Info:    routing  0.57  0.88 Net n159_o_LUT4_Z_C[0] (88,12) -> (88,12)
+Info:                          Sink n159_o_LUT4_Z.B
+Info:                          Defined in:
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_map.v:108.23-108.24
+Info:      logic  0.14  1.02 Source n159_o_LUT4_Z.F
+Info:    routing  0.43  1.45 Net led[6]$TRELLIS_IO_OUT (88,12) -> (88,12)
+Info:                          Sink n159_o_LUT4_D.D
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32425.8-32425.13
+Info:      logic  0.14  1.59 Source n159_o_LUT4_D.F
+Info:    routing  0.64  2.23 Net n159_o_LUT4_D_Z[1] (88,12) -> (87,13)
+Info:                          Sink n48_o_LUT4_Z.C
+Info:                          Defined in:
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_map.v:108.23-108.24
+Info:      logic  0.14  2.37 Source n48_o_LUT4_Z.F
+Info:    routing  0.11  2.48 Net n48_o (87,13) -> (87,13)
+Info:                          Sink n48_o_TRELLIS_FF_DI.DI
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32428.8-32428.13
+Info:      setup  0.00  2.48 Source n48_o_TRELLIS_FF_DI.DI
+Info: 0.73 ns logic, 1.75 ns routing
+
+Info: Critical path report for clock '$glbnet$phi1' (posedge -> posedge):
+Info:       type curr  total name
+Info:   clk-to-q  0.31  0.31 Source n203_q_TRELLIS_FF_Q_16.Q
+Info:    routing  0.60  0.91 Net n203_q[0] (86,15) -> (86,14)
+Info:                          Sink n153_o_CCU2C_S1$CCU2_COMB0.B
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32411.14-32411.26
+Info:      logic  0.28  1.19 Source n153_o_CCU2C_S1$CCU2_COMB0.FCO
+Info:    routing  0.00  1.19 Net n153_o_CCU2C_S1$CCU2_FCI_INT (86,14) -> (86,14)
+Info:                          Sink n153_o_CCU2C_S1$CCU2_COMB1.FCI
+Info:      logic  0.00  1.19 Source n153_o_CCU2C_S1$CCU2_COMB1.FCO
+Info:    routing  0.00  1.19 Net n153_o_CCU2C_S1_COUT (86,14) -> (86,14)
+Info:                          Sink n153_o_CCU2C_S0_3$CCU2_COMB0.FCI
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32630.19-32630.56
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/arith_map.v:74.7-80.4
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_sim.v:82.9-82.13
+Info:      logic  0.04  1.23 Source n153_o_CCU2C_S0_3$CCU2_COMB0.FCO
+Info:    routing  0.00  1.23 Net n153_o_CCU2C_S0_3$CCU2_FCI_INT (86,14) -> (86,14)
+Info:                          Sink n153_o_CCU2C_S0_3$CCU2_COMB1.FCI
+Info:      logic  0.00  1.23 Source n153_o_CCU2C_S0_3$CCU2_COMB1.FCO
+Info:    routing  0.00  1.23 Net n153_o_CCU2C_S0_3_COUT (86,14) -> (86,14)
+Info:                          Sink n153_o_CCU2C_S0_2$CCU2_COMB0.FCI
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32630.19-32630.56
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/arith_map.v:74.7-80.4
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_sim.v:82.9-82.13
+Info:      logic  0.04  1.28 Source n153_o_CCU2C_S0_2$CCU2_COMB0.FCO
+Info:    routing  0.00  1.28 Net n153_o_CCU2C_S0_2$CCU2_FCI_INT (86,14) -> (86,14)
+Info:                          Sink n153_o_CCU2C_S0_2$CCU2_COMB1.FCI
+Info:      logic  0.00  1.28 Source n153_o_CCU2C_S0_2$CCU2_COMB1.FCO
+Info:    routing  0.00  1.28 Net n153_o_CCU2C_S0_2_COUT (86,14) -> (87,14)
+Info:                          Sink n153_o_CCU2C_S0_1$CCU2_COMB0.FCI
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32630.19-32630.56
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/arith_map.v:74.7-80.4
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_sim.v:82.9-82.13
+Info:      logic  0.04  1.32 Source n153_o_CCU2C_S0_1$CCU2_COMB0.FCO
+Info:    routing  0.00  1.32 Net n153_o_CCU2C_S0_1$CCU2_FCI_INT (87,14) -> (87,14)
+Info:                          Sink n153_o_CCU2C_S0_1$CCU2_COMB1.FCI
+Info:      logic  0.00  1.32 Source n153_o_CCU2C_S0_1$CCU2_COMB1.FCO
+Info:    routing  0.00  1.32 Net n153_o_CCU2C_S0_1_COUT (87,14) -> (87,14)
+Info:                          Sink n153_o_CCU2C_S0$CCU2_COMB0.FCI
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32630.19-32630.56
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/arith_map.v:74.7-80.4
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_sim.v:82.9-82.13
+Info:      logic  0.04  1.36 Source n153_o_CCU2C_S0$CCU2_COMB0.FCO
+Info:    routing  0.00  1.36 Net n153_o_CCU2C_S0$CCU2_FCI_INT (87,14) -> (87,14)
+Info:                          Sink n153_o_CCU2C_S0$CCU2_COMB1.FCI
+Info:      logic  0.00  1.36 Source n153_o_CCU2C_S0$CCU2_COMB1.FCO
+--
+Info: Critical path report for clock '$glbnet$clk$TRELLIS_IO_IN' (posedge -> posedge):
+Info:       type curr  total name
+Info:   clk-to-q  0.31  0.31 Source u_system.u_cpu.u_phase_clocks.n8042_o_TRELLIS_FF_DI_6.Q
+Info:    routing  0.74  1.05 Net u_system.u_cpu.u_phase_clocks.n8042_o_LUT4_Z_4_D[2] (43,7) -> (43,9)
+Info:                          Sink u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1$CCU2_COMB0.B
+Info:                          Defined in:
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_map.v:108.23-108.24
+Info:      logic  0.28  1.33 Source u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1$CCU2_COMB0.FCO
+Info:    routing  0.00  1.33 Net u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1$CCU2_FCI_INT (43,9) -> (43,9)
+Info:                          Sink u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1$CCU2_COMB1.FCI
+Info:      logic  0.00  1.33 Source u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1$CCU2_COMB1.FCO
+Info:    routing  0.00  1.33 Net u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1_COUT (43,9) -> (43,9)
+Info:                          Sink u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1_COUT_CCU2C_CIN$CCU2_COMB0.FCI
+Info:                          Defined in:
+Info:                               build/blinky_top.v:5136.20-5136.66
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/arith_map.v:74.7-80.4
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_sim.v:82.9-82.13
+Info:      logic  0.04  1.37 Source u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1_COUT_CCU2C_CIN$CCU2_COMB0.FCO
+Info:    routing  0.00  1.37 Net u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1_COUT_CCU2C_CIN$CCU2_FCI_INT (43,9) -> (43,9)
+Info:                          Sink u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1_COUT_CCU2C_CIN$CCU2_COMB1.FCI
+Info:      logic  0.00  1.37 Source u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1_COUT_CCU2C_CIN$CCU2_COMB1.FCO
+Info:    routing  0.00  1.37 Net u_system.u_cpu.u_phase_clocks.n8042_o_CCU2C_S1_COUT_CCU2C_CIN_COUT (43,9) -> (43,9)
+Info:                          Sink u_system.u_cpu.u_phase_clocks.n8042_o_LUT4_Z_1_B_CCU2C_S1$CCU2_COMB0.FCI
+Info:                          Defined in:
+Info:                               build/blinky_top.v:5136.20-5136.66
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/arith_map.v:74.7-80.4
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_sim.v:82.9-82.13
+Info:      logic  0.26  1.63 Source u_system.u_cpu.u_phase_clocks.n8042_o_LUT4_Z_1_B_CCU2C_S1$CCU2_COMB0.F
+Info:    routing  0.51  2.14 Net u_system.u_cpu.u_phase_clocks.n8042_o_LUT4_Z_1_B_CCU2C_S1_S0[2] (43,9) -> (42,8)
+Info:                          Sink u_system.u_cpu.u_phase_clocks.n8042_o_PFUMX_Z_BLUT_LUT4_Z.C
+Info:                          Defined in:
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_map.v:108.23-108.24
+Info:      logic  0.24  2.38 Source u_system.u_cpu.u_phase_clocks.n8042_o_PFUMX_Z_BLUT_LUT4_Z.OFX
+Info:    routing  0.25  2.62 Net u_system.u_cpu.u_phase_clocks.n8042_o[4] (42,8) -> (42,8)
+Info:                          Sink u_system.u_cpu.u_phase_clocks.n8042_o_TRELLIS_FF_DI_2.M
+Info:                          Defined in:
+Info:                               build/blinky_top.v:5088.13-5088.20
+Info:      setup  0.00  2.62 Source u_system.u_cpu.u_phase_clocks.n8042_o_TRELLIS_FF_DI_2.M
+Info: 1.13 ns logic, 1.50 ns routing
+
+Info: Critical path report for cross-domain path '<async>' -> 'posedge $glbnet$clk$TRELLIS_IO_IN':
+Info:       type curr  total name
+Info:     source  0.00  0.00 Source sw[0]$tr_io.O
+Info:    routing  2.49  2.49 Net n25_o (0,35) -> (36,12)
+Info:                          Sink n196_q_TRELLIS_FF_Q_1.M
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32396.17-32396.19
+Info:      setup  0.00  2.49 Source n196_q_TRELLIS_FF_Q_1.M
+Info: 0.00 ns logic, 2.49 ns routing
+
+Info: Critical path report for cross-domain path 'posedge $glbnet$clk$TRELLIS_IO_IN' -> '<async>':
+Info:       type curr  total name
+Info:   clk-to-q  0.31  0.31 Source n29_o_TRELLIS_FF_Q.Q
+Info:    routing  0.41  0.72 Net n196_q[2] (52,11) -> (52,11)
+Info:                          Sink n30_o_LUT4_Z.C
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32399.13-32399.23
+Info:      logic  0.14  0.86 Source n30_o_LUT4_Z.F
+Info:    routing  2.12  2.98 Net led[3]$TRELLIS_IO_OUT (52,11) -> (90,14)
+Info:                          Sink led[3]$tr_io.I
+Info:                          Defined in:
+Info:                               build/blinky_top.v:4771.11-4771.16
+Info: 0.45 ns logic, 2.54 ns routing
+
+Info: Critical path report for cross-domain path 'posedge $glbnet$clk$TRELLIS_IO_IN' -> 'posedge $glbnet$phi2':
+Info:       type curr  total name
+Info:   clk-to-q  0.31  0.31 Source n29_o_TRELLIS_FF_Q.Q
+Info:    routing  0.41  0.72 Net n196_q[2] (52,11) -> (52,11)
+Info:                          Sink n30_o_LUT4_Z.C
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32399.13-32399.23
+Info:      logic  0.14  0.86 Source n30_o_LUT4_Z.F
+Info:    routing  1.63  2.49 Net led[3]$TRELLIS_IO_OUT (52,11) -> (86,13)
+Info:                          Sink n36_o_LUT4_Z_D_TRELLIS_FF_Q.LSR
+Info:                          Defined in:
+Info:                               build/blinky_top.v:4771.11-4771.16
+Info:      setup  0.22  2.71 Source n36_o_LUT4_Z_D_TRELLIS_FF_Q.LSR
+Info: 0.68 ns logic, 2.04 ns routing
+
+Info: Critical path report for cross-domain path 'posedge $glbnet$clk$TRELLIS_IO_IN' -> 'negedge $glbnet$phi2':
+Info:       type curr  total name
+Info:   clk-to-q  0.31  0.31 Source n29_o_TRELLIS_FF_Q.Q
+Info:    routing  0.41  0.72 Net n196_q[2] (52,11) -> (52,11)
+Info:                          Sink n30_o_LUT4_Z.C
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32399.13-32399.23
+Info:      logic  0.14  0.86 Source n30_o_LUT4_Z.F
+Info:    routing  1.61  2.47 Net led[3]$TRELLIS_IO_OUT (52,11) -> (88,11)
+Info:                          Sink u_system.u_cpu.u_state_timing.n8218_o_TRELLIS_FF_DI.LSR
+Info:                          Defined in:
+Info:                               build/blinky_top.v:4771.11-4771.16
+Info:      setup  0.22  2.69 Source u_system.u_cpu.u_state_timing.n8218_o_TRELLIS_FF_DI.LSR
+Info: 0.68 ns logic, 2.02 ns routing
+
+Info: Critical path report for cross-domain path 'posedge $glbnet$phi1' -> '<async>':
+Info:       type curr  total name
+Info:   clk-to-q  0.31  0.31 Source n188_o_TRELLIS_FF_Q.Q
+Info:    routing  0.33  0.64 Net n188_o (88,14) -> (88,14)
+Info:                          Sink n189_o_LUT4_Z.D
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32411.14-32411.26
+Info:      logic  0.14  0.78 Source n189_o_LUT4_Z.F
+Info:    routing  0.40  1.18 Net led[2]$TRELLIS_IO_OUT (88,14) -> (90,14)
+Info:                          Sink led[2]$tr_io.I
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32491.14-32491.20
+Info: 0.45 ns logic, 0.73 ns routing
+
+Info: Critical path report for cross-domain path 'posedge $glbnet$phi2' -> '<async>':
+Info:       type curr  total name
+Info:   clk-to-q  0.31  0.31 Source u_system.u_cpu.u_interrupt_ready.n8242_o_TRELLIS_FF_DI.Q
+Info:    routing  0.89  1.20 Net u_system.u_cpu.u_state_timing.n8218_o_TRELLIS_FF_DI_Q[1] (88,13) -> (88,13)
+Info:                          Sink n191_o_LUT4_Z.D
+Info:                          Defined in:
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_map.v:108.23-108.24
+Info:      logic  0.14  1.34 Source n191_o_LUT4_Z.F
+Info:    routing  0.86  2.20 Net led[5]$TRELLIS_IO_OUT (88,13) -> (90,14)
+Info:                          Sink led[5]$tr_io.I
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32491.14-32491.20
+Info: 0.45 ns logic, 1.75 ns routing
+
+Info: Critical path report for cross-domain path 'negedge $glbnet$phi2' -> '<async>':
+Info:       type curr  total name
+Info:   clk-to-q  0.31  0.31 Source u_system.u_cpu.u_state_timing.n8218_o_TRELLIS_FF_DI_Q_TRELLIS_FF_Q_2.Q
+Info:    routing  0.57  0.88 Net n159_o_LUT4_Z_C[0] (88,12) -> (88,12)
+Info:                          Sink n159_o_LUT4_Z.B
+Info:                          Defined in:
+Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/ecp5/cells_map.v:108.23-108.24
+Info:      logic  0.14  1.02 Source n159_o_LUT4_Z.F
+Info:    routing  0.67  1.69 Net led[6]$TRELLIS_IO_OUT (88,12) -> (90,14)
+Info:                          Sink led[6]$tr_io.I
+Info:                          Defined in:
+Info:                               build/blinky_top.v:32425.8-32425.13
+Info: 0.45 ns logic, 1.24 ns routing
+
+Info: Max frequency for clock              '$glbnet$phi2': 201.61 MHz (PASS at 12.00 MHz)
+Info: Max frequency for clock              '$glbnet$phi1': 534.76 MHz (PASS at 12.00 MHz)
+Info: Max frequency for clock '$glbnet$clk$TRELLIS_IO_IN': 380.95 MHz (PASS at 12.00 MHz)
+
+Info: Max delay <async>                           -> posedge $glbnet$clk$TRELLIS_IO_IN: 2.49 ns
+Info: Max delay posedge $glbnet$clk$TRELLIS_IO_IN -> <async>                          : 2.98 ns
+Info: Max delay posedge $glbnet$clk$TRELLIS_IO_IN -> posedge $glbnet$phi2             : 2.71 ns
+Info: Max delay posedge $glbnet$clk$TRELLIS_IO_IN -> negedge $glbnet$phi2             : 2.69 ns
+Info: Max delay posedge $glbnet$phi1              -> <async>                          : 1.18 ns
+Info: Max delay posedge $glbnet$phi2              -> <async>                          : 2.20 ns
+Info: Max delay negedge $glbnet$phi2              -> <async>                          : 1.69 ns
+
+Info: Slack histogram:
+Info:  legend: * represents 1 endpoint(s)
+Info:          + represents [1,1) endpoint(s)
+Info: [ 39186,  41364) |****+
+Info: [ 41364,  43542) | 
+Info: [ 43542,  45720) | 
+Info: [ 45720,  47898) | 
+Info: [ 47898,  50076) | 
+Info: [ 50076,  52254) | 
+Info: [ 52254,  54432) | 
+Info: [ 54432,  56610) | 
+Info: [ 56610,  58788) | 
+Info: [ 58788,  60966) | 
+Info: [ 60966,  63144) | 
+Info: [ 63144,  65322) | 
+Info: [ 65322,  67500) | 
+Info: [ 67500,  69678) | 
+Info: [ 69678,  71856) | 
+Info: [ 71856,  74034) | 
+Info: [ 74034,  76212) | 
+Info: [ 76212,  78390) | 
+Info: [ 78390,  80568) | 
+Info: [ 80568,  82746) |************************************************************ 
+
+Info: Program finished normally.
+Info: Max frequency for clock              '$glbnet$phi2': 279.02 MHz (PASS at 12.00 MHz)
+Info: Max frequency for clock              '$glbnet$phi1': 630.91 MHz (PASS at 12.00 MHz)
+Info: Max frequency for clock '$glbnet$clk$TRELLIS_IO_IN': 349.41 MHz (PASS at 12.00 MHz)
+Info: Max delay <async>                           -> posedge $glbnet$clk$TRELLIS_IO_IN: 3.97 ns
+Info: Max delay posedge $glbnet$clk$TRELLIS_IO_IN -> <async>                          : 3.68 ns
+Info: Max delay posedge $glbnet$clk$TRELLIS_IO_IN -> posedge $glbnet$phi2             : 3.70 ns
+Info: Max delay posedge $glbnet$clk$TRELLIS_IO_IN -> negedge $glbnet$phi2             : 3.59 ns
+Info: Max delay posedge $glbnet$phi1              -> <async>                          : 1.30 ns
+Info: Max delay posedge $glbnet$phi2              -> <async>                          : 1.83 ns
+Info: Max delay negedge $glbnet$phi2              -> <async>                          : 1.51 ns
+Info: Slack histogram:
+Info: Max frequency for clock              '$glbnet$phi2': 201.61 MHz (PASS at 12.00 MHz)
+Info: Max frequency for clock              '$glbnet$phi1': 534.76 MHz (PASS at 12.00 MHz)
+Info: Max frequency for clock '$glbnet$clk$TRELLIS_IO_IN': 380.95 MHz (PASS at 12.00 MHz)
+Info: Max delay <async>                           -> posedge $glbnet$clk$TRELLIS_IO_IN: 2.49 ns
+Info: Max delay posedge $glbnet$clk$TRELLIS_IO_IN -> <async>                          : 2.98 ns
+Info: Max delay posedge $glbnet$clk$TRELLIS_IO_IN -> posedge $glbnet$phi2             : 2.71 ns
+Info: Max delay posedge $glbnet$clk$TRELLIS_IO_IN -> negedge $glbnet$phi2             : 2.69 ns
+Info: Max delay posedge $glbnet$phi1              -> <async>                          : 1.18 ns
+Info: Max delay posedge $glbnet$phi2              -> <async>                          : 2.20 ns
+Info: Max delay negedge $glbnet$phi2              -> <async>                          : 1.69 ns
+Info: Slack histogram:

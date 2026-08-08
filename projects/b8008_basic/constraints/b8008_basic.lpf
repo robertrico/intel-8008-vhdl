@@ -45,6 +45,12 @@ IOBUF PORT "clk" IO_TYPE=LVDS;
 # required to ship a clean build.
 FREQUENCY PORT "clk" 100 MHz;
 
+# Explicit constraint on the PLL output domain (clk_sys, 25 MHz).
+# Without this line the only 25 MHz constraint is the
+# FREQUENCY_PIN_CLKOP attribute inside pll_25mhz.v - a PLL swap would
+# silently unconstrain every flop in the system (docs/TIMING.md #3).
+FREQUENCY NET "clk_sys" 25 MHz;
+
 # ====================================================================================
 # UART Interface
 # ====================================================================================
