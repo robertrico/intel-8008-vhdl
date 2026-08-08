@@ -1,0 +1,23 @@
+[tasks]
+bmc
+prove
+
+[options]
+bmc: mode bmc
+bmc: depth 20
+prove: mode prove
+prove: depth 4
+
+[engines]
+smtbmc
+
+[script]
+plugin -i ghdl
+ghdl --std=08 b8008_types.vhdl stack_pointer.vhdl stack_pointer_gate.vhdl miter.vhdl -e stack_pointer_miter
+prep -top stack_pointer_miter
+
+[files]
+../../src/b8008/b8008_types.vhdl
+../../src/b8008/stack_pointer.vhdl
+../../build/synth/stack_pointer_gate.vhdl
+miter.vhdl
