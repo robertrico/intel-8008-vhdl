@@ -30,7 +30,9 @@ jobs:
   sby:
     name: sby ${{ matrix.module }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # stack_memory_miter overrides: its bmc runs ~13 min on a fast
+    # laptop, the hosted runner needs more headroom.
+    timeout-minutes: ${{ matrix.timeout || 30 }}
     strategy:
       fail-fast: false
       matrix:
@@ -40,6 +42,7 @@ jobs:
           - module: machine_cycle_control
           - module: condition_flags
           - module: register_file
+          - module: stack_memory
           # Miter proves RTL == gate netlist; needs the gate-renamed
           # write_vhdl netlist in build/synth first.
           - module: stack_pointer_miter
@@ -48,6 +51,9 @@ jobs:
             prep: netlist-gate-alu
           - module: register_file_miter
             prep: netlist-gate-register_file
+          - module: stack_memory_miter
+            prep: netlist-gate-stack_memory
+            timeout: 60
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-oss-cad-suite
