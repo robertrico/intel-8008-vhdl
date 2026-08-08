@@ -1,0 +1,19 @@
+# EQY equivalence: ahl_pointer RTL vs its write_vhdl round trip.
+# Combinational module: no state to match, EQY is sound here.
+
+[gold]
+plugin -i ghdl
+ghdl --std=08 src/b8008/b8008_types.vhdl src/b8008/ahl_pointer.vhdl -e ahl_pointer
+synth -top ahl_pointer
+
+[gate]
+plugin -i ghdl
+ghdl --std=08 build/synth/ahl_pointer_netlist.vhdl -e ahl_pointer
+prep -top ahl_pointer
+
+[strategy sat]
+use sat
+depth 5
+
+[collect ahl_pointer]
+group *

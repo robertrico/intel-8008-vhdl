@@ -1,0 +1,23 @@
+[tasks]
+bmc
+prove
+
+[options]
+bmc: mode bmc
+bmc: depth 20
+prove: mode prove
+prove: depth 4
+
+[engines]
+smtbmc
+
+[script]
+plugin -i ghdl
+ghdl --std=08 b8008_types.vhdl interrupt_ready_ff.vhdl interrupt_ready_ff_gate.vhdl miter.vhdl -e interrupt_ready_ff_miter
+prep -top interrupt_ready_ff_miter
+
+[files]
+../../src/b8008/b8008_types.vhdl
+../../src/b8008/interrupt_ready_ff.vhdl
+../../build/synth/interrupt_ready_ff_gate.vhdl
+miter.vhdl

@@ -43,6 +43,10 @@ jobs:
           - module: condition_flags
           - module: register_file
           - module: stack_memory
+          - module: instruction_register
+          - module: temp_registers
+          - module: interrupt_ready_ff
+          - module: ahl_pointer
           # Miter proves RTL == gate netlist; needs the gate-renamed
           # write_vhdl netlist in build/synth first.
           - module: stack_pointer_miter
@@ -54,6 +58,12 @@ jobs:
           - module: stack_memory_miter
             prep: netlist-gate-stack_memory
             timeout: 60
+          - module: instruction_register_miter
+            prep: netlist-gate-instruction_register
+          - module: temp_registers_miter
+            prep: netlist-gate-temp_registers
+          - module: interrupt_ready_ff_miter
+            prep: netlist-gate-interrupt_ready_ff
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-oss-cad-suite
@@ -82,7 +92,9 @@ jobs:
         # splitting, which breaks EQY state matching and yields spurious
         # partition FAILs (verified 2026-08-07, splitnets does not help);
         # those are proven by the SBY miter in the sby job instead.
-        module: [carry_lookahead, sss_ddd_selector, scratchpad_decoder, instruction_decoder]
+        module: [carry_lookahead, sss_ddd_selector, scratchpad_decoder,
+                 instruction_decoder, ahl_pointer, io_buffer, mem_mux_refresh,
+                 scratchpad_addr_mux, stack_addr_mux]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-oss-cad-suite

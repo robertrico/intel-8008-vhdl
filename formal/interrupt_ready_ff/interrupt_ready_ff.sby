@@ -1,0 +1,25 @@
+[tasks]
+bmc
+prove
+cover
+
+[options]
+bmc: mode bmc
+bmc: depth 30
+prove: mode prove
+prove: depth 4
+cover: mode cover
+cover: depth 20
+
+[engines]
+smtbmc
+
+[script]
+plugin -i ghdl
+ghdl --std=08 b8008_types.vhdl interrupt_ready_ff.vhdl props.vhdl -e interrupt_ready_ff_props
+prep -top interrupt_ready_ff_props
+
+[files]
+../../src/b8008/b8008_types.vhdl
+../../src/b8008/interrupt_ready_ff.vhdl
+props.vhdl

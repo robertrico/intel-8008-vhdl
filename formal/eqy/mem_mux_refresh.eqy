@@ -1,0 +1,19 @@
+# EQY equivalence: mem_mux_refresh RTL vs its write_vhdl round trip.
+# Combinational module: no state to match, EQY is sound here.
+
+[gold]
+plugin -i ghdl
+ghdl --std=08 src/b8008/b8008_types.vhdl src/b8008/mem_mux_refresh.vhdl -e mem_mux_refresh
+synth -top mem_mux_refresh
+
+[gate]
+plugin -i ghdl
+ghdl --std=08 build/synth/mem_mux_refresh_netlist.vhdl -e mem_mux_refresh
+prep -top mem_mux_refresh
+
+[strategy sat]
+use sat
+depth 5
+
+[collect mem_mux_refresh]
+group *
