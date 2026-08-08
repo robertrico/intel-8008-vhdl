@@ -16,7 +16,13 @@ use work.b8008_types.all;
 
 entity b8008_top_tb is
     generic (
-        ROM_FILE : string := "test_programs/alu_test_as.mem"
+        ROM_FILE : string := "test_programs/alu_test_as.mem";
+        -- READY/WAIT stress mode: repeatedly deassert READY with varied
+        -- spacing and duration across the whole run (statistically covers
+        -- every machine-cycle type), plus one long park. Architectural
+        -- state must be unaffected: the check script diffs checkpoint
+        -- lines against a free run.
+        READY_STRESS : boolean := false
     );
 end entity b8008_top_tb;
 
@@ -241,6 +247,8 @@ begin
     -- ========================================================================
 
     stimulus : process
+        -- READY stress bookkeeping: remaining 100ns ticks of the active drop
+        variable drop_remaining : natural := 0;
     begin
         report "========================================";
         report "B8008 TOP-LEVEL SYSTEM TEST";
@@ -280,21 +288,51 @@ begin
         for i in 1 to 200000 loop
             wait for 100 ns;
 
-            -- READY/WAIT exercise: drop ready mid-run for 10 us. The CPU
-            -- must park in WAIT (status 000) and the program must still
-            -- finish with correct results (verification scripts check).
-            if i = 5000 then
-                ready_in <= '0';
-                report "READY dropped - CPU should park in WAIT";
-            elsif i = 5500 then
-                assert saw_wait_status
-                    report "ERROR: never saw WAIT status (000) while READY low"
-                    severity error;
-                ready_in <= '1';
-                report "READY restored - CPU should resume";
-            elsif i > 5000 and i < 5500 then
+            if not READY_STRESS then
+                -- READY/WAIT exercise: drop ready mid-run for 10 us. The
+                -- CPU must park in WAIT (status 000) and the program must
+                -- still finish correctly (verification scripts check).
+                if i = 5000 then
+                    ready_in <= '0';
+                    report "READY dropped - CPU should park in WAIT";
+                elsif i = 5500 then
+                    assert saw_wait_status
+                        report "ERROR: never saw WAIT status (000) while READY low"
+                        severity error;
+                    ready_in <= '1';
+                    report "READY restored - CPU should resume";
+                elsif i > 5000 and i < 5500 then
+                    if s2_out = '0' and s1_out = '0' and s0_out = '0' then
+                        saw_wait_status <= true;
+                    end if;
+                end if;
+            else
+                -- Stress mode: hundreds of READY drops with varied
+                -- duration (500 ns .. 2.5 us) and 13.7 us spacing, so
+                -- WAIT states land in every machine-cycle type many
+                -- times over the program, plus one long park.
                 if s2_out = '0' and s1_out = '0' and s0_out = '0' then
                     saw_wait_status <= true;
+                end if;
+                if i = 3000 then
+                    ready_in <= '0';
+                    report "READY stress: long park begins";
+                elsif i = 4000 then
+                    assert saw_wait_status
+                        report "ERROR: never saw WAIT status (000) during long park"
+                        severity error;
+                    ready_in <= '1';
+                    report "READY stress: long park ends";
+                elsif i < 3000 or i > 4000 then
+                    if drop_remaining > 0 then
+                        drop_remaining := drop_remaining - 1;
+                        if drop_remaining = 0 then
+                            ready_in <= '1';
+                        end if;
+                    elsif i mod 137 = 0 then
+                        drop_remaining := (i / 137) mod 21 + 5;  -- 5..25 ticks
+                        ready_in <= '0';
+                    end if;
                 end if;
             end if;
 

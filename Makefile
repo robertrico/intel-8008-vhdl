@@ -67,6 +67,10 @@ B8008_SRCS = \
 # Propagates from the environment, so verification scripts work unchanged:
 #   B8008_CORE=netlist ./test_programs/verification_scripts/run_all_tests.sh
 B8008_CORE ?= rtl
+
+# READY/WAIT stress mode for test-b8008-top (b8008_top_tb generic):
+# repeated READY drops + one long park; used by check_ready_wait_test.sh.
+READY_STRESS ?= false
 ifeq ($(B8008_CORE),netlist)
 # b8008_types must be analyzed explicitly: b8008_top's use clause needs it,
 # and the netlist branch doesn't pull in B8008_SRCS (a warm build/ dir from
@@ -184,7 +188,7 @@ test-b8008-top: $(BUILD_DIR) $(ROM_FILE)
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_8kx8.vhdl
 	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_top_tb.vhdl
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb -gROM_FILE=$(ROM_FILE) --stop-time=$(SIM_TIME)
+	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_tb -gROM_FILE=$(ROM_FILE) -gREADY_STRESS=$(READY_STRESS) --stop-time=$(SIM_TIME)
 
 # ============================================================================
 # EXTERNAL_RAM EQUIVALENCE TEST
