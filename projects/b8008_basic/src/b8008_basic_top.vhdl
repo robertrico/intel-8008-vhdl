@@ -131,6 +131,17 @@ architecture rtl of b8008_basic_top is
             run_enable  : in std_logic;
             interrupt   : in std_logic;
             int_vector  : in std_logic_vector(2 downto 0);
+            -- Testbench-only jam override and external-RAM bus: unused
+            -- by this board, declared to match the entity so default
+            -- binding stays warning-free (drift here = GHDL noise on
+            -- every build).
+            int_jam_byte : in std_logic_vector(7 downto 0) := (others => '0');
+            int_jam_en   : in std_logic := '0';
+            ram_ext_addr  : out std_logic_vector(13 downto 0);
+            ram_ext_wdata : out std_logic_vector(7 downto 0);
+            ram_ext_rdata : in  std_logic_vector(7 downto 0) := x"00";
+            ram_ext_rw_n  : out std_logic;
+            ram_ext_cs_n  : out std_logic;
             ready_in    : in std_logic := '1';
             phi1_out    : out std_logic;
             phi2_out    : out std_logic;
