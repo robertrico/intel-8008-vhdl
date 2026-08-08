@@ -43,17 +43,25 @@ No other state is architecturally visible. Temp registers a/b and the machine-cy
 - Analog/DC electrical characteristics; absolute microsecond timing (sim runs scaled clocks; ratios and non-overlap are kept — CLK-01/02).
 - 8008-1 speed grade distinction.
 
-## 6. Open decisions (blocking full ratification)
+## 6. Ratified decisions (2026-08-08)
 
-The 15 SPEC-QUESTIONs in `docs/VPLAN.md` §SPEC-QUESTIONS. Load-bearing subset:
+Ruling principle: most accurate to the Intel documentation, and the 8008
+stays working. All 15 SPEC-QUESTIONs are decided:
 
-| SQ | Decision needed | Default proposed |
-|----|-----------------|------------------|
-| SQ-15 | Model the 8008 power-on protocol (HLT forced into IR, 16-clock clear, INT to start) or accept explicit reset as a divergence? | accept explicit reset; document divergence here in §5 |
-| SQ-04 | Which T-state architecturally updates A during INP (T3 text vs T5 table)? | T5 (micro-op table), matching temp-reg b path |
-| SQ-05 | Does INP modify flags? | no — flags only driven onto bus at T4 |
-| SQ-07 | Page-cross: is same-cycle T2 high-byte pre-carry (visible artifact) or post-carry? | needs waveform-level ruling before bus monitor is written |
-| SQ-06 | Stack overflow "lowest level register" = oldest (relative) or slot 0 (absolute)? | oldest (current stackwrap_test reading) |
-| SQ-12 | Decode of 00 111 000 / 00 111 001 (would-be INR/DCR M)? | document actual decoder behavior as the defined alias |
-
-Answering an SQ = editing this file + flipping the VPLAN row from SPEC-QUESTION to decided; the diff is the ratification record.
+| SQ | Ruling |
+|----|--------|
+| SQ-01 | isa.json fixed: JFc `010CC000` / JTc `011CC000` per DS72 p.36 (D5 = true/false sense bit; the C/R families already carried it) |
+| SQ-02 | isa.json gains `num_states_not_taken` (9 for J/C conditionals, 3 for R) per DS72 p.45 "(9 or 11)" / "(3 or 5)"; `check_cycle_count_test.sh` now sources the pair from the oracle instead of hardcoding it |
+| SQ-03 | HLT "4 states" = 3 driven states + STOPPED entry; the CPU "internally remains in T3" (DS72 p.41 n.18) — no externally observable 4th state exists |
+| SQ-04 | A commits at T5 per the micro-op table (T3→Reg.b, T5→A). The p.37 prose "loaded at T3" describes bus-data arrival; the table is the cycle-accurate normative layer |
+| SQ-05 | INP does not modify flags — DS72 p.37 only *outputs* S,Z,P,C on D0-D3 at T4 |
+| SQ-06 | Stack overflow destroys the oldest return context, SP-relative (stackwrap_test and rst_wrap_test landing predictions confirm) |
+| SQ-07 | Page-cross T2 high byte is pre-carry: it is the CURRENT fetch's page; the pending carry belongs to the next address and lands at T2 second half (DS72 order: address out, then increment). No wrong-page artifact exists |
+| SQ-08 | WAIT/STOPPED persist in whole T-state (2-clock) units per visit |
+| SQ-09 | Late READY deassert (after the φ22 sample) is an environment setup constraint; the CPU acts on the sampled value, late changes take effect at the next sample |
+| SQ-10 | Logicals clear carry in ALL forms (r/M/I) — DS72 p.34's Accumulator Group header governs the whole group; exhaustively verified for r-form by alu_exhaustive_tb |
+| SQ-11 | Multi-cycle jam: only cycle 1 is T1I, remaining cycles are normal (verified by check_jam_test.sh) |
+| SQ-12 | 0x38/0x39 (would-be INR/DCR M) are excluded from every DS72 definition; the only derivable constraint is "memory may not be written". b8008's implementation-defined behavior, characterized and pinned by `check_undef_opcode_test.sh`: one PCI cycle, no memory write, no register write, flags update as INR/DCR of a dummy zero operand (0x38 → Z=0 S=0 P=0; 0x39 → Z=0 S=1 P=1), carry preserved |
+| SQ-13 | DS72 p.37 prints the restart mnemonic as "RET 00 AAA 101" — typo for RES/RST; citation note only |
+| SQ-14 | isa.json CAL/CFc/CTc cycle-3 T4 now carries the PUSH annotation (UM p.49 n.12) |
+| SQ-15 | Dissolved: the architectural power-on contract (power up STOPPED, execute nothing until INT, machine-chosen jam byte starts execution) is already met by reset→STOPPED→bootstrap-jam; Intel's internal HLT-in-IR/16-clock mechanism is unobservable and not reproduced |

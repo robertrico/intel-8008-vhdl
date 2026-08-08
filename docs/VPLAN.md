@@ -10,7 +10,7 @@
 - `GAP` — no failing check exists
 - A ⚠ note marks residual holes inside a COVERED row; residuals feed the gap report.
 
-Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ SQ) awaiting user decision.
+Spec ambiguities were SPEC-QUESTION rows (§ SQ); all 15 are RATIFIED as of 2026-08-08 — rulings live in `docs/SPEC.md` §6, the table below is kept as the question record.
 
 ---
 
@@ -40,7 +40,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | ST-09 | DS72 p.5 Fig2; UM p.10 | Instr end → T1, or T1I iff INT pending; interrupt never recognized mid-instruction (incl. between cycles of one instr) | INT at boundary vs mid | formal (module) + directed | `state_timing_generator.sby` "T5 boundary-only interrupt"; `state_timing_generator_tb` mid-instruction counter-case; `check_interrupt_test.sh` loop-integrity C=0x30 | COVERED-FORMAL ⚠ core-level composition unproven (module assume chain) |
 | ST-10 | DS72 p.39 Fig16; UM p.50 Fig20 | Cycle-exit map (which cycles end after T3/T4/T5, per class incl. failed-condition exits) | each arc | directed | `check_cycle_count_test.sh` per-class T-state diff vs isa.json; `formal/machine_cycle_control.sby` next-cycle contract (BMC-50) | COVERED-DIRECTED |
 | ST-11 | DS72 p.45; UM p.59; ISA | Min state counts: MOVrr 5, MOVrM 8, MOVMr 7, MVIr 8, MVIM 9, INR/DCR 5, ALUr 5, ALUM/ALUI 8, rot 5, JMP 11, Jcond 9/11, CAL 11, Ccond 9/11, RET 5, Rcond 3/5, RST 5, INP 8, OUT 6, HLT 4 | READY high | directed | `check_cycle_count_test.sh` — Python parser diffs measured T-states vs isa.json per class | COVERED-DIRECTED ⚠ conditionals accepted as {9,11}/{3,5} *sets* — script does not correlate which count paired with taken vs not-taken |
-| ST-12 | DS72 p.5; UM p.5 | WAIT/STOPPED persistence = even number of clock periods ("2n") | — | — | none | GAP (also SQ-08) |
+| ST-12 | DS72 p.5; UM p.5 | WAIT/STOPPED persistence = even number of clock periods ("2n") | — | by construction | SQ-08 ratified: whole-T-state quantization per visit; the state machine holds parked states in 2-clock units structurally (`state_timing_generator.sby` state_half assertion) | COVERED-FORMAL |
 
 ### C. Bus & cycle codes
 
@@ -66,7 +66,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | RDY-02 | DS72 p.5 Fig2 | Not-ready at T2 of any cycle type → WAIT; post-resume arch state identical to no-wait run | ×{PCI, PCR-imm, PCR-H:L, PCW, PCC-INP, PCC-OUT} | formal (module) + directed (system) | `state_timing_generator.sby` park+resume; `check_ready_wait_test.sh` — hundreds of varied READY drops + long park over memory_alu_test (all cycle types), checkpoints diffed against the free run | COVERED-DIRECTED |
 | RDY-03 | DS72 p.12 §V.B | READY pulsing single-steps one machine cycle per pulse | multi-cycle program | — | none (`debug_clock_control_tb` steps clocks, not READY) | GAP |
 | RDY-04 | UM p.49 n.17 | OUT PCC cycle requires READY; READY=0 → OUT stalls | OUT | — | none | GAP |
-| RDY-05 | DS72 p.16 tRW | READY sampled at φ22 of T2/WAIT | stimulus constraint | — | none; late-deassert window is SQ-09 | GAP (low value until SQ-09 resolved) |
+| RDY-05 | DS72 p.16 tRW | READY sampled at φ22 of T2/WAIT | stimulus constraint | — | SQ-09 ratified: environment setup constraint, not CPU behavior; late deassert takes effect at the next sample (board 2-FF-syncs READY) | CLOSED-AS-CONSTRAINT |
 
 ### E. Interrupt
 
@@ -85,7 +85,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 
 | ID | Spec cite | Assertion | Conditions | Check type | Check artifact | Status |
 |----|-----------|-----------|------------|------------|----------------|--------|
-| PWR-01 | UM p.11 §V.A.2 | Power-on forces HLT into IR; STOPPED without executing memory | — | — | none (b8008 uses explicit reset; fidelity to 8008 power-on sequence undecided) | GAP — needs scope decision (see SQ-15) |
+| PWR-01 | UM p.11 §V.A.2 | Power-on: STOPPED, nothing executes until INT | — | by design + directed | SQ-15 ratified: architectural contract met (reset→STOPPED→bootstrap jam; any jam byte works per check_jam_test.sh); internal HLT-in-IR mechanism unobservable, not reproduced | COVERED-DIRECTED |
 | PWR-02 | UM p.11 | 16 clocks after STOPPED entry: A, scratchpad, PC, stack = 0 | — | formal (partial) | reset-clears-state assertions exist per module (`register_file.sby`, `condition_flags.sby`, `stack_pointer.sby` P1) | COVERED-FORMAL ⚠ covers reset-clears, not the 16-clock power-on protocol itself |
 | PWR-03 | UM p.11-12 Ex.1 | INT exits power-on STOPPED via T1I; first fetch addr 0; addr 0 emitted twice (no advance) | — | incidental | interrupt_test RST0 bootstrap starts CPU this way | COVERED-INCIDENTAL ⚠ double-emission of addr 0 never asserted |
 
@@ -155,7 +155,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 |----|-----------|-----------|------------|------------|----------------|--------|
 | DC-01/02/03 | UM p.45-46 | JMP/CAL XXX aliases (8 each), RET XXX aliases (8), B3 D7:D6 don't-care (4) — identical behavior | all aliases | exhaustive (decode) | `sim/cocotb/test_instruction_decoder.py` — 256 opcodes vs independent Python golden model, 24 outputs each | COVERED-EXHAUSTIVE ⚠ decode-level; no execution-level alias test (accepted: decode equality implies execution equality given control path is decode-driven) |
 | DC-04 | UM p.43, p.46 | 0x00/0x01 = HLT (not INR/DCR A); 0xFF = HLT (not MOV M,M) | 3 opcodes | exhaustive + directed | decoder sweep; `check_hlt_01_test.sh`/`check_hlt_ff_test.sh` (weak, see I-HLT-01) | COVERED-EXHAUSTIVE (decode) ⚠ execution weak |
-| DC-05 | DS72 p.2-3 | All 256 opcodes decode defined/aliased; none wedge the FSM | full space | exhaustive | decoder sweep with KNOWN_QUIRKS waiver (issue #4 spurious mem_indirect on CPr 0xB8-0xBE, 0xFF — verified benign, staleness-guarded) | COVERED-EXHAUSTIVE ⚠ waived quirk is a live RTL deviation; INM/DCM slots are SQ-12 |
+| DC-05 | DS72 p.2-3 | All 256 opcodes decode defined/aliased; none wedge the FSM | full space | exhaustive | decoder sweep with KNOWN_QUIRKS waiver (issue #4 spurious mem_indirect on CPr 0xB8-0xBE, 0xFF — verified benign, staleness-guarded) | COVERED-EXHAUSTIVE ⚠ waived quirk is a live RTL deviation (issue #4); INM/DCM slots characterized + pinned by `check_undef_opcode_test.sh` (SQ-12 ratified) |
 | DC-06 | DS72 p.43; UM p.51 | Worked-example program encodings assemble & run per manual listing | integration | directed | `check_search_test.sh` (Intel manual character-search program) | COVERED-DIRECTED |
 
 ### L. Cross-products (Phase 2)
@@ -222,7 +222,7 @@ Sources: git history, `docs/LEGACY.md`, `docs/INTERRUPTS.md`, `docs/bug-report-y
 
 ---
 
-## SPEC-QUESTIONS (unresolved — user decision needed)
+## SPEC-QUESTIONS (ALL RATIFIED — see SPEC.md §6 for rulings)
 
 | ID | Question | Sources |
 |----|----------|---------|

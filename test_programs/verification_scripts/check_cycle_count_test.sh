@@ -34,6 +34,12 @@ import json, re, sys
 log_path, isa_path = sys.argv[1], sys.argv[2]
 isa = json.load(open(isa_path))
 states_of = {i['operation']: i['num_states_execution'] for i in isa['instructions']}
+# Conditionals: taken/not-taken pair comes from the oracle (SQ-02:
+# num_states_not_taken was added to isa.json from DS72 p.45)
+nt_of = {i['operation']: i['num_states_not_taken']
+         for i in isa['instructions'] if 'num_states_not_taken' in i}
+def cond_set(*ops):
+    return {states_of[o] for o in ops} | {nt_of[o] for o in ops}
 
 def classify(op):
     """opcode byte -> (isa operation name, expected set)"""
@@ -56,13 +62,13 @@ def classify(op):
         if lo3 == 1:  return 'DCr', {states_of['DCr']}
         if lo3 == 2:  return {0:'RLC',1:'RRC',2:'RAL',3:'RAR'}[mid], {5}
         if lo3 == 7:  return 'RET', {states_of['RET']}
-        if lo3 == 3:  return 'RFc/RTc', {3, 5}
+        if lo3 == 3:  return 'RFc/RTc', cond_set('RFc', 'RTc')
         if lo3 == 5:  return 'RST', {states_of['RST']}
     if hi2 == 1:
         if lo3 == 4:  return 'JMP', {states_of['JMP']}
-        if lo3 == 0:  return 'JFc/JTc', {9, 11}
+        if lo3 == 0:  return 'JFc/JTc', cond_set('JFc', 'JTc')
         if lo3 == 6:  return 'CAL', {states_of['CAL']}
-        if lo3 == 2:  return 'CFc/CTc', {9, 11}
+        if lo3 == 2:  return 'CFc/CTc', cond_set('CFc', 'CTc')
         if lo3 & 1:
             port = (op >> 1) & 0x1F
             return ('INP', {states_of['INP']}) if port < 8 else ('OUT', {states_of['OUT']})
