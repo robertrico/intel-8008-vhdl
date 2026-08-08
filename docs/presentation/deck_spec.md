@@ -323,7 +323,6 @@ official 2020-palette value (Pantone 660C).
 >
 > - I had to learn the 8008 cold: T-states, machine cycles, every ISA quirk
 > - Built `isa.json` — a line-by-line mapping of **every opcode to its documented T-state sequence** — as ground truth
-> - Wrote a Python "oracle" emulator to cross-check behavior before touching hardware
 > - 28-test regression suite; cycle counts diffed against the datasheet automatically
 >
 > **The AI multiplied effort. The verification was the job.**
