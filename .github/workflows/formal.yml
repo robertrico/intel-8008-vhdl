@@ -56,7 +56,7 @@ jobs:
         # splitting, which breaks EQY state matching and yields spurious
         # partition FAILs (verified 2026-08-07, splitnets does not help);
         # those are proven by the SBY miter in the sby job instead.
-        module: [carry_lookahead, sss_ddd_selector, scratchpad_decoder]
+        module: [carry_lookahead, sss_ddd_selector, scratchpad_decoder, instruction_decoder]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-oss-cad-suite
@@ -79,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [stack_pointer]
+        module: [stack_pointer, instruction_decoder]
         variant: [rtl, netlist]
     steps:
       - uses: actions/checkout@v4
