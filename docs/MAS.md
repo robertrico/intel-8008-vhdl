@@ -64,7 +64,7 @@ Internal bus: priority mux of six drivers (§6). External bus: T1/T2 address-and
 - **IR timing:** loads phi1_falling during T3 of PCI ("data stable mid-state"), or during T1I second half (interrupt jam); jam sets `ir_loaded_from_interrupt` to suppress the T3 reload. Decoder flags are therefore valid only from T3 first-half onward — machine_cycle_control splits its T3 decisions into t3_rising (old instruction) vs T3-second-half (new instruction) arms. This cross-module timing contract is enforced only by comments today. `TODO-prop: decoder-flag validity window.`
 - **Temp registers:** Reg.b = universal transfer latch (opcode at C1 T3; operand/immediate/addr-low at C2 T3; SSS operand at C1 T4; drives bus for MOV C1 T5, port number at I/O C2 T2). Reg.a = address-high only (loads C3 T3; never an ALU operand — accumulator hardwired to ALU input 1; never drives the bus).
 - **ALU:** enabled throughout T5; latches result on the rising edge of its enable; `update_flags` fires T5 second half only; destination register written at T5 (bus_to_regfile + scratchpad_write). Rotate → `carry_only` flag path; INR/DCR re-emits carry_in unchanged. `(PSL: condition_flags P3 carry_only; alu covered by exhaustive sweep + miter)`
-- **Interrupt FF:** clear (T1I ack) beats set; reset beats both. `(PSL: none — unit TB only)` `TODO-prop: interrupt_ready_ff clear-priority + no-lost-request.`
+- **Interrupt FF:** clear (T1I ack) beats set; reset beats both. `(PSL: formal/interrupt_ready_ff P2/P3/P4 — clear-priority, set, hold; k-induction)` Residual: "no-lost-request" across a clear-then-request same-tick window is the clear-wins semantics by design; system-level double-service remains open (VPLAN INT-07 ⚠).
 
 ## 5. Machine-cycle control
 

@@ -7,11 +7,14 @@
 -- (the pre-lookahead implementation, correct by construction):
 --
 --   ADD/ADC/SUB/SBB/CMP : all 256 x 256 operand pairs x carry_in {0,1}
+--   ANA/XRA/ORA         : all 256 x 256 operand pairs x carry_in {0,1}
+--                         (carry_in must be ignored AND the carry flag
+--                         forced to 0 - the 8008 logical-op rule)
 --   INR/DCR             : all 256 register values x carry_in {0,1}
 --
--- 656,384 cases total. Checks result(8:0) and all four flags, including
--- the borrow-high polarity for the subtract family and the INR/DCR
--- carry passthrough exception.
+-- 1,049,600 cases total. Checks result(8:0) and all four flags,
+-- including the borrow-high polarity for the subtract family, the
+-- INR/DCR carry passthrough exception, and the logical carry-clear.
 --
 -- Run: make test-alu-exhaustive
 --------------------------------------------------------------------------------
@@ -56,9 +59,13 @@ architecture test of alu_exhaustive_tb is
     constant OP_SUB : std_logic_vector(2 downto 0) := "010";
     constant OP_SBB : std_logic_vector(2 downto 0) := "011";
     constant OP_CMP : std_logic_vector(2 downto 0) := "111";
+    constant OP_ANA : std_logic_vector(2 downto 0) := "100";
+    constant OP_XRA : std_logic_vector(2 downto 0) := "101";
+    constant OP_ORA : std_logic_vector(2 downto 0) := "110";
 
     type op_list_t is array (natural range <>) of std_logic_vector(2 downto 0);
     constant ARITH_OPS : op_list_t := (OP_ADD, OP_ADC, OP_SUB, OP_SBB, OP_CMP);
+    constant LOGIC_OPS : op_list_t := (OP_ANA, OP_XRA, OP_ORA);
 
     -- Reference model: 9-bit unsigned arithmetic exactly as the
     -- pre-lookahead ALU computed it (bit 8 = carry for adds,
@@ -80,6 +87,11 @@ architecture test of alu_exhaustive_tb is
             when OP_SUB => r := av - bv;
             when OP_SBB => r := av - bv - cv;
             when OP_CMP => r := av - bv;
+            -- Logical ops: bit 8 stays 0 regardless of carry_in - the
+            -- 8008 forces the carry flag to zero on ANA/XRA/ORA.
+            when OP_ANA => r := unsigned('0' & (a and b));
+            when OP_XRA => r := unsigned('0' & (a xor b));
+            when OP_ORA => r := unsigned('0' & (a or b));
             when others => r := (others => '0');
         end case;
         return std_logic_vector(r);
@@ -220,6 +232,35 @@ begin
                 end loop;
             end loop;
             report "Op " & to_hstring(ARITH_OPS(oi)) & " done: " &
+                   integer'image(cases) & " cases, " &
+                   integer'image(errors) & " errors";
+        end loop;
+
+        -- Logical ops: 3 ops x 256 x 256 x 2 carry = 393,216 cases.
+        -- carry_in swept both ways to prove it is ignored; ref model
+        -- keeps bit 8 low, so the carry-flag check enforces the
+        -- forced-zero rule on every case.
+        for oi in LOGIC_OPS'range loop
+            opcode <= LOGIC_OPS(oi);
+            for c in 0 to 1 loop
+                if c = 1 then
+                    carry_in <= '1';
+                else
+                    carry_in <= '0';
+                end if;
+                for a in 0 to 255 loop
+                    accumulator_in <= std_logic_vector(to_unsigned(a, 8));
+                    for b in 0 to 255 loop
+                        reg_b_in <= std_logic_vector(to_unsigned(b, 8));
+                        pulse;
+                        check(LOGIC_OPS(oi),
+                              std_logic_vector(to_unsigned(a, 8)),
+                              std_logic_vector(to_unsigned(b, 8)),
+                              carry_in, '0');
+                    end loop;
+                end loop;
+            end loop;
+            report "Op " & to_hstring(LOGIC_OPS(oi)) & " done: " &
                    integer'image(cases) & " cases, " &
                    integer'image(errors) & " errors";
         end loop;

@@ -78,7 +78,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | INT-04 | DS72 p.10 | Multi-cycle/multi-byte jam: only first cycle is T1I, rest normal | jam 3-byte instr | — | none — no test jams anything but RST | GAP |
 | INT-05 | UM p.10 | Jam HLT → STOPPED; jam NOP → sequential at un-advanced PC; jam JMP 0 → run from 0 | 3 scenarios | partial directed | interrupt_test bootstrap uses jam; HLT-wake checked; NOP/JMP-0 jams never exercised | COVERED-INCIDENTAL ⚠ 2 of 3 scenarios GAP |
 | INT-06 | UM p.11 Fig5 | Jam RST at PC=N: N pushed; RET resumes at N; instr at N executes exactly once | — | directed | `check_interrupt_test.sh` C=0x30 loop-count integrity despite 3 mid-loop interrupts | COVERED-DIRECTED |
-| INT-07 | DS72 p.10 Fig4 | One T1I per INT pulse (deasserted before next PCI) | — | directed (module) | `int_button_tb` no-spurious-request; `interrupt_ready_ff_tb` latch/clear priority | COVERED-DIRECTED ⚠ module-level; system-level double-service unchecked |
+| INT-07 | DS72 p.10 Fig4 | One T1I per INT pulse (deasserted before next PCI) | — | formal (module) + directed | `int_button_tb` no-spurious-request; `formal/interrupt_ready_ff` clear-beats-set/set/hold by k-induction; `interrupt_ready_ff_tb` | COVERED-FORMAL ⚠ module-level; system-level double-service unchecked |
 | INT-08 | DS72 p.5 Fig2 | STOPPED + INT → T1I exit | — | formal + directed | `state_timing_generator.sby`; interrupt_test HLT-wake | COVERED-FORMAL |
 
 ### F. Power-on
@@ -93,11 +93,11 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 
 | ID | Spec cite | Assertion | Conditions | Check type | Check artifact | Status |
 |----|-----------|-----------|------------|------------|----------------|--------|
-| STK-01 | UM p.7 §III.B.1 | Stack = 8×14-bit; PC = slot[SP] | — | formal | `formal/stack_memory.sby` slot-isolation orbit + `stack_memory_tb` all-8-slot isolation | COVERED-FORMAL ⚠ **not in CI matrix** |
+| STK-01 | UM p.7 §III.B.1 | Stack = 8×14-bit; PC = slot[SP] | — | formal | `formal/stack_memory.sby` slot-isolation orbit + `stack_memory_tb` all-8-slot isolation | COVERED-FORMAL |
 | STK-02 | UM p.7 | SP wraps mod 8 both directions | push 7→0, pop 0→7 | formal | `stack_pointer.sby` P2/P3 (k-induction) + wrap covers; `stack_pointer_tb`; cocotb random walk | COVERED-FORMAL |
 | STK-03 | UM p.7 | CALL: SP advances; old slot retains return address | — | formal + directed | `stack_memory.sby` CALL/RET slot preservation; `check_stack_depth_test.sh` | COVERED-FORMAL |
-| STK-04 | UM p.7 | RET: SP retreats; PC = stored addr; LIFO | nesting | directed | `check_stack_depth_test.sh` (6 nested CALL/RET) | COVERED-DIRECTED ⚠ spec depth is 7; test nests only 6 |
-| STK-05 | DS72 p.36; UM p.45 | 7 nested CALLs + 7 RETs all return correctly | depth 7 | directed | `stack_depth_test` = 6 levels | GAP (off-by-one from spec'd depth) |
+| STK-04 | UM p.7 | RET: SP retreats; PC = stored addr; LIFO | nesting | directed | `check_stack_depth_test.sh` (7 nested CALL/RET) | COVERED-DIRECTED |
+| STK-05 | DS72 p.36; UM p.45 | 7 nested CALLs + 7 RETs all return correctly | depth 7 | directed | `check_stack_depth_test.sh` (7 levels, per-level checkpoints) | COVERED-DIRECTED |
 | STK-06 | UM p.7 | 8th nested CALL: SP recycles, oldest return destroyed, newer 7 intact, no trap | — | directed | `check_stackwrap_test.sh` (8th CALL overwrites oldest; includes negative assertion `assert_checkpoint_absent 3`) | COVERED-DIRECTED (also SQ-06) |
 | STK-07 | UM p.3, p.7 | 14-bit PC/address space; PC increment wraps 0x3FFF→0 | wrap | — | none — no program executes near top of memory | GAP (wrap case) |
 | STK-08 | UM p.7; DS72 p.7 | PC low incremented after T1; high driven at T2 then carry applied | page cross | formal + directed | `stack_memory.sby` lower/upper-increment carry semantics; `stack_memory_tb` 0x01FF→0x0200; `check_pc_carry_call_test.sh` (CALL at 0x00FC → return 0x0100) | COVERED-DIRECTED (T2-visible-value artifact is SQ-07) |
@@ -110,15 +110,15 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | REG-01 | UM p.3, p.7 | 7 independent 8-bit registers; write one, others unchanged | pairwise | formal | `register_file.sby` per-register write ×7 + hold ×7 (k-induction) + fully-proven `register_file_miter` | COVERED-FORMAL |
 | REG-02 | UM p.9 n.1 | SSS/DDD encodings A..L, 111=M | all codes | exhaustive | `sss_ddd_selector_tb` exhaustive sweeps; cocotb decoder sweep (256 opcodes vs independent Python model) | COVERED-EXHAUSTIVE |
 | REG-03 | UM p.7, p.9 n.2 | M address = {H[5:0], L}; changing H/L redirects next access | — | directed | `check_mov_mem_test.sh` self-modifying H/L pointer cases | COVERED-DIRECTED ⚠ H[7:6] mask untested (BUS-10) |
-| REG-04 | UM p.7 §III.C | Temp a/b invisible; no partial arch-state mid-instruction | whitebox | directed (module) | `temp_registers_tb`; `register_alu_control_tb` negative checks (load_reg_a NOT asserted at wrong cycles) | COVERED-DIRECTED |
+| REG-04 | UM p.7 §III.C | Temp a/b invisible; no partial arch-state mid-instruction | whitebox | formal (module) + directed | `formal/temp_registers` load/hold/mux by k-induction + miter; `temp_registers_tb`; `register_alu_control_tb` negative checks (load_reg_a NOT asserted at wrong cycles) | COVERED-DIRECTED |
 
 ### I. Flags
 
 | ID | Spec cite | Assertion | Conditions | Check type | Check artifact | Status |
 |----|-----------|-----------|------------|------------|----------------|--------|
 | FLG-01 | UM p.7 §III.C | Exactly C, Z, S, P flip-flops | — | formal | `condition_flags.sby` (k-induction, full suite) | COVERED-FORMAL |
-| FLG-02..05 | UM p.42 App I | C = carry/borrow; Z = result==0; S = bit7; P = even parity | all ops | exhaustive | `alu_exhaustive_tb`: 656,384 cases vs independent numeric_std reference — result + all 4 flags | COVERED-EXHAUSTIVE ⚠ sweep covers ADD/ADC/SUB/SBB/CMP/INR/DCR only — **logical ops (ANA/XRA/ORA) not in the exhaustive sweep** (directed only) |
-| FLG-06 | DS72 p.45; UM p.59 | Loads change no flag | all 4 flags | incidental | no directed check that a MOV/MVI preserves a dirty flag state | COVERED-INCIDENTAL |
+| FLG-02..05 | UM p.42 App I | C = carry/borrow; Z = result==0; S = bit7; P = even parity | all ops | exhaustive | `alu_exhaustive_tb`: 656,384 cases vs independent numeric_std reference — result + all 4 flags | COVERED-EXHAUSTIVE (all 8 ops: logical ops swept 256x256 x carry both ways, carry-clear enforced per case) |
+| FLG-06 | DS72 p.45; UM p.59 | Loads change no flag | all 4 flags | directed | `check_flag_test.sh` load-storm rounds: dirty flag states in both polarities survive a MOV/MVI barrage | COVERED-DIRECTED |
 | FLG-07 | DS72 p.34; UM p.43 | INR/DCR: Z,S,P update, C unchanged | C=0 and C=1 | exhaustive + directed | `alu_exhaustive_tb` INR/DCR×256×2 carry; `check_inr_carry_test.sh` (SCELBAL regression); `alu_tb` carry-preservation | COVERED-EXHAUSTIVE |
 | FLG-08 | UM p.43, p.59 | Every ALU op updates all 4 flags from result | 8 ops × 3 forms | exhaustive (arith) + directed (logical, M/I forms) | `alu_exhaustive_tb`; `check_alu_test.sh`, `check_flag_test.sh`, `check_memory_alu_test.sh` | COVERED-DIRECTED ⚠ logical-op flag space only spot-checked |
 | FLG-09 | DS72 p.34; UM p.43 | ANA/XRA/ORA force C=0 | all forms | directed | `alu_tb`; `check_flag_test.sh` | COVERED-DIRECTED ⚠ M/I-form carry-clear spot-checked only (SQ-10) |
@@ -137,7 +137,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | I-MVI-01/02 | UM p.43 | MVI r / MVI M: immediate to reg / mem[H:L]; PC+2 | — | directed | `check_mvi_m_test.sh`; immediates throughout suite | COVERED-DIRECTED |
 | I-IDR-01/02 | UM p.43 | INR/DCR r∈B..L: ±1 mod 256 | wrap 0xFF/0x00 | directed + exhaustive | `check_inr_dcr_test.sh` (all 12 variants + boundaries); ALU-level exhaustive | COVERED-DIRECTED |
 | I-ALU-01..08 | UM p.43-44 | ADD/ADC/SUB/SBB/ANA/XRA/ORA/CMP semantics (r-form) | all 56 reg ops | exhaustive (ALU) + directed (system) | `alu_exhaustive_tb` (arith); `check_alu_reg_comprehensive.sh` (all 56); `check_alu_full_coverage.sh` | COVERED-DIRECTED (ALU-module arith COVERED-EXHAUSTIVE) |
-| I-ALU-09 | UM p.44 | M/I forms: operand = mem[H:L] / B2, same semantics | 8 ops × 2 forms | directed | `check_alu_test.sh` (all 8 immediates); `check_memory_alu_test.sh` (ADC/SBB/ANA/XRA/ORA/CMP M) | COVERED-DIRECTED ⚠ **ADD M and SUB M have no directed check** |
+| I-ALU-09 | UM p.44 | M/I forms: operand = mem[H:L] / B2, same semantics | 8 ops × 2 forms | directed | `check_alu_test.sh` (all 8 immediates); `check_memory_alu_test.sh` (ADC/SBB/ANA/XRA/ORA/CMP M) | COVERED-DIRECTED (ADD M / SUB M added to `check_memory_alu_test.sh`, incoming carry deliberately set and ignored) |
 | I-ROT-01..04 | UM p.45 | RLC/RRC/RAL/RAR bit routing + carry | known patterns | directed | `check_rotate_carry_test.sh`, `check_rotate_flags_test.sh` | COVERED-DIRECTED |
 | I-JMP-01 | UM p.45 | JMP: PC ← B3[5:0]:B2 | — | directed | every multi-checkpoint program relies on jumps landing | COVERED-DIRECTED |
 | I-JMP-02/03 | UM p.45, p.48 n.11 | Jcond taken → target (11 st); not-taken → PC+3 (9 st), all 3 cycles still run, no other change | 4 flags × 2 senses × 2 | directed | `check_sign_parity_test.sh` (JP/JM/JPE/JPO), `check_rotate_carry_test.sh` (JC/JNC), zero-jumps across suite; state counts via cycle_count | COVERED-DIRECTED ⚠ no single artifact enumerates all 16 jump combos; taken/not-taken state-count correlation unchecked (ST-11 ⚠) |
@@ -147,7 +147,7 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | I-RST-01/02 | UM p.46, p.49 n.14 | RST: push next addr at T3; PC ← 8×AAA; RET resumes | all 8 vectors | directed | `check_rst_full_test.sh` (all 8), `check_rst_test.sh` | COVERED-DIRECTED |
 | I-INP-01 | UM p.46 | INP: A ← port MMM; PCC cycle bus protocol | 8 ports | directed | `check_io_test.sh`, `check_io_comprehensive_test.sh` (INP 0-7) | COVERED-DIRECTED ⚠ T4 flags-out and T2 port-on-bus unchecked (FLG-13, BUS gaps); SQ-04/SQ-05 open |
 | I-OUT-01 | UM p.46 | OUT: port RRMMM ← A; A & flags unchanged; 6 states | 24 ports | directed | `check_io_comprehensive_test.sh` (OUT 8-30) | COVERED-DIRECTED |
-| I-HLT-01 | UM p.46 | HLT (3 encodings): STOPPED entered; regs/mem unchanged; PC past HLT | 3 encodings | weak directed | `check_hlt_01_test.sh` / `check_hlt_ff_test.sh` — **presence-of-checkpoint only; never verify the CPU stopped** | COVERED-INCIDENTAL (effectively GAP: scripts cannot fail on a CPU that runs through HLT into a loop, only on one that dies before it) |
+| I-HLT-01 | UM p.46 | HLT (3 encodings): STOPPED entered; regs/mem unchanged; PC past HLT | 3 encodings | directed | `check_hlt_01_test.sh` / `check_hlt_ff_test.sh` — post-HLT sentinel checkpoint asserted ABSENT + s_stopped grep (rtl) | COVERED-DIRECTED ⚠ 0x00 encoding covered at decode level only (DC-04) |
 
 ### K. Decode completeness / don't-cares
 
@@ -167,12 +167,12 @@ Spec ambiguities are **not resolved here** — they are SPEC-QUESTION rows (§ S
 | XP-03 | INT during WAIT: no T1I until READY releases + instr completes | — | — | none | GAP |
 | XP-04 | Not-ready per cycle type ×6: WAIT inserted; final arch state equals no-wait run | 6 variants | — | none at system level (module formal only, RDY-02) | GAP |
 | XP-05 | In-flight data (reg.a/reg.b) survives arbitrary-length WAIT mid-instruction | long wait | — | none | GAP |
-| XP-06 | Push/pop SP wrap: CAL & RST at SP=7; RET at SP=0 | ×3 | formal + directed | `stack_pointer.sby` wraps; `check_stackwrap_test.sh` | COVERED-FORMAL ⚠ RST-at-wrap specifically untested |
+| XP-06 | Push/pop SP wrap: CAL & RST at SP=7; RET at SP=0 | ×3 | formal + directed | `stack_pointer.sby` wraps; `check_stackwrap_test.sh`; `check_rst_wrap_test.sh` (RST as the 8th push, wrapped-slot landing asserted) | COVERED-FORMAL |
 | XP-07 | 8 nested CALLs: returns 1-7 correct, 8th wrapped per STK-06 | — | directed | `check_stackwrap_test.sh` | COVERED-DIRECTED |
 | XP-08 | Conditional J/C/R × {C,Z,S,P} × sense × outcome = 48 combos: PC + SP + state count each | 48 | directed (scattered) | union of conditional_call, sign_parity, sign_parity_call, rotate_carry scripts | COVERED-DIRECTED ⚠ no artifact proves all 48 enumerated; per-combo state counts unverified |
 | XP-09 | MOV 49-pair sweep | 49 | directed | `check_mov_rr_test.sh` | COVERED-DIRECTED |
 | XP-10 | Write H/L then M-op uses new H:L | — | directed | mov_mem self-modifying pointers | COVERED-DIRECTED |
-| XP-11 | ALU boundary operands (carry chain, zero, sign, parity, C_in) | — | exhaustive (arith) | `alu_exhaustive_tb` | COVERED-EXHAUSTIVE ⚠ logical ops excluded from sweep |
+| XP-11 | ALU boundary operands (carry chain, zero, sign, parity, C_in) | — | exhaustive | `alu_exhaustive_tb` (all 8 ops) | COVERED-EXHAUSTIVE |
 | XP-12 | Fetch page-cross + 14-bit wrap 0x3FFF→0 | 2 boundaries | formal + directed (page) | stack_memory carry props; pc_carry_call_test | COVERED-DIRECTED ⚠ top-of-memory wrap (0x3FFF→0) never executed |
 | XP-13 | M ops with H[7:6]=11 alias to H[5:0] address | — | — | none | GAP |
 | XP-14 | Jam 3-byte instr (JMP/CAL) at interrupt; B2/B3 fetched from un-advanced PC stream | — | — | none | GAP (same as INT-04) |
@@ -251,29 +251,29 @@ Ranking: spec-mandated behavior with **no failing check** first; then weak/incid
 ### Tier 1 — spec-mandated, nothing would fail
 
 1. **READY/WAIT at system level** (XP-04, XP-05, RDY-02⚠, RDY-03, RDY-04). The only system-level WAIT artifact is one `saw_wait_status` assert. History warning: a real WAIT bug was found by period software, not by the suite (TODO.md). **Propose:** new TB mode or generic on `b8008_top_tb` driving a scripted READY pattern (deassert at each cycle type: PCI, PCR-imm, PCR-H:L, PCW, PCC-INP, PCC-OUT, plus a long multi-state wait) over an existing checkpoint program (e.g. `alu_test`); pass = every checkpoint identical to the free-run log. One script `check_ready_wait_test.sh` diffing checkpoint lines between the two runs.
-2. **HLT never actually verified to halt** (I-HLT-01). `check_hlt_01/ff` pass on checkpoint presence even if the CPU sails through HLT. **Propose:** extend both scripts with: (a) grep for STOPPED status emission after the checkpoint, and (b) `assert_checkpoint_absent` for a sentinel `OUT 31` placed after the HLT in the program. Small edit, closes a false-green.
+2. ~~HLT never actually verified to halt~~ **DONE** — post-HLT sentinel asserted absent + rtl s_stopped grep in both scripts.
 3. **Interrupt jam generality** (INT-04, INT-05⚠, XP-14). Only RST is ever jammed. Spec explicitly defines multi-byte jam, NOP jam, HLT jam, JMP-0 jam. **Propose:** extend `interrupt_test_tb` jam table to inject NOP (0xC0), HLT, and a 3-byte JMP/CAL at interrupt; verify via checkpoints that (a) 3-byte jam consumes B2/B3 correctly, (b) NOP jam resumes at un-advanced PC, (c) only cycle 1 is T1I. Script asserts resulting control flow.
 4. **External bus per-T-state contract** (BUS-01, BUS-02, BUS-04, BUS-06, D6/D7 encodings of BUS-03). The design claims cycle-accuracy; nothing checks what is on the bus at T1/T2/T4/T5. **Propose:** cocotb bus-protocol monitor on `b8008_top` (matches decoder-sweep idiom): at every SYNC-qualified T-state, assert T1=PCL/L, T2={cycle-code, high addr}, code∈{PCI,PCR,PCC,PCW} per instruction class, cycle 1 always PCI; run over an existing program ROM. This single monitor closes 5 rows.
 5. **14-bit PC wrap 0x3FFF→0** (STK-07, XP-12⚠). Never executed. **Propose:** tiny program placed at top of memory (assembler ORG 0x3FFC), sequential fetch + JMP across the wrap; checkpoint at 0x0000-side landing. Needs sim memory ≥16K or address-mask check in TB.
-6. **7-level nesting off-by-one** (STK-05). `stack_depth_test` nests 6; spec guarantees 7. **Propose:** add one level to `stack_depth_test` (7 CALLs + 7 RETs with per-level checkpoint).
+6. ~~7-level nesting off-by-one~~ **DONE** — `stack_depth_test` nests 7 with per-level checkpoints.
 7. **H[7:6] don't-care masking** (BUS-10⚠, XP-13). No test sets H[7:6]≠00. **Propose:** extend `mov_mem_test`: set H=0xC1 vs H=0x01, verify both hit the same physical byte (write via one, read via other).
 
 ### Tier 2 — covered weakly / incidentally
 
-8. **Logical ops missing from exhaustive ALU sweep** (FLG-02..05⚠, FLG-08⚠, FLG-09⚠, XP-11⚠). ANA/XRA/ORA are directed-only; carry-clear on M/I forms spot-checked. **Propose:** extend `alu_exhaustive_tb` with AND/XOR/OR × 256×256 (flags incl. forced C=0) — +196,608 cases, same reference-function idiom. Cheap; makes the sweep actually exhaustive over all 8 ops.
-9. **ADD M / SUB M no directed check** (I-ALU-09⚠). `memory_alu_test` covers the other six M-forms. **Propose:** two more checkpoints in `memory_alu_test`.
+8. ~~Logical ops missing from exhaustive ALU sweep~~ **DONE** — `alu_exhaustive_tb` covers all 8 ops (1,049,600 cases; carry-in ignored and carry flag forced 0 proven per logical case). M/I-form carry-clear at system level remains with FLG-09's directed checks.
+9. ~~ADD M / SUB M no directed check~~ **DONE** — two checkpoints in `memory_alu_test`, incoming carry set and ignored.
 10. **Conditional 48-combo matrix scattered** (XP-08, I-JMP-02/03⚠) and cycle-count taken/not-taken correlation unchecked (ST-11⚠). **Propose:** one generated program `cond_matrix_test` enumerating all 48 (set flag → conditional → checkpoint), plus teach `check_cycle_count_test.sh` to pair counts with taken/not-taken outcome (it already parses IR and isa.json).
-11. **Load-preserves-flags never directly asserted** (FLG-06). **Propose:** 4 checkpoints in `flag_test`: set each flag, run MOV/MVI storm, assert flags unchanged.
+11. ~~Load-preserves-flags never directly asserted~~ **DONE** — `flag_test` load-storm rounds, both polarities.
 12. **INP protocol details** (FLG-13⚠, I-INP-01⚠): flags-on-bus at T4, port number at T2. Fold into the Tier-1 #4 bus monitor. Blocked partly on SQ-04/SQ-05 answers.
 13. **Double-address emission on T1I** (INT-02, PWR-03⚠): the visible signature of the PC-not-incremented rule. Fold into bus monitor (assert cycle-N and cycle-N+1 addresses equal around T1I).
 14. **XP-02 HLT with INT pending; XP-03 INT during WAIT.** Two directed scenarios in `interrupt_test_tb`.
-15. **RST at SP wrap** (XP-06⚠): add RST-push variant to `stackwrap_test`.
+15. ~~RST at SP wrap~~ **DONE** — `check_rst_wrap_test.sh` (dedicated program; wrapped-slot landing + clean-return-absent).
 
 ### Tier 3 — meta-gaps (harness would not fire)
 
-16. **`run_all_tests.sh` trusts banner-grep over exit codes.** A script that crashes after printing "SUCCESS"-matching text, or dies before the banner in an ignored way, mis-reports. **Propose:** use exit codes as primary signal, banner as secondary.
-17. **Assembly regression suite not in CI** (needs ASL + gitignored `.mem` bootstrap — the known `ram_boot.mem` trap). Highest-value CI addition; everything Tier 1-2 lands in this suite.
-18. **`stack_memory` + `stack_memory_miter` not in CI sby matrix**; stack_memory_miter BMC workdir appears interrupted mid-run — re-run and pin status.
+16. ~~`run_all_tests.sh` trusts banner-grep over exit codes~~ **DONE** — exit code primary, banner cross-check, case-insensitive failure excerpt with tail fallback.
+17. ~~Assembly regression suite not in CI~~ **DONE** — regression job in verification.yml, matrix rtl|netlist; ASL built from pinned source (setup-asl action), .mem stays uncommitted (auto-assemble; cold-checkout verified 28/28).
+18. ~~`stack_memory` + `stack_memory_miter` not in CI sby matrix~~ **DONE** — both in the sby matrix; miter completes clean (bmc depth 15, CI job has a 60-min timeout override; induction unanchorable — 113 hidden gate bits).
 19. **Stale collateral:** `machine_cycle_control_tb` red at HEAD (excluded from test-units); `phase_clocks_tb` stale component declaration masks 6 new ports (CLK-01⚠); `docs/instruction_coverage.md` stale by its own header — mark superseded by this vplan.
 20. **CLK-02 clock-ratio conformance** unchecked — low risk (phase_clocks is stable), one-time TB addition.
 
