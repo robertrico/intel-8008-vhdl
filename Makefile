@@ -68,7 +68,10 @@ B8008_SRCS = \
 #   B8008_CORE=netlist ./test_programs/verification_scripts/run_all_tests.sh
 B8008_CORE ?= rtl
 ifeq ($(B8008_CORE),netlist)
-CORE_SIM_SRCS = $(NETLIST_VHDL) $(TEST_DIR)/b8008_netlist_shim.vhdl
+# b8008_types must be analyzed explicitly: b8008_top's use clause needs it,
+# and the netlist branch doesn't pull in B8008_SRCS (a warm build/ dir from
+# a prior rtl run masks this; a cold checkout - CI - fails without it).
+CORE_SIM_SRCS = $(SRC_DIR)/b8008_types.vhdl $(NETLIST_VHDL) $(TEST_DIR)/b8008_netlist_shim.vhdl
 else
 CORE_SIM_SRCS = $(B8008_SRCS)
 endif
