@@ -39,6 +39,15 @@ assert_checkpoint 49 \
     "E=0x08"
 
 # --- taken/not-taken state-count pairing ------------------------------
+# Mines RTL report lines (STATE/MCycle/IR), which synthesis strips -
+# RTL core only, like check_cycle_count_test.sh. The 48 checkpoint
+# assertions above still verify outcomes on the netlist core.
+if [ "$B8008_CORE" = "netlist" ]; then
+    echo ""
+    echo "=== State-count pairing skipped (netlist core strips reports) ==="
+    print_summary
+    exit $?
+fi
 echo ""
 echo "=== State-count pairing (DS72 p.45) ==="
 python3 - "$LOG_FILE" "$PROJECT_DIR/test_programs/cond_matrix_expected.txt" <<'PYEOF'

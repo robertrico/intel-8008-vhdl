@@ -78,7 +78,7 @@ CORE_SIM_SRCS = $(B8008_SRCS)
 endif
 
 # Unit-test targets are declared phony via $(UNIT_TESTS) below.
-.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-b8008-extram test-serial test-interrupt test-bitbang-uart help show-programs synth pnr bit prog prog-flash
+.PHONY: all clean assemble assemble-sample test-b8008 test-b8008-top test-serial test-interrupt test-bitbang-uart help show-programs synth pnr bit prog prog-flash
 
 all: help
 
@@ -205,64 +205,6 @@ test-interrupt-jam: $(BUILD_DIR) $(PROG_DIR)/jam_test_as.mem
 	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_jam_tb
 	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) interrupt_jam_tb -gROM_FILE=test_programs/jam_test_as.mem --stop-time=25ms
 
-# ============================================================================
-# EXTERNAL_RAM EQUIVALENCE TEST
-# ============================================================================
-# Runs two b8008_top instances side by side (internal ram_sync vs
-# EXTERNAL_RAM => true) on the same RAM-exercising program and asserts they
-# stay bit-identical. Proves EXTERNAL_RAM is a no-op on CPU behavior before
-# a LiteX SoC is trusted to own the RAM.
-#
-# Usage:
-#   make test-b8008-extram
-EXTRAM_PROG ?= ram_intensive_as
-EXTRAM_ROM_FILE = test_programs/$(EXTRAM_PROG).mem
-EXTRAM_SIM_TIME ?= 31ms
-test-b8008-extram: $(BUILD_DIR) $(EXTRAM_ROM_FILE)
-	@echo "========================================="
-	@echo "Testing b8008_top - EXTERNAL_RAM equivalence"
-	@echo "Program: $(EXTRAM_ROM_FILE)"
-	@echo "Sim time: $(EXTRAM_SIM_TIME)"
-	@echo "========================================="
-	@echo ""
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_types.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/phase_clocks.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/state_timing_generator.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/interrupt_ready_ff.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/machine_cycle_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_decoder.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/memory_io_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/ahl_pointer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/mem_mux_refresh.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_pointer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/stack_memory.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/scratchpad_decoder.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_file.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/temp_registers.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/register_alu_control.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/alu.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/condition_flags.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/instruction_register.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/io_buffer.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/b8008/ram_sync.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/address_decoder.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(SRC_DIR)/b8008_top.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) ./src/components/rom_8kx8.vhdl
-	$(GHDL) -a $(GHDL_FLAGS) --workdir=$(BUILD_DIR) $(TEST_DIR)/b8008_top_extram_tb.vhdl
-	$(GHDL) -e $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_extram_tb
-	$(GHDL) -r $(GHDL_FLAGS) --workdir=$(BUILD_DIR) b8008_top_extram_tb -gROM_FILE=$(EXTRAM_ROM_FILE) --stop-time=$(EXTRAM_SIM_TIME)
-
-# List available test programs
-show-programs:
-	@echo "Available test programs:"
-	@ls -1 $(PROG_DIR)/*.mem 2>/dev/null | xargs -I {} basename {} .mem | sed 's/^/  /'
-	@echo ""
-	@echo "Sample programs (serial I/O):"
-	@ls -1 $(PROG_DIR)/samples/*.mem 2>/dev/null | xargs -I {} basename {} .mem | sed 's/^/  /' || echo "  (none assembled yet)"
-	@echo ""
-	@echo "Usage: make test-b8008-top PROG=<program_name>"
-	@echo "       make test-serial PROG=<sample_name>"
 
 # ============================================================================
 # SERIAL I/O TEST (for sample programs with bitbanged UART)

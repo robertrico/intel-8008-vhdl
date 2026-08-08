@@ -62,7 +62,7 @@ async def rom_server(dut, mem):
 async def boot(dut):
     dut.reset.value = 1
     dut.interrupt.value = 0
-    dut.int_vector.value = 0
+    dut.int_instruction.value = 0x05
     dut.io_port_in.value = 0
     dut.io_port_in_select.value = 0
     dut.io_port_in_enable.value = 0

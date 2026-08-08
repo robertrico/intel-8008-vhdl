@@ -9,6 +9,10 @@
 --   S2  HLT jam into a counted loop             - CPU stops; RST7 wakes it
 --   S3  3-byte JMP jam into an inescapable spin - TB supplies B2/B3 on the
 --       bus during the two operand-fetch cycles; asserts only ONE T1I
+--
+-- Arbitrary jam bytes go in through int_instruction - the same port a
+-- real interrupt controller uses (it presents a full instruction byte
+-- on the bus; the RST-only narrowing lives in the board tops).
 --   S4  READY park with INT asserted during WAIT - no T1I until READY
 --       returns and the in-flight instruction completes
 --
@@ -33,9 +37,7 @@ architecture testbench of interrupt_jam_tb is
             clk_in      : in  std_logic;
             reset       : in  std_logic;
             interrupt   : in  std_logic;
-            int_vector  : in  std_logic_vector(2 downto 0) := "000";
-            int_jam_byte : in std_logic_vector(7 downto 0) := (others => '0');
-            int_jam_en   : in std_logic := '0';
+            int_instruction : in std_logic_vector(7 downto 0) := "00000101";
             ready_in    : in  std_logic := '1';
             phi1_out    : out std_logic;
             phi2_out    : out std_logic;
@@ -99,9 +101,7 @@ architecture testbench of interrupt_jam_tb is
     signal clk_in      : std_logic := '0';
     signal reset       : std_logic := '1';
     signal interrupt   : std_logic := '0';
-    signal int_vector  : std_logic_vector(2 downto 0) := "000";
-    signal int_jam_byte : std_logic_vector(7 downto 0) := (others => '0');
-    signal int_jam_en   : std_logic := '0';
+    signal int_instruction : std_logic_vector(7 downto 0) := "00000101";
     signal ready_in    : std_logic := '1';
     signal phi1_out    : std_logic;
     signal phi2_out    : std_logic;
@@ -152,14 +152,12 @@ architecture testbench of interrupt_jam_tb is
 
 begin
 
-    uut : b8008_top
+    uut : entity work.b8008_top
         port map (
             clk_in      => clk_in,
             reset       => reset,
             interrupt   => interrupt,
-            int_vector  => int_vector,
-            int_jam_byte => int_jam_byte,
-            int_jam_en   => int_jam_en,
+            int_instruction => int_instruction,
             ready_in    => ready_in,
             phi1_out    => phi1_out,
             phi2_out    => phi2_out,
@@ -247,17 +245,17 @@ begin
     stimulus : process
         variable t1i_before : natural;
 
-        -- Jam one arbitrary byte via T1I and release the request
+        -- Jam one arbitrary instruction byte via T1I (int_instruction
+        -- is what the interrupt controller presents on the bus)
         procedure jam(byte : std_logic_vector(7 downto 0)) is
         begin
-            int_jam_byte <= byte;
-            int_jam_en   <= '1';
-            interrupt    <= '1';
+            int_instruction <= byte;
+            interrupt <= '1';
             wait until in_t1i;
             wait for 50 ns;
             interrupt <= '0';
             wait until not in_t1i;
-            int_jam_en <= '0';
+            int_instruction <= "00000101";  -- back to RST 0
         end procedure;
     begin
         report "========================================";
@@ -294,7 +292,7 @@ begin
         assert in_stopped
             report "ERROR: CPU did not remain stopped after HLT jam" severity error;
         report "S2: CPU stopped; waking with RST 7";
-        int_vector <= "111";
+        int_instruction <= "00111101";
         interrupt <= '1';
         wait until in_t1i;
         wait for 50 ns;
@@ -307,14 +305,13 @@ begin
         report "S3: jamming JMP 0x0200 (3 bytes) into SPIN";
         t1i_before := t1i_count;
         -- Cycle 1: T1I with the JMP opcode
-        int_jam_byte <= x"44";
-        int_jam_en   <= '1';
-        interrupt    <= '1';
+        int_instruction <= x"44";
+        interrupt <= '1';
         wait until in_t1i;
         wait for 50 ns;
         interrupt <= '0';
         wait until not in_t1i;
-        int_jam_en <= '0';
+        int_instruction <= "00000101";
         -- The jam cycle itself still runs T2/T3 (fetch-shaped; the IR
         -- reload is suppressed) - let its T3 pass before serving operands
         wait until in_t3;
@@ -345,7 +342,7 @@ begin
         assert in_wait
             report "ERROR: CPU never parked in WAIT" severity error;
         t1i_before := t1i_count;
-        int_vector <= "111";
+        int_instruction <= "00111101";
         interrupt <= '1';               -- INT while parked
         wait for 200 us;
         assert in_wait

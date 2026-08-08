@@ -34,7 +34,7 @@ architecture testbench of b8008_top_tb is
             clk_in      : in  std_logic;
             reset       : in  std_logic;
             interrupt   : in  std_logic;
-            int_vector  : in  std_logic_vector(2 downto 0) := "000";
+            int_instruction : in std_logic_vector(7 downto 0) := "00000101";
             ready_in    : in  std_logic := '1';
             phi1_out    : out std_logic;
             phi2_out    : out std_logic;
@@ -100,7 +100,7 @@ architecture testbench of b8008_top_tb is
     signal interrupt   : std_logic := '0';
     signal ready_in    : std_logic := '1';
     signal saw_wait_status : boolean := false;
-    signal int_vector  : std_logic_vector(2 downto 0) := "000";
+    signal int_instruction : std_logic_vector(7 downto 0) := "00000101";
     signal phi1_out    : std_logic;
     signal phi2_out    : std_logic;
     signal sync_out    : std_logic;
@@ -167,7 +167,7 @@ begin
             reset       => reset,
             interrupt   => interrupt,
             ready_in    => ready_in,
-            int_vector  => int_vector,
+            int_instruction => int_instruction,
             phi1_out    => phi1_out,
             phi2_out    => phi2_out,
             sync_out    => sync_out,

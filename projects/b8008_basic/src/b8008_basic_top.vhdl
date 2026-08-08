@@ -130,18 +130,7 @@ architecture rtl of b8008_basic_top is
             reset       : in std_logic;
             run_enable  : in std_logic;
             interrupt   : in std_logic;
-            int_vector  : in std_logic_vector(2 downto 0);
-            -- Testbench-only jam override and external-RAM bus: unused
-            -- by this board, declared to match the entity so default
-            -- binding stays warning-free (drift here = GHDL noise on
-            -- every build).
-            int_jam_byte : in std_logic_vector(7 downto 0) := (others => '0');
-            int_jam_en   : in std_logic := '0';
-            ram_ext_addr  : out std_logic_vector(13 downto 0);
-            ram_ext_wdata : out std_logic_vector(7 downto 0);
-            ram_ext_rdata : in  std_logic_vector(7 downto 0) := x"00";
-            ram_ext_rw_n  : out std_logic;
-            ram_ext_cs_n  : out std_logic;
+            int_instruction : in std_logic_vector(7 downto 0) := "00000101";
             ready_in    : in std_logic := '1';
             phi1_out    : out std_logic;
             phi2_out    : out std_logic;
@@ -309,6 +298,9 @@ architecture rtl of b8008_basic_top is
     signal t1i_ack_sig  : std_logic;
     signal btn_int_req  : std_logic;
     signal btn_int_vec  : std_logic_vector(2 downto 0);
+    -- Board jam circuit: this front panel only jams RST instructions;
+    -- encode the switch vector as the full RST byte for the CPU system
+    signal jam_instruction : std_logic_vector(7 downto 0);
     signal cpu_int_vec  : std_logic_vector(2 downto 0);
 
     -- CPU signals
@@ -668,6 +660,8 @@ begin
     --------------------------------------------------------------------------------
     -- b8008 CPU System Instance
     --------------------------------------------------------------------------------
+    jam_instruction <= "00" & cpu_int_vec & "101";
+
     u_system : b8008_top
         generic map (
             CLK_FREQ_HZ   => 25_000_000,       -- PLL output frequency
@@ -683,7 +677,7 @@ begin
             reset       => reset_int,
             run_enable  => dbg_run_enable,    -- Debug hold: '0' freezes phi state machine
             interrupt   => bootstrap_int or btn_int_req,
-            int_vector  => cpu_int_vec,  -- RST 0 for bootstrap, sw(7) pick after
+            int_instruction => jam_instruction,  -- RST 0 for bootstrap, sw(7) pick after
             ready_in    => not (ready_sync(1) xor sw6_base),  -- sw(6) flipped from baseline = WAIT
             phi1_out    => phi1,
             phi2_out    => phi2,

@@ -34,12 +34,7 @@ entity b8008_top is
         ROM_LAST      : integer := 16#0FFF#;
         RAM_BASE      : integer := 16#1000#;
         RAM_LAST      : integer := 16#3FFF#;
-        RAM_ADDR_BITS : integer := 14;
-        -- false (default): RAM lives inside this module (internal ram_sync),
-        -- exactly as before -- backward compatible, nothing else changes.
-        -- true: RAM is owned externally (e.g. a LiteX SoC); this module
-        -- drives the ram_ext_* bus below instead of instantiating ram_sync.
-        EXTERNAL_RAM  : boolean := false
+        RAM_ADDR_BITS : integer := 14
     );
     port (
         -- External clock and reset
@@ -50,12 +45,11 @@ entity b8008_top is
         -- continue to work with no code change.
         run_enable  : in std_logic := '1';
         interrupt   : in std_logic;  -- Bootstrap interrupt (tie high after reset)
-        int_vector  : in std_logic_vector(2 downto 0) := "000";  -- RST vector (0-7) to jam during T1I
-        -- Optional arbitrary jam byte (testbench use): when int_jam_en='1'
-        -- the T1I cycle jams int_jam_byte instead of the RST pattern -
-        -- the spec allows ANY instruction to be jammed (UM p.10).
-        int_jam_byte : in std_logic_vector(7 downto 0) := (others => '0');
-        int_jam_en   : in std_logic := '0';
+        -- The full instruction byte the interrupt controller jams during
+        -- T1I. The real 8008's controller presents any instruction on the
+        -- bus (SIM8-01 jammed CALs); a board that only jams RSTs encodes
+        -- "00" & vector & "101" at the board level. Default: RST 0.
+        int_instruction : in std_logic_vector(7 downto 0) := "00000101";
         ready_in    : in std_logic := '1';  -- READY: '0' parks the CPU in WAIT after T2
 
         -- Debug outputs
@@ -115,19 +109,7 @@ entity b8008_top is
         rom_a               : out std_logic_vector(13 downto 0); -- ROM address rel. ROM_BASE (up to 16K)
         rom_d               : in  std_logic_vector(7 downto 0);  -- ROM data input
         rom_ce_n            : out std_logic;                     -- ROM chip enable (active low)
-        rom_oe_n            : out std_logic;                     -- ROM output enable (active low)
-
-        -- External RAM interface (used only when EXTERNAL_RAM => true; all
-        -- signals in the clk_in domain). Memory-port contract: external RAM
-        -- behaves exactly like ram_sync: on every rising clk_in edge,
-        -- ram_ext_rdata becomes the registered read of ram_ext_addr
-        -- (one-cycle latency, no CS gating on reads); a write occurs on the
-        -- edge when ram_ext_cs_n='0' and ram_ext_rw_n='0'.
-        ram_ext_addr  : out std_logic_vector(13 downto 0);         -- latched address, low RAM_ADDR_BITS valid
-        ram_ext_wdata : out std_logic_vector(7 downto 0);
-        ram_ext_rdata : in  std_logic_vector(7 downto 0) := x"00"; -- must be a 1-cycle synchronous read of ram_ext_addr
-        ram_ext_rw_n  : out std_logic;                              -- 0 = write (ram_sync semantics)
-        ram_ext_cs_n  : out std_logic                               -- 0 = selected
+        rom_oe_n            : out std_logic                      -- ROM output enable (active low)
     );
 end entity b8008_top;
 
@@ -218,9 +200,7 @@ architecture structural of b8008_top is
     signal address_bus : std_logic_vector(13 downto 0);
     signal data_bus    : std_logic_vector(7 downto 0);  -- Combined data bus (external bidirectional)
     signal cpu_data_in  : std_logic_vector(7 downto 0); -- Data TO CPU (no loop from cpu_data_out)
-    -- Byte jammed during T1I: RST pattern from int_vector, or the
-    -- arbitrary override when int_jam_en='1' (testbench use)
-    signal jam_byte_sel : std_logic_vector(7 downto 0);
+
     signal cpu_data_out : std_logic_vector(7 downto 0); -- Data from CPU
     signal cpu_data_oe  : std_logic;                    -- CPU output enable
     signal phi1        : std_logic;
@@ -423,15 +403,8 @@ begin
     -- to PCW/T3 windows, so multiple clk edges during that window just
     -- rewrite the same value.
     --
-    -- EXTERNAL_RAM => false (default): internal ram_sync, unchanged path.
-    -- EXTERNAL_RAM => true: no internal RAM; ram_data_out is fed from
-    -- ram_ext_rdata and the ram_ext_* bus is driven instead (see contract
-    -- above the port declarations). Assignments live inside each generate
-    -- branch rather than a shared "when EXTERNAL_RAM else" -- GHDL trips
-    -- on boolean generics used that way in a concurrent signal assignment.
-    gen_ram_internal : if not EXTERNAL_RAM generate
-        u_ram : ram_sync
-            generic map (
+    u_ram : ram_sync
+        generic map (
                 ADDR_BITS => RAM_ADDR_BITS,
                 INIT_FILE => RAM_INIT_FILE
             )
@@ -443,21 +416,6 @@ begin
                 RW_N     => ram_rw_n,
                 CS_N     => ram_cs_n
             );
-
-        ram_ext_addr  <= (others => '0');
-        ram_ext_wdata <= (others => '0');
-        ram_ext_rw_n  <= '1';
-        ram_ext_cs_n  <= '1';
-    end generate gen_ram_internal;
-
-    gen_ram_external : if EXTERNAL_RAM generate
-        ram_data_out <= ram_ext_rdata;
-
-        ram_ext_addr  <= std_logic_vector(resize(unsigned(latched_address(RAM_ADDR_BITS-1 downto 0)), 14));
-        ram_ext_wdata <= ram_data_in;
-        ram_ext_rw_n  <= ram_rw_n;
-        ram_ext_cs_n  <= ram_cs_n;
-    end generate gen_ram_external;
 
     -- Shadow of RAM location 0 for the ram_byte_0 debug output (the block RAM
     -- has no second read port; testbenches assert on this signal)
@@ -654,9 +612,7 @@ begin
     --
     -- cpu_data_in: Data TO the CPU - does NOT include cpu_data_out to break combinational loop
     -- This is what the CPU reads during T3-T5 (instruction fetch, memory read, I/O read)
-    jam_byte_sel <= int_jam_byte when int_jam_en = '1' else ("00" & int_vector & "101");
-
-    cpu_data_in <= jam_byte_sel when (s2_int = '1' and s1_int = '1' and s0_int = '0') else  -- T1I: jam instruction
+    cpu_data_in <= int_instruction when (s2_int = '1' and s1_int = '1' and s0_int = '0') else  -- T1I: jam instruction
                    io_input_data when (is_io = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1') and
                                        latched_address(13 downto 12) = "00") else  -- INP: I/O input during T3/T4/T5
                    rom_d when (is_io = '0' and rom_selected = '1' and (is_t3 = '1' or is_t4 = '1' or is_t5 = '1')) else  -- External ROM during T3/T4/T5

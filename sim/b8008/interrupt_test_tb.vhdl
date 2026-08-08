@@ -33,7 +33,7 @@ architecture testbench of interrupt_test_tb is
             clk_in      : in  std_logic;
             reset       : in  std_logic;
             interrupt   : in  std_logic;
-            int_vector  : in  std_logic_vector(2 downto 0) := "000";
+            int_instruction : in std_logic_vector(7 downto 0) := "00000101";
             phi1_out    : out std_logic;
             phi2_out    : out std_logic;
             sync_out    : out std_logic;
@@ -94,7 +94,7 @@ architecture testbench of interrupt_test_tb is
     signal clk_in      : std_logic := '0';
     signal reset       : std_logic := '1';
     signal interrupt   : std_logic := '0';
-    signal int_vector  : std_logic_vector(2 downto 0) := "000";
+    signal int_instruction : std_logic_vector(7 downto 0) := "00000101";
     signal phi1_out    : std_logic;
     signal phi2_out    : std_logic;
     signal sync_out    : std_logic;
@@ -158,7 +158,7 @@ begin
             clk_in      => clk_in,
             reset       => reset,
             interrupt   => interrupt,
-            int_vector  => int_vector,
+            int_instruction => int_instruction,
             phi1_out    => phi1_out,
             phi2_out    => phi2_out,
             sync_out    => sync_out,
@@ -242,7 +242,7 @@ begin
         -- Phase 1: Bootstrap (RST 0)
         reset <= '1';
         interrupt <= '0';
-        int_vector <= "000";  -- RST 0 for bootstrap
+        int_instruction <= "00000101";  -- RST 0 for bootstrap
         wait for 200 ns;
 
         reset <= '0';
@@ -267,7 +267,7 @@ begin
         wait for 2 ms;  -- Wait for program to reach WAIT_FOR_INT section
 
         -- Change vector to RST 7 and trigger interrupt
-        int_vector <= "111";  -- RST 7
+        int_instruction <= "00111101";  -- RST 7
         report "Triggering RST 7 interrupt";
         interrupt <= '1';
         wait for 1 ns;
@@ -289,7 +289,7 @@ begin
         -- lands near a taken JNZ; the post-handler resume must hit the
         -- exact jump target or the loop derails (CP6 never fires).
         for i in 1 to 3 loop
-            int_vector <= "111";
+            int_instruction <= "00111101";
             report "Phase 4: RST 7 into the running loop (" & integer'image(i) & ")";
             interrupt <= '1';
             wait for 1 ns;
