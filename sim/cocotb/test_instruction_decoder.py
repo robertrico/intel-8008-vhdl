@@ -133,15 +133,10 @@ def golden(op):
     return g
 
 
-# Known divergences from the golden model, accepted for now and tracked
-# in issue #4: the RTL sets instr_is_mem_indirect for CPr (bits 5:3 are
-# the CP opcode, not a register) and for 0xFF HLT. Verified benign: every
-# consumer gates these cases out (see the issue for the walk). Remove the
-# entries when issue #4 is fixed; the test then requires a clean match.
-KNOWN_QUIRKS = {
-    (op, "instr_is_mem_indirect") for op in (0xB8, 0xB9, 0xBA, 0xBB,
-                                             0xBC, 0xBD, 0xBE, 0xFF)
-}
+# Known divergences from the golden model. Empty since issue #4's fix
+# (CPr/0xFF no longer spuriously set instr_is_mem_indirect); the
+# staleness guard below keeps this table honest in both directions.
+KNOWN_QUIRKS = set()
 
 
 @cocotb.test()

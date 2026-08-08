@@ -103,10 +103,15 @@ begin
         transition_to_stopped <= '0';  -- Default: don't stop
 
         -- Detect memory indirect operations (M register access)
-        -- This happens when SSS or DDD field = "111" for move (11) or ALU register (10) ops
-        -- NOT for ALU immediate (00PPP100) where PPP might be "111"
-        -- NOT for jump/call/io (01XXXXXX) where XXX might be "111"
-        if (op_210 = "111" or op_543 = "111") and (op_76 = "10" or op_76 = "11") then
+        -- ALU family (10 PPP SSS): only SSS=111 is the M form - bits 5:3
+        -- are the ALU opcode there, so "10 111 SSS" (CPr) must NOT match.
+        -- MOV family (11 DDD SSS): LrM (SSS=111) or LMr (DDD=111), but
+        -- 11 111 111 (0xFF) is HLT, not MOV M,M.
+        -- NOT for ALU immediate (00PPP100) or jump/call/io (01XXXXXX).
+        -- (Was issue #4: CPr 0xB8-0xBE and 0xFF spuriously matched.)
+        if (op_76 = "10" and op_210 = "111") or
+           (op_76 = "11" and (op_210 = "111" or op_543 = "111") and
+            not (op_210 = "111" and op_543 = "111")) then
             instr_is_mem_indirect <= '1';
         end if;
 
