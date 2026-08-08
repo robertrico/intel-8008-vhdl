@@ -1,0 +1,47 @@
+# Builds The Macroassembler AS (Alfred Arnold's ASL) from source and
+# installs asl + p2hex to $HOME/asl. The top-level Makefile picks them up
+# through the ASL / P2HEX environment variables (?= assignments).
+#
+# The version is PINNED to the build the repo's programs are assembled
+# with locally; bump `version` deliberately (and re-run the regression
+# suite) rather than tracking asl-current. The compiled binaries are
+# cached, so the upstream server is only contacted when the pin changes.
+name: setup-asl
+description: Build ASL macro assembler (asl, p2hex) to $HOME/asl
+
+inputs:
+  version:
+    description: ASL interim release (asl-current-<version>.tar.bz2)
+    default: "142-bld297"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache ASL binaries
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/asl
+        key: asl-${{ inputs.version }}-linux-x64
+
+    - name: Download and build ASL
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="${{ inputs.version }}"
+        URL="http://john.ccac.rwth-aachen.de:8000/ftp/as/source/c_version/asl-current-${VERSION}.tar.bz2"
+        echo "Fetching ${URL}"
+        mkdir -p "${HOME}/asl-src"
+        curl -fsSL "${URL}" | tar xj -C "${HOME}/asl-src" --strip-components=1
+        cd "${HOME}/asl-src"
+        cp Makefile.def-samples/Makefile.def-x86_64-unknown-linux Makefile.def
+        make -j"$(nproc)" binaries
+        mkdir -p "${HOME}/asl"
+        cp asl p2hex "${HOME}/asl/"
+
+    - name: Export ASL / P2HEX for the Makefile
+      shell: bash
+      run: |
+        echo "ASL=${HOME}/asl/asl" >> "${GITHUB_ENV}"
+        echo "P2HEX=${HOME}/asl/p2hex" >> "${GITHUB_ENV}"

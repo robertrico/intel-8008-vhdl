@@ -14,9 +14,33 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Classic GHDL unit testbenches (no .mem programs needed; the asm
-  # regression suite is NOT here: it requires the ASL assembler and
-  # assembled .mem artifacts that are not committed).
+  # Full-system assembly regression suite: every check_*.sh assembles
+  # its program (ASL built by setup-asl; .mem stays uncommitted) and
+  # runs it on the complete CPU in GHDL. The netlist variant swaps in
+  # the write_vhdl round-trip core (B8008_CORE=netlist).
+  regression:
+    name: regression suite (${{ matrix.core }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        core: [rtl, netlist]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oss-cad-suite
+      - uses: ./.github/actions/setup-asl
+      - name: Run regression suite
+        run: B8008_CORE=${{ matrix.core }} ./test_programs/verification_scripts/run_all_tests.sh
+      - name: Upload simulation logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-${{ matrix.core }}-logs
+          path: test_programs/verification_scripts/*.log
+          if-no-files-found: ignore
+
+  # Classic GHDL unit testbenches (no .mem programs needed).
   unit:
     name: unit testbenches
     runs-on: ubuntu-latest
