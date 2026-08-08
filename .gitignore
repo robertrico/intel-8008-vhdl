@@ -73,3 +73,5 @@ sim/cocotb/sim_build/
 sim/cocotb/results.xml
 sim/cocotb/*.ghw
 sim/cocotb/__pycache__/
+formal/*/status.sqlite
+formal/*/*/
