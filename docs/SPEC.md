@@ -1,6 +1,6 @@
 # b8008 Architecture Specification (SPEC.md)
 
-**Status:** draft — binds existing normative sources; 15 open decisions pending (§6).
+**Status:** ratified — binds existing normative sources; all 15 SPEC-QUESTIONs decided (§6).
 **Scope:** the programmer-visible contract of the b8008 core. Internals belong to the MAS (`docs/MAS.md`); testable enumeration of every claim here lives in `docs/VPLAN.md`.
 
 ## 1. Identity
@@ -13,7 +13,7 @@ Conflicts resolve top-down; any discovered conflict becomes a SPEC-QUESTION in V
 
 1. `docs/8008_1972.pdf` (Intel datasheet, 1972) and `docs/8008UM.pdf` (MCS-8 User's Manual) — joint primary authority.
 2. `docs/isa.json` — machine-readable per-instruction T-state/cycle oracle, used directly by `check_cycle_count_test.sh`. Known divergences from the PDFs are logged as SQ-01/SQ-02/SQ-14 and must be fixed in isa.json, not worked around.
-3. `docs/VPLAN.md` — the row-level enumeration (97 rows). Where prose here is compressed, the VPLAN row is the precise statement.
+3. `docs/VPLAN.md` — the row-level enumeration (102 rows). Where prose here is compressed, the VPLAN row is the precise statement.
 
 ## 3. Programmer-visible state
 
@@ -34,7 +34,7 @@ No other state is architecturally visible. Temp registers a/b and the machine-cy
 - **Flags:** update masks are load-bearing spec (escaped twice historically — VPLAN S2/S3): loads touch nothing (FLG-06), INR/DCR spare carry (FLG-07), rotates touch only carry (FLG-10), logicals clear carry (FLG-09), CMP writes flags not A (FLG-11).
 - **Stack:** CALL/RET move SP, slots retain values; 7-level nesting guaranteed; 8th call wraps onto oldest (STK-03..06). Pushed value = address of the instruction after the CALL/RST (STK-09).
 - **Interrupts:** recognized only at instruction boundaries; acknowledge cycle is T1I with PC not incremented; the T3 byte of that cycle is jammed into IR; multi-cycle jams continue as normal cycles (VPLAN §E). No automatic state save.
-- **READY/WAIT:** READY sampled at T2 of every cycle; not-ready parks in WAIT losslessly; single-stepping by READY pulse is supported behavior (VPLAN §D).
+- **READY/WAIT:** READY sampled at T2 of every cycle; not-ready parks in WAIT losslessly (system-verified by the READY stress test). Single-stepping by READY pulse is documented 8008 behavior but UNTESTED here (VPLAN RDY-03/XP-15 remain the open gap).
 - **HLT/STOPPED:** three encodings; STOPPED exits only via interrupt (ST-05/06, I-HLT-01).
 
 ## 5. Explicit non-goals

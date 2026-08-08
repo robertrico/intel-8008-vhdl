@@ -1,6 +1,8 @@
 # b8008 External Bus Protocol
 
-**Status:** draft. Pin-level contract of the CPU boundary, derived from the spec sources ranked in `docs/SPEC.md` §2. Every claim cites its `docs/VPLAN.md` row; this document is the specification for the planned cocotb bus-protocol monitor (VPLAN gap Tier-1 #4) — the monitor asserts exactly these tables.
+**Status:** active. Pin-level contract of the 8008 bus, derived from the spec sources ranked in `docs/SPEC.md` §2. Every claim cites its `docs/VPLAN.md` row; the cocotb bus-protocol monitor (`sim/cocotb/test_b8008_top.py`, in CI) asserts these tables.
+
+**Implementation mapping note:** the b8008 CORE entity diverges from the physical 8008 pinout in two synthesis-driven ways: φ1/φ2 are OUTPUTS (generated internally by phase_clocks from clk_in, not fed in), and the bidirectional D bus is split into data_bus_in / data_bus_out / data_bus_oe (FPGA tri-state modeling). The PROTOCOL below — what appears when, per T-state — is unchanged by either.
 
 ## 1. Signals
 
@@ -39,7 +41,7 @@ No other code is ever driven. Monitor assertion: at every SYNC-qualified sample,
 | STOPPED | bus floats | (BUS-09) |
 | T4, T5 | internal-bus value observable (testability) | per micro-op tables (BUS-06); INP drives flags at T4: S→D0, Z→D1, P→D2, C→D3 (FLG-13) |
 
-**OPEN (SQ-07):** whether the T2 high-address byte of a page-crossing fetch is pre- or post-carry. Monitor must not assert this bit pattern until ruled.
+**SQ-07 RULED (pre-carry):** the T2 high byte is the CURRENT fetch's page; the pending carry lands at T2 second half (SPEC §6). The monitor asserts T2 = current fetch page.
 
 ## 4. Cycle types (VPLAN BUS-03, BUS-07, BUS-08)
 

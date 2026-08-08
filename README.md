@@ -27,7 +27,7 @@ All period software below runs on the FPGA, loaded over serial through the monit
 
 ## Project Status
 
-**Silicon-validated on a Lattice ECP5-5G Versa.** 28/28 regression tests, 46/46 hardware ISA self-tests on the board, cycle-exact T-states verified against the datasheet for all 27 timing classes.
+**Silicon-validated on a Lattice ECP5-5G Versa.** 35/35 regression tests, 46/46 hardware ISA self-tests on the board, cycle-exact T-states verified against the datasheet for all 27 timing classes.
 
 | Component | Status |
 |-----------|--------|
@@ -47,7 +47,7 @@ Module contracts are machine-checked in CI on every push (`verification` badge a
 
 - **SBY property proofs** — module contracts as PSL/VHDL assertions; k-induction where possible, bounded model checking otherwise. Cover checks confirm the properties are reachable.
 - **Synthesis round-trip equivalence** — each module is synthesized with Yosys, written back to VHDL (`write_vhdl`), and checked equivalent to the original RTL: EQY for combinational modules, SBY miters for sequential ones (write_vhdl splits vector flops, which breaks EQY's partition matching).
-- **Exhaustive sweeps against independent models** — instruction decoder: all 256 opcodes against a Python model written from the datasheet (found issue #4). ALU: all 656,384 arithmetic cases against a reference model.
+- **Exhaustive sweeps against independent models** — instruction decoder: all 256 opcodes against a Python model written from the datasheet (found issue #4, since fixed). ALU: all 1,049,600 cases (arithmetic + logical) against a reference model.
 - **Mutation-tested checkers** — each property suite and sweep was validated by planting a bug in the RTL, confirming the checker fails, then reverting.
 - **cocotb testbenches** — Python random-walk tests that run against both the RTL and the round-tripped netlist (`DUT_VARIANT=rtl|netlist`).
 
@@ -70,9 +70,10 @@ Scorecard:
 | carry_lookahead | — | ✅ EQY | — |
 | instruction_decoder | — | ✅ EQY | ✅ 256-opcode sweep, rtl + netlist |
 | scratchpad_decoder, io_buffer, mem_mux_refresh | — | ✅ EQY | — |
-| full core (b8008) | — | ✅ regression suite with netlist core swap (local) | — |
+| MCC+STG composition cluster | ✅ mutex + status bijection (bmc-120) | — | — |
+| full core (b8008) | — | ✅ regression suite with netlist core swap (CI, both cores) | ✅ external bus-protocol monitor |
 
-Every b8008 module has machine-checked verification. CI runs per push: the full assembly regression suite on both the RTL and round-trip-netlist cores, all unit testbenches, 10 SBY property suites, 7 SBY miters, 6 EQY equivalence checks, and 6 cocotb runs. Findings are tracked as repo issues.
+Every b8008 module has machine-checked verification. CI runs per push: the full 35-test assembly regression suite on both the RTL and round-trip-netlist cores, all unit testbenches, 11 SBY property suites (including the composition cluster), 7 SBY miters, 6 EQY equivalence checks, and 7 cocotb runs (including the whole-system bus-protocol monitor). Findings are tracked as repo issues.
 
 ## Architecture
 
@@ -150,7 +151,7 @@ make test-b8008-top PROG=search_as
 # Test individual modules
 make test-stack-memory    # Address stack (PC-in-stack)
 make test-alu             # ALU
-make test-alu-exhaustive  # All 656,384 arithmetic cases vs reference model
+make test-alu-exhaustive  # All 1,049,600 ALU cases vs reference model
 make test-instr-decoder   # Instruction decoder
 
 # See everything
@@ -161,7 +162,7 @@ make show-programs
 ### Verification Scripts
 
 ```bash
-# Run ALL verification tests (regression suite, 28/28)
+# Run ALL verification tests (regression suite, 35/35)
 ./test_programs/verification_scripts/run_all_tests.sh
 
 # Individual checks

@@ -30,7 +30,7 @@ Each step has an observable gate; do not advance on inference. Order = verify-wh
 6. **Selftest ROM.** 46-test ISA selftest over serial. Gate: 46/46 — and record which VPLAN rows this does NOT cover (it missed scars S2/S3 historically; the checkpoint regression suite is the stronger net).
 7. **Checkpoint regression on silicon.** Run the `check_*.sh`-instrumented programs via monitor HEX load where feasible; compare `OUT 31` serial dumps against sim logs. Gate: byte-identical checkpoint lines.
 8. **Interrupt storm.** sw(5)/sw(7) RST7 jams into the spinning-loop program (VPLAN INT-06 idiom). Gate: loop-count integrity via checkpoint (C register exact).
-9. **READY/WAIT on hardware.** sw(6) not-ready during execution; single-step by READY pulses. Gate (VPLAN RDY-02/03, currently GAP even in sim): program completes with identical final checkpoints; WAIT code 000 visible on S-pins while parked; bus floats during WAIT (LA: D-lines high-Z/pulled).
+9. **READY/WAIT on hardware.** sw(6) not-ready during execution; single-step by READY pulses. Gate (VPLAN RDY-02 sim-covered by check_ready_wait_test.sh; RDY-03 single-step still GAP): program completes with identical final checkpoints; WAIT code 000 visible on S-pins while parked; bus floats during WAIT (LA: D-lines high-Z/pulled).
 10. **Period software.** SCELBAL / Mandelbrot / STARS boot. Gate: known-good outputs (these caught scar S2 when the selftest didn't — they stay in the sequence).
 
 ## 3. Contingency

@@ -76,12 +76,12 @@ Internal bus: priority mux of six drivers (§6). External bus: T1/T2 address-and
 
 | Rule | Where | Formal |
 |------|-------|--------|
-| Internal-bus driver priority io_buffer > mem_mux > temp_regs > alu > cond_flags > IR (mutual exclusion is control's job; mux is backstop) | b8008.vhdl:848-854 | `TODO-prop: one-driver-at-a-time (core-level)` |
+| Internal-bus driver priority io_buffer > mem_mux > temp_regs > alu > cond_flags > IR (mutual exclusion is control's job; mux is backstop) | b8008.vhdl internal-bus mux | `TODO-prop: one-driver-at-a-time (core-level)` |
 | SP push beats pop; wraps both directions | stack_pointer.vhdl:53-61 | `(PSL: stack_pointer P2/P3)` |
 | PC-slot op priority load > inc_upper > inc_lower > hold (same order in forwarding mux and sync update) | stack_memory.vhdl:98-131 | `(PSL: stack_memory)` |
 | T3 exit: stopped > advance(T1I/T1) > cycle_done(T1, no INT check) > T4; T4: advance > cycle_done > T5; T5→T1I only at boundary | state_timing_generator.vhdl:140-197 | `(PSL: state_timing P4)` |
 | STOPPED exits only on interrupt → T1I; T2/WAIT park on READY | state_timing_generator.vhdl:102-138 | `(PSL: state_timing arcs)` |
-| Scratchpad address: ahl_active override beats scratchpad_select | b8008.vhdl:780 | `TODO-prop` |
+| Scratchpad address: ahl_active override beats scratchpad_select | b8008.vhdl scratchpad-address mux | `TODO-prop` |
 | Register-file read priority A>B>…>L (one-hot input makes it moot) | register_file.vhdl:114-121 | `(PSL: register_file mux priority)` |
 | PC-load source: RST vector > temp regs (RET loads nothing - the pop IS the return; the stack arm was dead and is deleted) | mem_mux_refresh.vhdl | `TODO-prop (module has no props yet)` |
 | condition_met defaults '1' unconditional; conditional = flag XNOR sense | condition_flags.vhdl:132-176 | `(PSL: condition_flags P6)` |
@@ -96,22 +96,23 @@ Internal bus: priority mux of six drivers (§6). External bus: T1/T2 address-and
 
 **Async pin entries (all → clk_sys):** debug buttons via debouncer (2-FF + 20 ms); sw-reset 3-FF; INT switch via `int_button` (2-FF + debounce + **latched request held until T1I ack** — slow φ-rate sampling can't miss it); READY switch 2-FF + baseline capture; UART RX 2-FF; sw(1..4) quasi-static raw (accepted); sw(7) vector captured at request time.
 
-**Post-reset sequence:** debug controller powers up stopped (CPU frozen) → run/auto-start → bootstrap jams RST 0 via interrupt → hardware break re-stops unless configured. Startup relative to SPEC SQ-15 (8008 power-on protocol) is a documented divergence pending that decision.
+**Post-reset sequence:** debug controller powers up stopped (CPU frozen) → run/auto-start → bootstrap jams RST 0 via interrupt → hardware break re-stops unless configured. Startup vs the 8008 power-on protocol: SQ-15 is ratified as dissolved — the architectural contract (STOPPED until INT, machine-chosen jam byte) is met; Intel's internal HLT-in-IR mechanism is unobservable and not reproduced.
 
 ## 8. Observability (designed-in; can't add at the bench)
 
 - **Core debug ports (`b8008_top`):** φ/SYNC/S0-S2, address_out, data_out, all 7 registers, PC, IR, cycle, 4 flags, int_pending, state_half, IO ports 8/9/10 — plus the `OUT 31` checkpoint report (full CPU state) that the entire verification-script layer keys on.
 - **Monitor board:** dedicated LA pins (cpu_d[7:0], S0-S2, SYNC, φ1/φ2, INT); LED capture modes (fetch data/addr-low/addr-high/status); run/stop/step-φ/step-SYNC buttons.
-- **Bench toolchain:** DSView probe map = `INT_RST, PHI1, PHI2, SYNC, S0, S1, S2, D0-D7` (dsview_settings.dsc); `test_tools/*.py` consume DSView CSV export and decode state codes + cycle types (trace_states, trace_execution, check_int_timing, analyze_glitches).
+- **Bench toolchain:** DSView probe map = `INT_RST, PHI1, PHI2, SYNC, S0, S1, S2, D0-D7` (dsview_settings.dsc); `test_tools/*.py` consume DSView CSV export and decode state codes + cycle types (trace_states, trace_execution, check_int_timing, analyze_glitches, analyze_logic_csv, find_int_edges).
 - Rule going forward: any new internal mechanism gets its observability decided here first (scar S6: dead board = no visibility).
 
 ## 9. Debts & deviations register
 
 1. **Compensating paired state** (`memory_io_control`): `suppress_pc_inc_next_cycle` (4-arm set condition) and `ir_loaded_from_interrupt` (set T1I, cleared after T4) — the exact pattern behind scars S4/S5; RTL comments memorialize two prior bugs from it. Candidate structural fix, not more conditions.
 2. **Conditional accretion:** memory_io_control's 430-line guarded lattice and machine_cycle_control's advance/cycle_done ladder are at the CLAUDE.md style boundary — tolerated in smart modules, but the suppress-flag disjunction is past it.
-3. **Instruction knowledge outside decoder/control:** structural top conditions bus mux on `instr_is_io` and picks alu_opcode from instr flags (b8008.vhdl:795-807, 838); machine_cycle_control reconstructs LMr identity by flag algebra (:137). Move into decoder outputs.
+3. **Instruction knowledge outside decoder/control:** structural top conditions bus mux on `instr_is_io` and picks alu_opcode from instr flags (b8008.vhdl data-bus/alu-opcode muxes); machine_cycle_control reconstructs LMr identity by flag algebra (:137). Move into decoder outputs.
 4. **Hidden state in a "no state" module:** alu's `result_latched`/`enable_prev` edge-detect adds a second timing convention beneath register_alu_control's level-based one.
 5. **Duplicate state decode:** register_alu_control re-derives T-states from S0-S2 — now safe: status/one-hot proven a bijection `(PSL: state_timing P3/P3b, k-induction)`.
-6. **Dead/vestigial fabric:** ~~orphan modules~~ (deleted); dead memory_io_control outputs (addr_select_sss/ddd, memory_refresh, refresh_increment, stack_addr_select, stack_read/write); unused ports (register_alu_control.interrupt — repo issue #2, memory_io_control.pc_lower_byte); `stack_addr <= pc_addr` alias makes select_stack/pc_load_from_stack degenerate; `pc_control_t.hold` never read; scratchpad_decoder.enable_m dangles; condition_flags bus output permanently disabled. Delete or justify each.
+6. **Dead/vestigial fabric: SWEPT (all deletions landed).** Removed: memory_io_control's dead outputs and inputs, state_timing_generator's dead instr_is_hlt_flag chain, register_alu_control.interrupt, mem_mux_refresh's stack-load arm and address inputs, the stack_addr alias, `pc_control_t.hold`, the three orphan modules, b8008_uart_top, and the EXTERNAL_RAM/ram_ext_* option (LiteX ruled out of scope). Justified keeps, commented in RTL: scratchpad_decoder.enable_m (ratified SQ-12 behavior). condition_flags' flag-to-bus path is now LIVE: register_alu_control drives output_flags at INP's PCC T4 (FLG-13 implemented and monitor-asserted).
+
 7. **Record-type erosion:** only `pc_control_t` survives as a record; memory_io_control's contract is ~28 scalar strobes. Consider re-grouping into records per consumer (readability + fewer wiring bugs).
 8. **Composition obligations:** advance/cycle_done mutex proven on the mcc_stg_cluster (see §4); status↔one-hot bijection proven module-level. Remaining unproven composition items, descoped with justification (bounded project; behavior pinned by the system suites + bus monitor): internal-bus one-driver-at-a-time (priority mux backstop + cocotb strobes), ahl_active override (hl_mask + mov_mem system tests).

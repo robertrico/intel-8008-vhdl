@@ -4,7 +4,7 @@
 > verification plan is the current coverage truth.
 >
 > **HISTORICAL SNAPSHOT.** This matrix predates the full test buildout.
-> Current truth: 28/28 regression tests, a 46-test hardware ISA self-test
+> Current truth: see VPLAN.md (regression suite now 35 tests), a 46-test hardware ISA self-test
 > passing on silicon, cycle-exact timing verified for all 27 classes
 > (`check_cycle_count_test.sh` vs `docs/isa.json`), and period software
 > (SCELBAL BASIC, HEXPAWN, SCELBI FP calc, etc.) running on the board -

@@ -7,11 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is **b8008** - a block-based VHDL implementation of the Intel 8008 microprocessor (world's first 8-bit microprocessor from 1972). Unlike previous monolithic implementations, b8008 uses a **modular block-diagram approach** where each component (Program Counter, ALU, Register File, etc.) is a separate, simple module with explicit interfaces.
 
 **IMPORTANT**: This is the third iteration of the Intel 8008 implementation:
-- **s8008** (legacy) - Single-cycle implementation (in `src/components/s8008.vhdl`)
-- **v8008** (legacy) - Attempted multi-cycle implementation (in `src/components/v8008.vhdl`)
+- **s8008** (legacy) - Single-cycle implementation (in `src/s8008/`)
+- **v8008** (legacy) - Attempted multi-cycle implementation (in `src/v8008/`)
 - **b8008** (CURRENT) - Block-based, modular implementation (in `src/b8008/`)
 
-**IGNORE ALL CODE IN**: `src/components/s8008.vhdl`, `src/components/v8008.vhdl`, and `projects/legacy_projects/`. These are deprecated implementations kept for reference only.
+**IGNORE ALL CODE IN**: `src/s8008/`, `src/v8008/`, and `projects/legacy_projects/`. These are deprecated implementations kept for reference only.
 
 ## Architecture Philosophy
 
@@ -39,7 +39,7 @@ b8008 follows the Intel 8008 block diagram architecture:
 ┌──────────────────┐
 │  Stack Pointer   │  ┌─────────────────┐
 │  (3-bit, wraps)  │  │      ALU        │
-└──────────────────┘  │  (i8008_alu)    │
+└──────────────────┘  │  (alu.vhdl)     │
                       └─────────────────┘
 ```
 
@@ -99,7 +99,7 @@ make test-b8008-top PROG=search_as
 # Test individual modules
 make test-stack-memory    # Address stack (PC-in-stack)
 make test-alu             # ALU
-make test-alu-exhaustive  # ALU arithmetic: all 656,384 cases vs reference model
+make test-alu-exhaustive  # ALU: all 1,049,600 arithmetic+logical cases vs reference model
 make test-carry-lookahead # Carry look-ahead (the ALU's adder)
 make test-instr-decoder   # Instruction decoder
 
@@ -126,18 +126,11 @@ The `test_programs/verification_scripts/` directory contains automated verificat
 # Run ALL verification tests (regression suite)
 ./test_programs/verification_scripts/run_all_tests.sh
 
-# Run a specific verification test
+# Run a specific verification test (one check_*.sh per test program - 35 total)
 ./test_programs/verification_scripts/check_alu_test.sh
 ./test_programs/verification_scripts/check_search_test.sh
-./test_programs/verification_scripts/check_ram_test.sh
-./test_programs/verification_scripts/check_rotate_test.sh
-./test_programs/verification_scripts/check_sign_parity_test.sh
-./test_programs/verification_scripts/check_conditional_call_test.sh
-./test_programs/verification_scripts/check_sign_parity_call_test.sh
-./test_programs/verification_scripts/check_memory_alu_test.sh
-./test_programs/verification_scripts/check_mvi_m_test.sh
-./test_programs/verification_scripts/check_rst_test.sh
-./test_programs/verification_scripts/check_io_test.sh
+./test_programs/verification_scripts/check_ready_wait_test.sh
+# ... ls test_programs/verification_scripts/check_*.sh for the full list
 ```
 
 **Workflow for testing assembly programs:**
@@ -150,9 +143,10 @@ The `test_programs/verification_scripts/` directory contains automated verificat
 
 ```
 intel-8008-vhdl/
-├── Makefile                         # Build system: sim, synth, assembler targets (see 'make help')
+├── Makefile                         # Build system: sim, synth, formal, assembler targets (see 'make help')
 ├── src/
 │   ├── b8008/                       # ✅ CURRENT: Block-based implementation
+│   │   ├── address_decoder.vhdl
 │   │   ├── ahl_pointer.vhdl
 │   │   ├── alu.vhdl
 │   │   ├── b8008_top.vhdl
@@ -160,60 +154,47 @@ intel-8008-vhdl/
 │   │   ├── b8008.vhdl
 │   │   ├── carry_lookahead.vhdl
 │   │   ├── condition_flags.vhdl
+│   │   ├── debug_clock_control.vhdl
 │   │   ├── instruction_decoder.vhdl
 │   │   ├── instruction_register.vhdl
+│   │   ├── int_button.vhdl
 │   │   ├── interrupt_ready_ff.vhdl
 │   │   ├── io_buffer.vhdl
 │   │   ├── machine_cycle_control.vhdl
 │   │   ├── mem_mux_refresh.vhdl
 │   │   ├── memory_io_control.vhdl
+│   │   ├── ram_sync.vhdl
 │   │   ├── register_alu_control.vhdl
 │   │   ├── register_file.vhdl
-│   │   ├── scratchpad_addr_mux.vhdl
 │   │   ├── scratchpad_decoder.vhdl
-│   │   ├── sss_ddd_selector.vhdl
-│   │   ├── stack_addr_mux.vhdl
 │   │   ├── stack_memory.vhdl
 │   │   ├── stack_pointer.vhdl
 │   │   ├── state_timing_generator.vhdl
 │   │   └── temp_registers.vhdl
 │   ├── components/                  # Shared/reusable components
 │   │   ├── phase_clocks.vhdl        # ✅ REUSABLE: Two-phase clock generator
-│   │   ├── i8008_alu.vhdl           # ✅ REUSABLE: ALU (will be adapted for b8008)
+│   │   ├── i8008_alu.vhdl           # legacy ALU (b8008 has its own alu.vhdl)
 │   │   ├── debouncer.vhdl           # ✅ REUSABLE: Button debouncer
-│   │   ├── rom_2kx8.vhdl            # ✅ REUSABLE: 2KB ROM
-│   │   ├── rom_4kx8.vhdl            # ✅ REUSABLE: 4KB ROM
+│   │   ├── uart_rx.vhdl / uart_tx.vhdl / usart.vhdl / b8008_usart.vhdl
+│   │   ├── rom_1kx8/2kx8/4kx8/8kx8.vhdl, ram_4kx8.vhdl
 │   │   └── legacy/                  # Legacy support components (DO NOT USE)
-│   │       ├── memory_controller.vhdl
-│   │       ├── interrupt_controller.vhdl
-│   │       ├── io_controller.vhdl
-│   │       ├── uart_rx.vhdl
-│   │       └── uart_tx.vhdl
-│   ├── s8008/                       # ⚠️ DEPRECATED: Single-cycle implementation
-│   │   └── s8008.vhdl               # (IGNORE - legacy monolithic design)
-│   └── v8008/                       # ⚠️ DEPRECATED: Multi-cycle implementation
-│       └── v8008.vhdl               # (IGNORE - overly complex design)
+│   ├── s8008/                       # ⚠️ DEPRECATED: Single-cycle implementation + its TBs (IGNORE)
+│   ├── v8008/                       # ⚠️ DEPRECATED: Multi-cycle implementation + its TBs (IGNORE)
+│   └── synth/                       # Synthesis wrappers
 ├── sim/
-│   ├── b8008/                       # ✅ CURRENT: Tests for b8008 modules
+│   ├── b8008/                       # ✅ CURRENT: VHDL testbenches for b8008 modules
+│   ├── cocotb/                      # ✅ cocotb suites (decoder, stack_pointer, memory_io_control, b8008_top bus monitor)
 │   └── units/                       # Unit tests for external peripheral components
+├── formal/                          # ✅ SBY property suites + netlist miters (per-module), eqy/
 ├── build/
 │   └── b8008/                       # Build artifacts for b8008
 ├── projects/
+│   ├── b8008_basic/, b8008_monitor/ # FPGA board tops
 │   └── legacy_projects/             # ⚠️ DEPRECATED: Old s8008/v8008 FPGA projects
 ├── test_programs/                   # Assembly programs (.asm files)
-│   └── verification_scripts/        # ✅ REQUIRED: Test verification scripts
-│       ├── run_all_tests.sh         # Regression test runner
-│       ├── check_alu_test.sh        # ALU instruction verification
-│       ├── check_search_test.sh     # Memory search test verification
-│       ├── check_ram_test.sh        # RAM read/write verification
-│       ├── check_rotate_test.sh     # Rotate instruction verification
-│       ├── check_conditional_call_test.sh
-│       ├── check_sign_parity_call_test.sh
-│       ├── check_memory_alu_test.sh
-│       ├── check_mvi_m_test.sh
-│       ├── check_rst_test.sh
-│       └── check_io_test.sh
-└── docs/                            # Documentation (datasheets, guides)
+│   └── verification_scripts/        # ✅ REQUIRED: run_all_tests.sh + one check_*.sh per program (35 tests)
+├── test_tools/                      # Log/trace analysis helpers
+└── docs/                            # Documentation (datasheets, SPEC/MAS/VPLAN/BUS_PROTOCOL/TIMING/BRINGUP)
 ```
 
 ## b8008 Implementation Details
