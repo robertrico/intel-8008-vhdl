@@ -419,8 +419,8 @@ title(s, 'Five questions, in order')
 cards = [
     ('1', 'What IS an\nFPGA?', 'LUTs, flip-flops,\nrouting, hard blocks,\nbitstreams. No\nhand-waving.'),
     ('2', 'What does HDL\nactually say?', 'VHDL vs Verilog, the\nthree things you write,\nand what each becomes\nin silicon.'),
-    ('3', 'What does the\ntoolchain do?', 'GHDL → Yosys →\nnextpnr → bitstream.\nSynthesis, place, route,\ntiming closure.'),
-    ('4', 'Where does it\nbite you?', 'Tri-states, inference,\nclock domains, and the\nday simulation lied\nto me.'),
+    ('3', 'What does the\ntoolchain do?', 'GHDL → Yosys → nextpnr\n→ bitstream. Place, route,\ntiming closure — and\ninference’s sharp edge.'),
+    ('4', 'Where does it\nbite you?', 'The clocking trap, the\nday the toolchain ate\nmy ROM, and how you\nprove gateware is right.'),
     ('5', 'Can you learn\nthis with an AI?', 'Yes. I did. And the two\nattempts I threw away\nshow exactly how\nnot to.'),
 ]
 cx = 0.6
@@ -565,13 +565,13 @@ cw, chh, cg = 0.52, 0.42, 0.08
 tbx, tby = lx + 1.55, ly + 0.75
 tb, tf = box(s, lx + 0.25, ly + 0.18, 5.5, 0.45)
 p = tf.paragraphs[0]
-r = p.add_run(); r.text = 'The 16 configuration bits your bitstream loads'
-r.font.name = FONT; r.font.size = Pt(14); r.font.bold = True
+r = p.add_run(); r.text = 'The 16 possible answers — each cell is q for one input combo'
+r.font.name = FONT; r.font.size = Pt(13); r.font.bold = True
 r.font.color.rgb = CHARCOAL
 for i, b in enumerate(bits):
     rr, cc = divmod(i, 4)
     sh = rect(s, tbx + cc * (cw + cg), tby + rr * (chh + cg), cw, chh,
-              YELLOW if b else RGBColor(0xEC, 0xEF, 0xF3),
+              RGBColor(0xEC, 0xEF, 0xF3),
               line_color=RGBColor(0xC9, 0xCE, 0xD6), line_w=1)
     shape_text(sh, str(b), size=14, bold=True, color=CHARCOAL, mono=True)
     if cc == 0:
@@ -582,13 +582,25 @@ outp = rect(s, tbx + 0.9, tby + 4 * (chh + cg) + 0.35, 2.1, 0.6, CHARCOAL2,
 shape_text(outp, 'q', size=16, bold=True, mono=True)
 arrow(s, tbx + 1.95, tby + 4 * (chh + cg) + 0.05, tbx + 1.95,
       tby + 4 * (chh + cg) + 0.32, color=CHARCOAL2, wpt=2)
+caption(s, tbx + 2.15, tby + 4 * (chh + cg) + 0.08, 2.3,
+        'inputs pick ONE cell', size=10)
 caption(s, lx + 0.25, ly + 4.05, 5.5,
         'Change the function → change 16 bits. Same silicon.', size=13)
-notes(s, 'This is the "oh!" slide for anyone who has never seen inside an FPGA. Walk one '
-         'row: a=1,b=1 → the answer is 1 regardless of c and d, so those rows are yellow. '
-         'Then the punchline: reconfiguring an FPGA is literally rewriting these tables. '
-         'The ECP5 has ~44,000 of them, and a real LUT4 also has a fast path to its '
-         'neighbour so wide functions chain cheaply.')
+notes(s, 'This is the "oh!" slide for anyone who has never seen inside an FPGA. '
+         'Key point to say out loud: all 16 cells are identical memory bits — none of '
+         'them is special, none of them is "active". At runtime the four inputs d,c,b,a '
+         'form a 4-bit address and the multiplexer copies exactly ONE cell to q, whether '
+         'it holds 0 or 1. Walk one concrete lookup: a=1, b=1, c=0, d=0 → address '
+         'dcba=0011 → that is the 4th cell of the top row, which stores 1 → q=1. Then '
+         'walk a zero: a=0, b=1, c=0, d=1 → dcba=1010 → 3rd cell of 3rd row, stores 0 → '
+         'q=0. Same mechanism both times; the LUT does not "know" AND or OR, it just '
+         'remembers answers. How the grid was filled: the synthesizer evaluated '
+         'q = (a AND b) OR (c AND NOT d) for all 16 addresses. Row 2 is all 1s because '
+         'c=1,d=0 makes the second term true no matter what a,b are; the last column of '
+         'the other rows is 1 because those are the addresses where a=b=1. Punchline: '
+         'reconfiguring an FPGA is literally rewriting these tables. The ECP5 has '
+         '~44,000 of them, and a real LUT4 also has a fast path to its neighbour so '
+         'wide functions chain cheaply.')
 
 # ---- Slide 6: The hard blocks
 s = slide()
@@ -896,7 +908,8 @@ code_panel(s, 0.6, 1.95, 7.0, 4.5,
            '  end if;\n'
            'end process;', size=13)
 bullets(s, 7.95, 1.95, 4.85, 4.6, [
-    'This is the **entire** 8008 stack pointer. 69 lines with comments.',
+    'This is **all the logic** of the 8008 stack pointer. The full file is 69 lines — '
+    'the rest is comments and boilerplate.',
     'It does not know what `CALL` is. It does not know interrupts exist. It counts, and it '
     'wraps 7→0 for free because it is 3 bits wide.',
     'In silicon: **3 flip-flops, an incrementer, a decrementer, and a mux.**',
@@ -913,91 +926,7 @@ notes(s, 'Two payoffs, both worth naming. (1) Verification: a module this small 
          'Claude and reviewed by me. The 8008’s wrap-around stack semantics fall out of '
          'the 3-bit width; I never wrote code for it.')
 
-# ---- Slide 14: VHDL to LUTs, all the way down
-s = slide()
-kicker(s, 'Part 2 — Describing hardware')
-title(s, 'All the way down: one line of VHDL → silicon')
-stages = [
-    ('You write', 'sp_r <= sp_r + 1;', '-- VHDL'),
-    ('GHDL emits', 'assign n42 = sp_r + 3\'d1;', '// Verilog'),
-    ('Yosys maps', 'CCU2C  #(.INIT0(...))\n  ccu_0 (.A0(sp_r[0]), ...);', '// ECP5 cells'),
-    ('nextpnr places', 'X23/Y7/SLICEA  →  X23/Y7/SLICEB', '// coordinates'),
-]
-cy = 1.95
-for i, (who, code, tag) in enumerate(stages):
-    sh = rect(s, 0.6, cy, 2.5, 0.85, CHARCOAL2, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
-    shape_text(sh, who, size=15, bold=True)
-    code_panel(s, 3.35, cy, 6.2, 0.85, code, size=12.5,
-               comment='--' if i == 0 else '//')
-    tb, tf = box(s, 9.75, cy + 0.14, 3.1, 0.7)
-    p = tf.paragraphs[0]
-    rich(p, tag.replace('--', '').replace('//', '').strip(), False, 13,
-         base_color=MIDGREY)
-    if i < len(stages) - 1:
-        arrow(s, 1.85, cy + 0.87, 1.85, cy + 1.03, color=YELLOW, wpt=2.5)
-    cy += 1.05
-sh = rect(s, 0.6, cy + 0.05, 12.1, 0.95, PALE_YELLOW, line_color=YELLOW, line_w=1.5)
-tf = sh.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
-rich(p, 'Every intermediate file is on my disk, in plain text, because the whole '
-        'toolchain is open source.', False, 16)
-notes(s, 'This is the spine of the talk for hardware-curious folks: the abstraction stack '
-         'is only four levels deep and you can inspect all of it. Mention that '
-         '`build/*.v` and `build/*.json` are readable — I have debugged real problems by '
-         'grepping the Yosys JSON. Contrast with a closed vendor flow where the '
-         'intermediate is a binary blob.')
-
-# ---- Slide 15: Inference
-s = slide()
-kicker(s, 'Part 2 — Describing hardware')
-title(s, 'Inference: say the magic words, get the hard block')
-code_panel(s, 0.6, 1.95, 6.5, 2.65,
-           'process(CLK)\n'
-           'begin\n'
-           '  if rising_edge(CLK) then\n'
-           '    if CS_N=\'0\' and RW_N=\'0\' then\n'
-           '      ram(idx) <= DATA_IN;\n'
-           '    end if;\n'
-           '    DATA_OUT <= ram(idx);   -- registered read\n'
-           '  end if;\n'
-           'end process;', size=13)
-caption(s, 0.6, 4.7, 6.5, 'src/b8008/ram_sync.vhdl — the 8008’s memory')
-bullets(s, 7.4, 1.95, 5.4, 2.8, [
-    'Because **both** the read and the write are clocked, Yosys recognizes the shape and '
-    'emits `DP16KD` — a real block RAM.',
-    'All 16 KB of this machine’s ROM and RAM: **8 block RAMs. Zero LUTs.**',
-], size=16, space=14)
-# right/wrong panel
-rect(s, 0.6, 5.15, 6.5, 1.95, RGBColor(0xFF, 0xFF, 0xFF),
-     line_color=RED, line_w=1.5)
-tb, tf = box(s, 0.85, 5.28, 6.0, 1.7)
-p = tf.paragraphs[0]
-r = p.add_run(); r.text = 'Move the read outside the clocked process…'
-r.font.name = FONT; r.font.size = Pt(16); r.font.bold = True
-r.font.color.rgb = RED
-p = tf.add_paragraph(); p.space_before = Pt(8)
-rich(p, '…and you have asked for an **asynchronous-read memory**, which a block RAM '
-        'physically cannot do. Yosys obliges — by building it out of **131,072 '
-        'flip-flops**. The chip has 43,848. It does not fit, and the error arrives three '
-        'tools downstream, phrased as a placement failure.', False, 14)
-rect(s, 7.4, 5.15, 5.4, 1.95, PALE_YELLOW, line_color=YELLOW, line_w=1.5)
-tb, tf = box(s, 7.62, 5.3, 5.0, 1.7)
-p = tf.paragraphs[0]
-r = p.add_run(); r.text = 'The lesson'
-r.font.name = FONT; r.font.size = Pt(16); r.font.bold = True
-r.font.color.rgb = CHARCOAL
-p = tf.add_paragraph(); p.space_before = Pt(8)
-rich(p, 'In HDL, **the shape of your code is the request.** Same logic, same result in '
-        'simulation — one version fits in 7% of the block RAM, the other does not fit '
-        'at all.', False, 14)
-notes(s, 'Best single example of "HDL is not software". Both versions simulate '
-         'identically and both are correct. One fits in 7% of the block RAM; the other '
-         'does not fit at all. This is why HDL people talk about "coding styles" — they '
-         'are not style, they are load-bearing. Also note the deliberate design comment in '
-         'ram_sync.vhdl: the one-cycle read latency is invisible to the 8008 because the '
-         'address is latched at T1/T2 and data is not consumed until T3.')
-
-# ---- Slide 16: Things that don't exist inside an FPGA
+# ---- Slide 14: Things that don't exist inside an FPGA
 s = slide()
 kicker(s, 'Part 2 — Describing hardware')
 title(s, 'Things that do not exist inside an FPGA')
@@ -1055,7 +984,41 @@ notes(s, 'These three are where a 1972 datasheet collides with 2013 silicon. The
 # PART 3 — THE TOOLCHAIN
 # ============================================================
 
-# ---- Slide 17: The flow
+# ---- Slide 15: VHDL to LUTs, all the way down
+s = slide()
+kicker(s, 'Part 3 — The toolchain')
+title(s, 'All the way down: one line of VHDL → silicon')
+stages = [
+    ('You write', 'sp_r <= sp_r + 1;', '-- VHDL'),
+    ('GHDL emits', 'assign n42 = sp_r + 3\'d1;', '// Verilog'),
+    ('Yosys maps', 'CCU2C  #(.INIT0(...))\n  ccu_0 (.A0(sp_r[0]), ...);', '// ECP5 cells'),
+    ('nextpnr places', 'X23/Y7/SLICEA  →  X23/Y7/SLICEB', '// coordinates'),
+]
+cy = 1.95
+for i, (who, code, tag) in enumerate(stages):
+    sh = rect(s, 0.6, cy, 2.5, 0.85, CHARCOAL2, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
+    shape_text(sh, who, size=15, bold=True)
+    code_panel(s, 3.35, cy, 6.2, 0.85, code, size=12.5,
+               comment='--' if i == 0 else '//')
+    tb, tf = box(s, 9.75, cy + 0.14, 3.1, 0.7)
+    p = tf.paragraphs[0]
+    rich(p, tag.replace('--', '').replace('//', '').strip(), False, 13,
+         base_color=MIDGREY)
+    if i < len(stages) - 1:
+        arrow(s, 1.85, cy + 0.87, 1.85, cy + 1.03, color=YELLOW, wpt=2.5)
+    cy += 1.05
+sh = rect(s, 0.6, cy + 0.05, 12.1, 0.95, PALE_YELLOW, line_color=YELLOW, line_w=1.5)
+tf = sh.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
+rich(p, 'Every intermediate file is on my disk, in plain text, because the whole '
+        'toolchain is open source.', False, 16)
+notes(s, 'This is the spine of the talk for hardware-curious folks: the abstraction stack '
+         'is only four levels deep and you can inspect all of it. Mention that '
+         '`build/*.v` and `build/*.json` are readable — I have debugged real problems by '
+         'grepping the Yosys JSON. Contrast with a closed vendor flow where the '
+         'intermediate is a binary blob.')
+
+# ---- Slide 16: The flow
 s = slide(dark=True)
 kicker(s, 'Part 3 — The toolchain', dark=True)
 title(s, 'Source to silicon, entirely open source', dark=True)
@@ -1094,7 +1057,7 @@ notes(s, 'These are the real commands out of projects/project.mk. Worth calling 
          'because GHDL emits two primitives Yosys does not know. Both are the kind of '
          'seam you only get to see, let alone fix, in an open toolchain.')
 
-# ---- Slide 18: What P&R actually does
+# ---- Slide 17: What P&R actually does
 s = slide()
 kicker(s, 'Part 3 — The toolchain')
 title(s, 'The two hard steps: place, then route')
@@ -1138,7 +1101,7 @@ notes(s, 'Manage expectations for anyone who might try this: the edit-compile-te
          'batch changes, you lean much harder on simulation, and you do not chase a 3% '
          'fmax difference between two runs because it is noise.')
 
-# ---- Slide 19: Timing closure
+# ---- Slide 18: Timing closure
 s = slide()
 kicker(s, 'Part 3 — The toolchain')
 title(s, 'Timing closure: the only question that matters')
@@ -1179,6 +1142,56 @@ notes(s, 'Two things to land. (1) What "fmax" means physically — it is a race 
          'and again after routing. 115.66 is the final one. If someone asks how you fix a '
          'failing path: add a pipeline register and let the tool re-place it.')
 
+# ---- Slide 19: Inference
+s = slide()
+kicker(s, 'Part 3 — The toolchain')
+title(s, 'Inference: say the magic words, get the hard block')
+code_panel(s, 0.6, 1.95, 6.5, 2.65,
+           'process(CLK)\n'
+           'begin\n'
+           '  if rising_edge(CLK) then\n'
+           '    if CS_N=\'0\' and RW_N=\'0\' then\n'
+           '      ram(idx) <= DATA_IN;\n'
+           '    end if;\n'
+           '    DATA_OUT <= ram(idx);   -- registered read\n'
+           '  end if;\n'
+           'end process;', size=13)
+caption(s, 0.6, 4.7, 6.5, 'src/b8008/ram_sync.vhdl — the 8008’s memory')
+bullets(s, 7.4, 1.95, 5.4, 2.8, [
+    'Because **both** the read and the write are clocked, Yosys recognizes the shape and '
+    'emits `DP16KD` — a real block RAM.',
+    'All 16 KB of this machine’s ROM and RAM: **8 block RAMs. Zero LUTs.**',
+], size=16, space=14)
+# right/wrong panel
+rect(s, 0.6, 5.15, 6.5, 1.95, RGBColor(0xFF, 0xFF, 0xFF),
+     line_color=RED, line_w=1.5)
+tb, tf = box(s, 0.85, 5.28, 6.0, 1.7)
+p = tf.paragraphs[0]
+r = p.add_run(); r.text = 'Move the read outside the clocked process…'
+r.font.name = FONT; r.font.size = Pt(16); r.font.bold = True
+r.font.color.rgb = RED
+p = tf.add_paragraph(); p.space_before = Pt(8)
+rich(p, '…and you have asked for an **asynchronous-read memory**, which a block RAM '
+        'physically cannot do. Yosys obliges — by building it out of **131,072 '
+        'flip-flops**. The chip has 43,848. It does not fit, and the error arrives three '
+        'tools downstream, phrased as a placement failure.', False, 14)
+rect(s, 7.4, 5.15, 5.4, 1.95, PALE_YELLOW, line_color=YELLOW, line_w=1.5)
+tb, tf = box(s, 7.62, 5.3, 5.0, 1.7)
+p = tf.paragraphs[0]
+r = p.add_run(); r.text = 'The lesson'
+r.font.name = FONT; r.font.size = Pt(16); r.font.bold = True
+r.font.color.rgb = CHARCOAL
+p = tf.add_paragraph(); p.space_before = Pt(8)
+rich(p, 'In HDL, **the shape of your code is the request.** Same logic, same result in '
+        'simulation — one version fits in 7% of the block RAM, the other does not fit '
+        'at all.', False, 14)
+notes(s, 'Best single example of "HDL is not software". Both versions simulate '
+         'identically and both are correct. One fits in 7% of the block RAM; the other '
+         'does not fit at all. This is why HDL people talk about "coding styles" — they '
+         'are not style, they are load-bearing. Also note the deliberate design comment in '
+         'ram_sync.vhdl: the one-cycle read latency is invisible to the 8008 because the '
+         'address is latched at T1/T2 and data is not consumed until T3.')
+
 # ---- Slide 20: Utilization
 s = slide()
 kicker(s, 'Part 3 — The toolchain')
@@ -1212,7 +1225,7 @@ notes(s, 'Good "wow" beat, and an honest one — those numbers are straight from
 # PART 4 — THE DESIGN + WAR STORIES
 # ============================================================
 
-# ---- Slide 22: Where the architecture came from (NEW)
+# ---- Slide 21: Where the architecture came from (NEW)
 s = slide()
 kicker(s, 'Part 4 — Building the thing')
 title(s, 'Where the architecture came from')
@@ -1237,9 +1250,8 @@ r.font.name = FONT; r.font.size = Pt(21); r.font.bold = True
 r.font.color.rgb = YELLOW
 p = tf.add_paragraph(); p.space_before = Pt(9); p.alignment = PP_ALIGN.CENTER
 rich(p, 'Eighteen months of looking — Google Groups, websites that look like they are '
-        'from 1994, the SCELBI archives. Everything I found, and everything in the '
-        'model’s training data, is an **instruction-set simulator**: sequential software '
-        'that executes one opcode at a time.', True, 14)
+        'from 1994, the SCELBI archives. Everything I found is an **instruction-set '
+        'simulator**: sequential software that executes one opcode at a time.', True, 14)
 p = tf.add_paragraph(); p.space_before = Pt(7); p.alignment = PP_ALIGN.CENTER
 r = p.add_run(); r.text = 'If you find another, please tell me. I would genuinely like to see it.'
 r.font.name = FONT; r.font.size = Pt(14); r.font.italic = True
@@ -1250,10 +1262,10 @@ notes(s, 'This is the keystone slide and it is worth slowing down for. Two separ
          'modules with explicit control signals is an RTL partition, and that work is '
          'mine. Second, the survey: eighteen months of searching turned up only '
          'instruction-set simulators. Make the invitation genuinely — you want the '
-         'counterexample if it exists. The corpus observation is not a throwaway; it is '
-         'the mechanism behind the two failed attempts, and you cash it in at the end.')
+         'counterexample if it exists. Do NOT bring up the AI/training-data angle here — '
+         'that diagnosis belongs to Part 6, where the survey fact gets cashed in.')
 
-# ---- Slide 21: What is actually on the chip
+# ---- Slide 22: What is actually on the chip
 s = slide()
 kicker(s, 'Part 4 — Building the thing')
 title(s, 'The whole computer, on one die')
@@ -1309,7 +1321,7 @@ notes(s, 'This is the "system on chip" slide. The point for an FPGA audience: th
          'to freeze the CPU with a DIP switch and single-step it is a debugging superpower '
          'you simply cannot have with a physical 1972 chip.')
 
-# ---- Slide 22: Clocking trap
+# ---- Slide 23: Clocking trap
 s = slide()
 kicker(s, 'Part 4 — Building the thing')
 title(s, 'The trap I fell in: φ1 and φ2 are data, not clocks')
@@ -1355,7 +1367,7 @@ notes(s, 'Best transferable FPGA lesson in the deck. The general rule: derive cl
          'slide show the real φ1/φ2 coming out of the FPGA — those are outputs, not '
          'internal clocks.')
 
-# ---- Slide 23: The 0xFF bug
+# ---- Slide 24: The 0xFF bug
 s = slide(dark=True)
 kicker(s, 'Part 4 — Building the thing', dark=True)
 title(s, 'War story: the day the toolchain ate my ROM', dark=True)
@@ -1391,7 +1403,7 @@ notes(s, 'Tell this one as a detective story; it is the most memorable slide in 
          'disagree, the toolchain is a legitimate suspect. Days lost: about three. '
          'Characters changed: one.')
 
-# ---- Slide 24: ecpbram
+# ---- Slide 25: ecpbram
 s = slide()
 kicker(s, 'Part 4 — Building the thing')
 title(s, 'A trick worth stealing: patch firmware, skip the build')
@@ -1422,7 +1434,7 @@ notes(s, 'Generalizable well beyond this project: if your design has a soft CPU 
          'mif-update). It turns a 90-second loop into an interactive one, which changes '
          'how you write firmware.')
 
-# ---- Slide 27: Verification
+# ---- Slide 26: Verification
 s = slide()
 kicker(s, 'Part 5 — Proof')
 title(s, 'How you know gateware is right')
@@ -1450,15 +1462,14 @@ rich(p, 'Simulation passing is a **hypothesis**.', True, 16)
 p = tf.add_paragraph(); p.space_before = Pt(10)
 rich(p, 'Hardware is the **proof**.', True, 16)
 p = tf.add_paragraph(); p.space_before = Pt(16)
-rich(p, 'My first attempt passed its entire simulation suite and produced garbage from the '
-        'ALU on real silicon. Nothing is done until the board says so.', True, 13.5)
+rich(p, 'Nothing is done until the board says so.', True, 13.5)
 notes(s, 'Bridge from the war stories to the demo. The exhaustive ALU sweep is worth a '
          'beat — 1,049,600 cases is every operand pair × every op × carry-in, checked '
          'against an independent model. You can do that for an 8-bit ALU; that is a real '
          'advantage of working at this scale. Then: sim-versus-silicon, which is the '
          'lesson every single one of these war stories converges on.')
 
-# ---- Slide 27b: Verification tooling (formal proofs, equivalence, fuzzing)
+# ---- Slide 27: Verification tooling (formal proofs, equivalence, fuzzing)
 s = slide()
 kicker(s, 'Part 5 — Proof')
 title(s, 'Beyond tests: proofs, equivalence, fuzzing')
@@ -1493,7 +1504,7 @@ notes(s, 'One paragraph per row, no deep dive. SBY: the solver proves the assert
          'the external bus. The fuzzer runs the same random program on the RTL core and '
          'the synthesized-netlist core and diffs the traces.')
 
-# ---- Slide 26: Live demo
+# ---- Slide 28: Live demo
 s = slide(dark=True)
 kicker(s, 'Live', dark=True)
 title(s, 'The circuit, running', dark=True)
@@ -1530,7 +1541,8 @@ s = slide(dark=True)
 kicker(s, 'Part 6 — How this got built', dark=True)
 title(s, 'Three versions, eighteen months', dark=True)
 bullets(s, 0.6, 1.5, 12.1, 0.45, [
-    'Eighteen months ago I could not read a VHDL `process`, and had never touched an FPGA.',
+    'Eighteen months ago I could not read a VHDL `process`. **Most of the VHDL here was '
+    'drafted by AI** — the architecture, the spec, and every review were mine.',
 ], dark=True, size=16)
 stages = [
     ('STEP ZERO', 'The book',
@@ -1612,7 +1624,7 @@ rows1 = [
      'would have had nothing to check its work against.'),
     ('What HDL says',
      'Drafted most of the VHDL. Reading and critiquing code is a faster way to learn than '
-     'writing from scratch — **this is where it genuinely carried weight.**',
+     'writing from scratch — **this is where it carried the most weight.**',
      'The concurrency model. Until you have it you cannot tell correct RTL from *plausible* '
      'RTL — and it produces plausible RTL all day long.'),
     ('Inference',
@@ -1683,7 +1695,7 @@ rows2 = [
      '**The block diagram, from the 1972 datasheet.** This is the one that mattered — and '
      'the one thing no model could have handed me.'),
     ('Verification',
-     'Wrote much of the testbenches — the boring scaffolding, tirelessly.',
+     'Wrote most of the testbench scaffolding.',
      '`isa.json`, transcribed by hand from the datasheet. The spec has to come '
      'from the source, not the model — otherwise you are grading its homework with its '
      'own answer key.'),
@@ -1759,12 +1771,12 @@ p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
 rich(p, 'And: 1972 engineers did all of this with 3,500 transistors, no simulator, and '
         'one shot at the mask. Respect.', True, 16)
 notes(s, 'Close on the last line — it lands, and it is true. Everything that made this '
-         'project possible (simulation, regression tests, a rewritable chip, undo, and a '
-         'tireless collaborator) is something the original team did not have. The six '
+         'project possible (simulation, regression tests, a rewritable chip, undo, and an '
+         'AI assistant) is something the original team did not have. The six '
          'above are the transferable answer to "can you learn a hard skill this way": yes, '
          'and the conditions are specific and non-optional.')
 
-# ---- Slide 28: Q&A
+# ---- Slide 33: Q&A
 s = slide(dark=True)
 title(s, 'Questions?', dark=True, size=44, y=1.9)
 logo(s, ASSETS + '/lattice_logo_ondark.png', h=0.34)
