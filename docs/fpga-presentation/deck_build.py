@@ -21,7 +21,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
-REPO = '/Users/hambook/Development/intel-8008-vhdl'
+REPO = '/Users/hackbook/Development/intel-8008-vhdl'
 ASSETS = REPO + '/docs/fpga-presentation/assets'
 OUT = REPO + '/docs/fpga-presentation/fpga_talk.pptx'
 
@@ -864,7 +864,7 @@ for (head, sub, color), code in zip(heads, codes):
 bullets(s, 0.6, 6.15, 12.2, 1.1, [
     'That is the whole language, for synthesis purposes. Everything else — types, '
     'generics, packages — is bookkeeping so humans can manage thousands of these.',
-    'This design: **29 files**, each one mostly kind 1 and 2, wired by one file of kind 3.',
+    'This design: **25 files**, each one mostly kind 1 and 2, wired by one file of kind 3.',
 ], size=16, space=8)
 notes(s, 'Demystifying move: HDL has a small synthesizable core. Most of a VHDL textbook '
          'is simulation-only constructs that never reach the chip. If you can read these '
@@ -1063,7 +1063,7 @@ logo(s, ASSETS + '/lattice_logo_ondark.png', h=0.34)
 FLOW_W, FLOW_GAP = 1.62, 0.40   # 0.6 + 6*W + 5*GAP = 12.32
 chain(s, 0.6, 2.15, ['VHDL', 'GHDL', 'Yosys', 'nextpnr', 'ecppack', 'board'],
       box_w=FLOW_W, box_h=0.95, gap=FLOW_GAP, dark=True, size=14)
-labels = ['29 files', 'analyze +\nemit Verilog', 'synthesize to\nECP5 cells',
+labels = ['25 files', 'analyze +\nemit Verilog', 'synthesize to\nECP5 cells',
           'place & route,\ntiming', 'pack .bit', 'openFPGA\nLoader']
 cx = 0.6
 for lbl in labels:
@@ -1222,7 +1222,7 @@ caption(s, 0.6, 1.9 + bh + 0.06, 5.5,
         'Intel 8008 User’s Manual, 1972 — the block diagram')
 bullets(s, 6.4, 1.9, 6.3, 2.9, [
     'Every module in this design is **one box from that diagram.**',
-    'Intel drew the *concept*. The RTL partition is mine: **29 independently testable '
+    'Intel drew the *concept*. The RTL partition is mine: **25 independently testable '
     'modules**, each with explicit control signals and no knowledge of any other — '
     'derived from the datasheet, not from any existing implementation.',
 ], size=16, space=16)
@@ -1246,7 +1246,7 @@ r.font.name = FONT; r.font.size = Pt(14); r.font.italic = True
 r.font.color.rgb = RGBColor(0xC9, 0xCE, 0xD6)
 notes(s, 'This is the keystone slide and it is worth slowing down for. Two separate '
          'claims, kept separate. First, provenance: Intel drew a conceptual block '
-         'diagram; turning those boxes into 29 synthesizable, independently testable '
+         'diagram; turning those boxes into 25 synthesizable, independently testable '
          'modules with explicit control signals is an RTL partition, and that work is '
          'mine. Second, the survey: eighteen months of searching turned up only '
          'instruction-set simulators. Make the invitation genuinely — you want the '
@@ -1262,7 +1262,7 @@ rect(s, 0.6, 1.95, 5.4, 4.3, RGBColor(0xFF, 0xFF, 0xFF),
      line_color=CHARCOAL, line_w=2)
 tb, tf = box(s, 0.8, 2.05, 5.0, 0.45)
 p = tf.paragraphs[0]
-r = p.add_run(); r.text = 'b8008 CPU core — 29 VHDL modules'
+r = p.add_run(); r.text = 'b8008 CPU core — 25 VHDL modules'
 r.font.name = FONT; r.font.size = Pt(15); r.font.bold = True
 r.font.color.rgb = CHARCOAL
 core = ['timing &\ncontrol', 'instruction\ndecoder', 'address\nstack (8×14)',
@@ -1432,9 +1432,10 @@ bullets(s, 0.6, 1.9, 12.2, 0.75, [
 ], size=17)
 table(s, 0.6, 2.75, 7.5, 3.3, [
     ['Layer', 'What it proves', 'Result'],
-    ['Per-module testbench', 'Each dumb block in isolation', '29 modules'],
-    ['Exhaustive ALU sweep', 'All 656,384 arithmetic cases vs a reference model', '**PASS**'],
-    ['Regression suite', 'Real assembly programs in simulation', '**28 / 28**'],
+    ['Per-module testbench', 'Each dumb block in isolation', '25 modules'],
+    ['Exhaustive ALU sweep', 'All 1,049,600 arithmetic + logical cases vs a reference model',
+     '**PASS**'],
+    ['Regression suite', 'Real assembly programs in simulation', '**37 / 37**'],
     ['Cycle-exact T-states', 'Every timing class vs the 1972 datasheet', '**27 / 27**'],
     ['ISA self-test **on the board**', 'The final word', '**46 / 46**'],
 ], [2.9, 3.4, 1.2], size=14)
@@ -1452,10 +1453,45 @@ p = tf.add_paragraph(); p.space_before = Pt(16)
 rich(p, 'My first attempt passed its entire simulation suite and produced garbage from the '
         'ALU on real silicon. Nothing is done until the board says so.', True, 13.5)
 notes(s, 'Bridge from the war stories to the demo. The exhaustive ALU sweep is worth a '
-         'beat — 656,384 cases is every operand pair × every op × carry-in, checked '
+         'beat — 1,049,600 cases is every operand pair × every op × carry-in, checked '
          'against an independent model. You can do that for an 8-bit ALU; that is a real '
          'advantage of working at this scale. Then: sim-versus-silicon, which is the '
          'lesson every single one of these war stories converges on.')
+
+# ---- Slide 27b: Verification tooling (formal proofs, equivalence, fuzzing)
+s = slide()
+kicker(s, 'Part 5 — Proof')
+title(s, 'Beyond tests: proofs, equivalence, fuzzing')
+bullets(s, 0.6, 1.7, 12.2, 0.6, [
+    'Same open-source ecosystem as the build flow — YosysHQ tools, all running in CI '
+    'on every push.',
+], size=16)
+table(s, 0.6, 2.4, 12.1, 3.5, [
+    ['Layer', 'What it checks', 'Scale'],
+    ['SBY property proofs', 'Module contracts as PSL assertions, proven by SMT solver '
+     '(k-induction / bounded)', '11 suites'],
+    ['Equivalence checks', 'RTL vs its synthesized gate netlist (Yosys round trip)',
+     '7 miters + 6 EQY'],
+    ['Exhaustive sweeps', 'ALU and instruction decoder vs independent Python models',
+     '1,049,600 + 256 cases'],
+    ['cocotb monitors', 'External bus protocol on the full core; per-instruction '
+     'control-signal scenarios', 'RTL + netlist'],
+    ['Differential fuzzer', 'Random legal programs under three oracles: bus monitor, '
+     'datasheet timing, RTL-vs-netlist trace diff', 'seeded, both cores'],
+], [2.5, 7.2, 2.4], size=13.5)
+sh = rect(s, 0.6, 6.15, 12.1, 0.85, PALE_YELLOW)
+shape_text(sh, '37 CI jobs on every push  ·  every checker mutation-tested  ·  '
+              'verification plan: 102 rows, zero gaps', size=16, bold=True, color=CHARCOAL)
+notes(s, 'One paragraph per row, no deep dive. SBY: the solver proves the assertion for '
+         'ALL input sequences, not sampled ones — math, not test vectors. Equivalence: '
+         'the exact netlist headed for the FPGA is proven to match the RTL, so synthesis '
+         'cannot silently change behavior — the 0xFF war story is why this exists. '
+         'Exhaustive: every ALU input combination, every opcode, against models written '
+         'from the datasheet, not from the VHDL. Mutation-tested = plant a bug, watch the '
+         'checker fail, revert — a checker that cannot fail proves nothing. Anecdote: the '
+         'bus monitor found a real RTL bug — two machine-cycle type codes transposed on '
+         'the external bus. The fuzzer runs the same random program on the RTL core and '
+         'the synthesized-netlist core and diffs the traces.')
 
 # ---- Slide 26: Live demo
 s = slide(dark=True)
@@ -1507,7 +1543,7 @@ stages = [
      'Multi-cycle rewrite.\nToo clever, too entangled.',
      'Collapsed under its own\ncomplexity.', False),
     ('VERSION 3', 'b8008',
-     '29 dumb modules, derived from\nthe 1972 block diagram.',
+     '25 dumb modules, derived from\nthe 1972 block diagram.',
      'Silicon validated.\n46/46 on the board.', True),
 ]
 cx = 0.6
@@ -1544,7 +1580,7 @@ p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
 rich(p, 'Both failures were the **same** failure: I was building the architecture the '
         'corpus knew — an instruction-set simulator written in VHDL — instead of the one '
         'the datasheet drew.', True, 18)
-notes(s, 'Now the whole story lands in one place. 297 commits, two complete rewrites. The '
+notes(s, 'Now the whole story lands in one place. 367 commits, two complete rewrites. The '
          'diagnosis in the bar is the important sentence and it is not a metaphor: ask a '
          'model to implement an 8008 and everything it has ever seen is an emulator — '
          'sequential software, one opcode at a time. So its instinct pulls that way, and '
@@ -1647,8 +1683,8 @@ rows2 = [
      '**The block diagram, from the 1972 datasheet.** This is the one that mattered — and '
      'the one thing no model could have handed me.'),
     ('Verification',
-     'Wrote much of the 29 testbenches — the boring scaffolding, tirelessly.',
-     '`isa.json` and the oracle emulator, by hand from the datasheet. The spec has to come '
+     'Wrote much of the testbenches — the boring scaffolding, tirelessly.',
+     '`isa.json`, transcribed by hand from the datasheet. The spec has to come '
      'from the source, not the model — otherwise you are grading its homework with its '
      'own answer key.'),
 ]

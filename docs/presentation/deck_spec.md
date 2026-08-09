@@ -1,5 +1,18 @@
 # b8008 Presentation — Deck Spec
 
+> **REV 4 (2026-08-08):** Factual refresh + one new slide.
+>
+> 1. Numbers updated to current repo state: 367 commits Nov 2025 → Aug 2026
+>    ("9 months"), 37-test regression suite (was 28), 25 VHDL files (was 29),
+>    scorecard row 37/37.
+> 2. **New slide after the scorecard: "Beyond tests: proofs, equivalence,
+>    fuzzing"** — introduces the verification tooling without deep-diving:
+>    SBY property proofs (11 suites), RTL-vs-netlist equivalence (7 miters +
+>    6 EQY), exhaustive sweeps (ALU 1,049,600 cases + decoder 256), cocotb
+>    bus-protocol monitor, differential fuzzer (three oracles). Yellow bar:
+>    37 CI jobs per push, every checker mutation-tested, verification plan
+>    102 rows zero gaps.
+
 > **REV 3 (2026-07-04):** `deck_build.py` is now the source of truth for
 > verbatim slide content — edit it and rerun to regenerate
 > `b8008_talk.pptx`. Changes since the spec below was written:

@@ -15,7 +15,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
-REPO = '/Users/hambook/Development/intel-8008-vhdl'
+REPO = '/Users/hackbook/Development/intel-8008-vhdl'
 ASSETS = REPO + '/docs/presentation/assets'
 OUT = REPO + '/docs/presentation/b8008_talk.pptx'
 
@@ -576,9 +576,9 @@ notes(s, 'Don’t linger. "Verbose but strict — it catches a class of mistakes
 # ---- Slide 11: The project
 s = slide()
 kicker(s, 'Act III — The AI-Aided Project')
-title(s, 'The project: 8 months, 3 attempts')
+title(s, 'The project: 9 months, 3 attempts')
 bullets(s, 0.6, 1.85, 12.2, 1.3, [
-    '**Nov 2025 → Jul 2026** — 297 commits. **3 iterations, 2 complete bottom-to-top rewrites.**',
+    '**Nov 2025 → Aug 2026** — 367 commits. **3 iterations, 2 complete bottom-to-top rewrites.**',
 ], size=19)
 ty = 3.15
 attempts = [
@@ -607,7 +607,7 @@ for name, desc, ok, w in attempts:
 bullets(s, 0.6, 5.5, 12.2, 1.4, [
     'Built in collaboration with **Claude** (Anthropic’s AI) — every line reviewed, tested, and frequently rejected',
 ], size=19)
-notes(s, 'Set expectations honestly: this was NOT "AI, build me an 8008." Eight months of '
+notes(s, 'Set expectations honestly: this was NOT "AI, build me an 8008." Nine months of '
          'iteration, and I threw the whole thing away twice. Here’s what the first two '
          'attempts taught me.')
 
@@ -636,7 +636,7 @@ bullets(s, 0.6, 1.9, 6.9, 4.6, [
     'It worked because **I could tell when it was wrong**.',
     '- I had to learn the 8008 cold: T-states, machine cycles, every ISA quirk',
     '- Built `isa.json` — every opcode mapped to its documented T-state sequence — as ground truth',
-    '- 28-test regression suite; cycle counts diffed against the datasheet automatically',
+    '- 37-test regression suite; cycle counts diffed against the datasheet automatically',
     '**The AI multiplied effort. The verification was the job.**',
 ], size=16.5, space=11)
 code_panel(s, 7.8, 1.9, 4.9, 4.9,
@@ -681,7 +681,7 @@ s = slide()
 kicker(s, 'Act IV — The Design the Failures Forced')
 title(s, 'Design rule: every module is dumb')
 bullets(s, 0.6, 1.9, 6.2, 4.8, [
-    '**29 VHDL files.** Each block:',
+    '**25 VHDL files.** Each block:',
     '- Does **one job**, ~50–100 lines',
     '- Knows **nothing** about instructions, interrupts, or other modules',
     '- Responds only to explicit control signals',
@@ -767,7 +767,7 @@ kicker(s, 'Act V — How Do I Know It Works?')
 title(s, 'Verification scorecard')
 table(s, 1.2, 2.0, 10.9, 4.4, [
     ['Check', 'Result'],
-    ['Regression suite', '28/28'],
+    ['Regression suite', '37/37'],
     ['Cycle-exact T-states vs datasheet (all 27 timing classes)', '27/27'],
     ['Interrupt suite', '10/10'],
     ['Hardware ISA self-test, running on the board', '46/46'],
@@ -777,6 +777,36 @@ table(s, 1.2, 2.0, 10.9, 4.4, [
 notes(s, '"Cycle-exact" means: not just the right answer — the right answer in exactly the '
          'number of clock states the 1972 datasheet specifies, for every instruction class. '
          'Optional: swap table for green run_all_tests.sh terminal screenshot.')
+
+# ---- Slide 19b: Verification tooling (formal proofs, equivalence, fuzzing)
+s = slide()
+kicker(s, 'Act V — How Do I Know It Works?')
+title(s, 'Beyond tests: proofs, equivalence, fuzzing')
+table(s, 0.6, 1.85, 12.1, 3.9, [
+    ['Layer', 'What it checks', 'Scale'],
+    ['SBY property proofs', 'Module contracts as PSL assertions, proven by SMT solver '
+     '(k-induction / bounded)', '11 suites'],
+    ['Equivalence checks', 'RTL vs its synthesized gate netlist (Yosys round trip)',
+     '7 miters + 6 EQY'],
+    ['Exhaustive sweeps', 'ALU and instruction decoder vs independent Python models',
+     '1,049,600 + 256 cases'],
+    ['cocotb monitors', 'External bus protocol on the full core; per-instruction '
+     'control-signal scenarios', 'RTL + netlist'],
+    ['Differential fuzzer', 'Random legal programs under three oracles: bus monitor, '
+     'datasheet timing, RTL-vs-netlist trace diff', 'seeded, both cores'],
+], [2.5, 7.2, 2.4], size=13.5)
+sh = rect(s, 0.6, 6.0, 12.1, 0.85, PALE_YELLOW)
+shape_text(sh, '37 CI jobs on every push  ·  every checker mutation-tested  ·  '
+              'verification plan: 102 rows, zero gaps', size=16, bold=True, color=CHARCOAL)
+notes(s, 'One paragraph per row, no deep dive. SBY: the solver proves the assertion for ALL '
+         'input sequences, not sampled ones — math, not test vectors. Equivalence: the exact '
+         'netlist headed for the FPGA is proven to match the RTL, so synthesis can’t silently '
+         'change behavior. Exhaustive: every ALU input combination, every opcode, against '
+         'models written from the datasheet, not from the VHDL. Mutation-tested = plant a bug, '
+         'watch the checker fail, revert — a checker that can’t fail proves nothing. '
+         'Anecdote: the bus monitor found a real RTL bug — two machine-cycle type codes '
+         'transposed on the external bus. The fuzzer runs the same random program on the RTL '
+         'core and the synthesized-netlist core and diffs the traces.')
 
 # ---- Slide 20: Demos (light, like other Lattice content slides)
 s = slide()

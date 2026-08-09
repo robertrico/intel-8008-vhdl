@@ -1,6 +1,24 @@
 # FPGA Talk — Deck Spec
 
-**Status: DRAFT 3** (2026-08-05). 32 slides.
+**Status: DRAFT 4** (2026-08-08). 33 slides.
+
+> **Changes since draft 3 — factual refresh + one new slide.**
+>
+> 1. Numbers updated to current repo state: 25 VHDL modules (was 29 —
+>    orphan-module sweep), 367 commits (was 297), regression suite 37/37
+>    (was 28/28), ALU sweep 1,049,600 arithmetic + logical cases (was
+>    656,384 arithmetic-only).
+> 2. **New slide after the verification ladder: "Beyond tests: proofs,
+>    equivalence, fuzzing"** — introduces the tooling without deep-diving:
+>    SBY property proofs (11 suites), RTL-vs-netlist equivalence (7 miters +
+>    6 EQY), exhaustive sweeps, cocotb bus-protocol monitor, differential
+>    fuzzer (three oracles). Yellow bar: 37 CI jobs per push, every checker
+>    mutation-tested, verification plan 102 rows zero gaps. On-theme for
+>    this deck: it is the same YosysHQ ecosystem as the build flow, and the
+>    equivalence row is the structural answer to the 0xFF war story.
+> 3. "Oracle emulator" credit removed from the verification sweep row —
+>    the old Python emulator was discarded as a bad implementation and is
+>    not cited as a reference anywhere; `isa.json` stands alone.
 
 > **Changes since draft 2 — the arc was rebuilt.** Draft 2 hopped: a
 > personal-narrative slide sat mid-deck and posed a question the deck never
