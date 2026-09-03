@@ -7,6 +7,7 @@ Two-zone theme:
   Lattice zone (slides 9+):  charcoal + yellow. Theme flips on the FPGA primer
                              slide (dark, Lattice logo) - "entering Lattice world".
 """
+import os
 import re
 from PIL import Image
 from pptx import Presentation
@@ -15,7 +16,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
-REPO = '/Users/hackbook/Development/intel-8008-vhdl'
+REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 ASSETS = REPO + '/docs/presentation/assets'
 OUT = REPO + '/docs/presentation/b8008_talk.pptx'
 

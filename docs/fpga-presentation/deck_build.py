@@ -21,7 +21,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
-REPO = '/Users/hackbook/Development/intel-8008-vhdl'
+REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 ASSETS = REPO + '/docs/fpga-presentation/assets'
 OUT = REPO + '/docs/fpga-presentation/fpga_talk.pptx'
 
@@ -577,13 +577,13 @@ for i, b in enumerate(bits):
     if cc == 0:
         caption(s, tbx - 1.28, tby + rr * (chh + cg) + 0.04, 1.2,
                 f'dcba = {i:04b}..{i + 3:04b}', size=10)
-outp = rect(s, tbx + 0.9, tby + 4 * (chh + cg) + 0.35, 2.1, 0.6, CHARCOAL2,
-            shape=MSO_SHAPE.ROUNDED_RECTANGLE)
-shape_text(outp, 'q', size=16, bold=True, mono=True)
-arrow(s, tbx + 1.95, tby + 4 * (chh + cg) + 0.05, tbx + 1.95,
-      tby + 4 * (chh + cg) + 0.32, color=CHARCOAL2, wpt=2)
-caption(s, tbx + 2.15, tby + 4 * (chh + cg) + 0.08, 2.3,
-        'inputs pick ONE cell', size=10)
+# Under the grid: one right-aligned caption (replaced the q box + arrow
+# + "inputs pick ONE cell" caption in the 2026-08-09 hand edit).
+tb, tf = box(s, tbx + 0.02, tby + 4 * (chh + cg) - 0.06, 2.3, 0.27)
+p = tf.paragraphs[0]; p.alignment = PP_ALIGN.RIGHT
+r = p.add_run(); r.text = 'Each cell is a q output'
+r.font.name = FONT; r.font.size = Pt(10); r.font.italic = True
+r.font.color.rgb = MIDGREY
 caption(s, lx + 0.25, ly + 4.05, 5.5,
         'Change the function → change 16 bits. Same silicon.', size=13)
 notes(s, 'This is the "oh!" slide for anyone who has never seen inside an FPGA. '
@@ -1527,7 +1527,7 @@ if have(REPO + '/docs/images/tiny_os_scelbal.png'):
     pic(s, REPO + '/docs/images/tiny_os_scelbal.png', 7.9, 4.55, w=tw)
 notes(s, 'Demo cheat sheet — verify before the talk. Scope: probe the phi1_out/phi2_out '
          'pins so the audience sees Part 1 made physical. Pi: L in monitor, send_hex.py, '
-         'G 0040; narrate while it grinds; 49/50 digits — the 50th is the original 1970s '
+         'G 2040; narrate while it grinds; 49/50 digits — the 50th is the original 1970s '
          'program’s guard-byte truncation, good trivia. Calc: load, G, type the sum live. '
          'Finale: power-cycle into the b8008_basic bitstream, type a 3-line FOR/NEXT, RUN, '
          'MON, D the program region, G 1FB6, LIST. Fallback recordings ready for all four.')
@@ -1540,7 +1540,7 @@ notes(s, 'Demo cheat sheet — verify before the talk. Scope: probe the phi1_out
 s = slide(dark=True)
 kicker(s, 'Part 6 — How this got built', dark=True)
 title(s, 'Three versions, eighteen months', dark=True)
-bullets(s, 0.6, 1.5, 12.1, 0.45, [
+bullets(s, 0.6, 1.5, 12.1, 0.64, [
     'Eighteen months ago I could not read a VHDL `process`. **Most of the VHDL here was '
     'drafted by AI** — the architecture, the spec, and every review were mine.',
 ], dark=True, size=16)
@@ -1769,7 +1769,7 @@ sh = rect(s, 0.6, cy + 0.02, 12.1, 0.62, CHARCOAL)
 tf = sh.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
 p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
 rich(p, 'And: 1972 engineers did all of this with 3,500 transistors, no simulator, and '
-        'one shot at the mask. Respect.', True, 16)
+        'one shot at the mask.', True, 16)
 notes(s, 'Close on the last line — it lands, and it is true. Everything that made this '
          'project possible (simulation, regression tests, a rewritable chip, undo, and an '
          'AI assistant) is something the original team did not have. The six '
@@ -1798,7 +1798,7 @@ notes(s, 'Fill in the repo URL when public. Likely questions: "why not Verilog/S
          '(taste + type strictness), "why not a Xilinx board" (open toolchain), '
          '"how much did the AI actually write" (most of the VHDL drafts; all of the '
          'specification, verification, and rejection was mine), "could you run it faster" '
-         '(yes — 190× headroom — but then the period software’s timing loops break).')
+         '(yes — 230× headroom — but then the period software’s timing loops break).')
 
 prs.save(OUT)
 print(f'Wrote {OUT} — {len(prs.slides.__iter__.__self__._sldIdLst)} slides')
