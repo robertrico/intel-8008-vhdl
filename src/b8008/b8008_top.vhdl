@@ -34,7 +34,11 @@ entity b8008_top is
         ROM_LAST      : integer := 16#0FFF#;
         RAM_BASE      : integer := 16#1000#;
         RAM_LAST      : integer := 16#3FFF#;
-        RAM_ADDR_BITS : integer := 14
+        RAM_ADDR_BITS : integer := 14;
+        -- RAM byte shadowed onto ram_byte_led (memory-mapped LEDs): any
+        -- write to this address is also latched into a register the board
+        -- top can show. Plain RAM otherwise - reads see what was written.
+        LED_SHADOW_ADDR : integer := 16#3FFF#
     );
     port (
         -- External clock and reset
@@ -66,6 +70,7 @@ entity b8008_top is
 
         -- RAM debug output (location 0 for verification)
         ram_byte_0  : out std_logic_vector(7 downto 0);
+        ram_byte_led : out std_logic_vector(7 downto 0);  -- shadow of RAM[LED_SHADOW_ADDR]
 
         -- Debug outputs: CPU state and key registers
         debug_reg_a         : out std_logic_vector(7 downto 0);  -- A register
@@ -427,6 +432,20 @@ begin
             elsif ram_cs_n = '0' and ram_rw_n = '0' and
                   unsigned(latched_address(RAM_ADDR_BITS-1 downto 0)) = 0 then
                 ram_byte_0 <= ram_data_in;
+            end if;
+        end if;
+    end process;
+
+    -- Shadow of RAM[LED_SHADOW_ADDR] for memory-mapped LEDs (same idea as
+    -- ram_byte_0: the block RAM has no second read port). Reset = all off.
+    process(clk_in)
+    begin
+        if rising_edge(clk_in) then
+            if reset = '1' then
+                ram_byte_led <= (others => '0');
+            elsif ram_cs_n = '0' and ram_rw_n = '0' and
+                  unsigned(latched_address) = LED_SHADOW_ADDR then
+                ram_byte_led <= ram_data_in;
             end if;
         end if;
     end process;

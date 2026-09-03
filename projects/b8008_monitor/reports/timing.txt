@@ -1,137 +1,121 @@
 Info: Critical path report for clock '$glbnet$clk_sys' (posedge -> posedge):
 Info:       type curr  total name
-Info:   clk-to-q  0.31  0.31 Source u_system.u_cpu.u_instruction_register.n4699_TRELLIS_FF_CE_1_Q_TRELLIS_FF_Q_3.Q
-Info:    routing  0.55  0.86 Net u_system.u_cpu.u_instruction_register.n4699_TRELLIS_FF_CE_1_Q[2] (13,3) -> (13,3)
-Info:                          Sink u_system.u_cpu.u_instruction_register.n4699_TRELLIS_FF_CE_Q_LUT4_Z.D
+Info:   clk-to-q  0.31  0.31 Source u_system.u_cpu.u_machine_cycle.n2666_TRELLIS_FF_DI.Q
+Info:    routing  0.57  0.88 Net u_system.u_cpu.state_t2_LUT4_C_Z[0] (4,4) -> (4,4)
+Info:                          Sink cpu_s2_LUT4_C_Z_LUT4_Z_C_LUT4_Z.C
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.14  1.00 Source u_system.u_cpu.u_instruction_register.n4699_TRELLIS_FF_CE_Q_LUT4_Z.F
-Info:    routing  0.64  1.64 Net u_system.u_cpu.u_instruction_register.n4699_TRELLIS_FF_CE_Q[3] (13,3) -> (12,5)
-Info:                          Sink u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_LUT4_Z_2_C_LUT4_Z_D_L6MUX21_Z_1_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.M
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.14  1.02 Source cpu_s2_LUT4_C_Z_LUT4_Z_C_LUT4_Z.F
+Info:    routing  0.47  1.49 Net cpu_s2_LUT4_C_Z_LUT4_Z_C[5] (4,4) -> (6,4)
+Info:                          Sink cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_D1_PFUMX_Z_ALUT_LUT4_Z.M
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.15  1.79 Source u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_LUT4_Z_2_C_LUT4_Z_D_L6MUX21_Z_1_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.OFX
-Info:    routing  0.55  2.34 Net u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_LUT4_Z_2_C_LUT4_Z_D[1] (12,5) -> (10,5)
-Info:                          Sink u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_LUT4_Z_2_C_LUT4_Z_D_LUT4_D.D
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.15  1.64 Source cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_D1_PFUMX_Z_ALUT_LUT4_Z.OFX
+Info:    routing  0.00  1.64 Net cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_Z (6,4) -> (6,4)
+Info:                          Sink cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_D0_PFUMX_Z_ALUT_LUT4_Z.FXB
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.14  2.48 Source u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_LUT4_Z_2_C_LUT4_Z_D_LUT4_D.F
-Info:    routing  0.56  3.04 Net u_system.u_cpu.u_alu.n4564_LUT4_Z_1_A_LUT4_B_Z_LUT4_D_Z_LUT4_Z_2_D_LUT4_D_C[4] (10,5) -> (9,4)
-Info:                          Sink u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_L6MUX21_Z_D1_PFUMX_Z_BLUT_LUT4_Z.M
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:157.70-157.72
+Info:      logic  0.14  1.78 Source cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_D0_PFUMX_Z_ALUT_LUT4_Z.OFX
+Info:    routing  0.66  2.44 Net cpu_s0_LUT4_Z_D_LUT4_D_C_LUT4_D_Z[3] (6,4) -> (8,3)
+Info:                          Sink cpu_s2_LUT4_C_Z_LUT4_B_C_LUT4_Z_2.D
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.15  3.19 Source u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_L6MUX21_Z_D1_PFUMX_Z_BLUT_LUT4_Z.OFX
-Info:    routing  0.00  3.19 Net u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_L6MUX21_Z_D1 (9,4) -> (9,4)
-Info:                          Sink u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_L6MUX21_Z_D1_PFUMX_Z_ALUT_LUT4_Z.FXB
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.14  2.58 Source cpu_s2_LUT4_C_Z_LUT4_B_C_LUT4_Z_2.F
+Info:    routing  0.56  3.14 Net cpu_s2_LUT4_C_Z_LUT4_B_C[4] (8,3) -> (8,3)
+Info:                          Sink u_system.u_cpu.u_register_file.n4154_LUT4_Z_D_LUT4_Z_D_LUT4_Z_D_LUT4_Z_D_LUT4_D.C
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:141.38-141.40
-Info:      logic  0.14  3.33 Source u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z_L6MUX21_Z_D1_PFUMX_Z_ALUT_LUT4_Z.OFX
-Info:    routing  0.75  4.08 Net u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_C_D_LUT4_Z_D_LUT4_Z_D_LUT4_D_Z_LUT4_C_Z_PFUMX_BLUT_Z[3] (9,4) -> (18,6)
-Info:                          Sink u_system.u_cpu.u_register_file.n4190_TRELLIS_FF_CE_Q_L6MUX21_Z_1_D1_PFUMX_Z_BLUT_LUT4_Z.D
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.14  3.28 Source u_system.u_cpu.u_register_file.n4154_LUT4_Z_D_LUT4_Z_D_LUT4_Z_D_LUT4_Z_D_LUT4_D.F
+Info:    routing  0.51  3.79 Net u_system.u_cpu.u_memory_io_control.n3279_LUT4_Z_C_LUT4_B_D_LUT4_C_Z[5] (8,3) -> (9,4)
+Info:                          Sink u_system.u_cpu.u_register_file.n4160_TRELLIS_FF_CE_4_Q_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.M
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.24  4.32 Source u_system.u_cpu.u_register_file.n4190_TRELLIS_FF_CE_Q_L6MUX21_Z_1_D1_PFUMX_Z_BLUT_LUT4_Z.OFX
-Info:    routing  0.00  4.32 Net u_system.u_cpu.u_register_file.n4190_TRELLIS_FF_CE_Q_L6MUX21_Z_1_D1 (18,6) -> (18,6)
-Info:                          Sink u_system.u_cpu.u_register_file.n4190_TRELLIS_FF_CE_Q_L6MUX21_Z_1_D1_PFUMX_Z_ALUT_LUT4_Z.FXB
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.15  3.94 Source u_system.u_cpu.u_register_file.n4160_TRELLIS_FF_CE_4_Q_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.OFX
+Info:    routing  0.88  4.82 Net n373_LUT4_A_Z_PFUMX_ALUT_Z_LUT4_C_Z_LUT4_Z_2_A[3] (9,4) -> (15,4)
+Info:                          Sink u_system.u_cpu.u_register_file.n4157_TRELLIS_FF_CE_3_Q_LUT4_B.D
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:141.38-141.40
-Info:      logic  0.14  4.46 Source u_system.u_cpu.u_register_file.n4190_TRELLIS_FF_CE_Q_L6MUX21_Z_1_D1_PFUMX_Z_ALUT_LUT4_Z.OFX
-Info:    routing  0.68  5.14 Net data_sig_LUT4_Z_4_D_LUT4_Z_D_LUT4_Z_1_D_LUT4_D_Z_L6MUX21_Z_1_D1_L6MUX21_Z_D1_PFUMX_Z_BLUT_LUT4_Z_C[5] (18,6) -> (17,3)
-Info:                          Sink u_system.u_cpu.u_alu.flag_sign_LUT4_C_A_LUT4_B_Z_LUT4_Z_B_LUT4_B_Z_LUT4_D_Z_LUT4_Z.D
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.14  4.96 Source u_system.u_cpu.u_register_file.n4157_TRELLIS_FF_CE_3_Q_LUT4_B.F
+Info:    routing  0.00  4.96 Net u_system.u_cpu.u_register_file.n4159_TRELLIS_FF_CE_4_Q_L6MUX21_Z_D1_PFUMX_Z_ALUT (15,4) -> (15,4)
+Info:                          Sink u_system.u_cpu.u_register_file.n4157_TRELLIS_FF_CE_3_Q_LUT4_B_1.F1
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.14  5.28 Source u_system.u_cpu.u_alu.flag_sign_LUT4_C_A_LUT4_B_Z_LUT4_Z_B_LUT4_B_Z_LUT4_D_Z_LUT4_Z.F
-Info:    routing  0.49  5.78 Net u_system.u_cpu.u_alu.flag_sign_LUT4_C_A_LUT4_B_Z_LUT4_Z_B_LUT4_B_Z_LUT4_D_Z[4] (17,3) -> (17,2)
-Info:                          Sink u_system.u_cpu.u_alu.n4564_LUT4_Z_3_D_PFUMX_Z_C0_LUT4_Z_B_LUT4_C_Z_PFUMX_ALUT_Z_L6MUX21_D1_Z_L6MUX21_D1_Z_L6MUX21_Z_D1_PFUMX_Z_BLUT_LUT4_Z.M
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:141.30-141.32
+Info:      logic  0.10  5.06 Source u_system.u_cpu.u_register_file.n4157_TRELLIS_FF_CE_3_Q_LUT4_B_1.OFX
+Info:    routing  0.00  5.06 Net u_system.u_cpu.u_register_file.n4159_TRELLIS_FF_CE_4_Q_L6MUX21_Z_D1 (15,4) -> (15,4)
+Info:                          Sink u_system.u_cpu.u_register_file.n4157_TRELLIS_FF_CE_3_Q_LUT4_B.FXB
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.15  5.93 Source u_system.u_cpu.u_alu.n4564_LUT4_Z_3_D_PFUMX_Z_C0_LUT4_Z_B_LUT4_C_Z_PFUMX_ALUT_Z_L6MUX21_D1_Z_L6MUX21_D1_Z_L6MUX21_Z_D1_PFUMX_Z_BLUT_LUT4_Z.OFX
-Info:    routing  0.00  5.93 Net u_system.u_cpu.u_alu.n4564_LUT4_Z_3_D_PFUMX_Z_C0_LUT4_Z_B_LUT4_C_Z_PFUMX_ALUT_Z_L6MUX21_D1_Z_L6MUX21_D1_Z_L6MUX21_Z_D1 (17,2) -> (17,2)
-Info:                          Sink u_system.u_cpu.u_alu.n4564_LUT4_Z_3_D_PFUMX_Z_C0_LUT4_Z_B_LUT4_C_Z_PFUMX_ALUT_Z_L6MUX21_D1_Z_L6MUX21_D1_Z_L6MUX21_Z_D1_PFUMX_Z_ALUT_LUT4_Z.FXB
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:141.38-141.40
+Info:      logic  0.14  5.20 Source u_system.u_cpu.u_register_file.n4157_TRELLIS_FF_CE_3_Q_LUT4_B.OFX
+Info:    routing  0.43  5.63 Net u_system.u_cpu.u_register_file.n4159_TRELLIS_FF_CE_4_Q[6] (15,4) -> (16,4)
+Info:                          Sink u_int_button.n649_LUT4_B_Z_LUT4_D_Z_L6MUX21_Z_1_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.M
 Info:                          Defined in:
 --
-Info: Critical path report for cross-domain path '<async>' -> '<async>':
-Info:       type curr  total name
-Info:     source  0.00  0.00 Source sw[4]$tr_io.O
-Info:    routing  3.87  3.87 Net led_LUT4_Z_1_D[0] (90,29) -> (25,9)
-Info:                          Sink led_L18_LUT4_Z.A
-Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.14  4.01 Source led_L18_LUT4_Z.F
-Info:    routing  3.96  7.98 Net led_L18$TRELLIS_IO_OUT (25,9) -> (90,38)
-Info:                          Sink led_L18$tr_io.I
-Info:                          Defined in:
-Info:                               build/b8008_monitor_top.v:30402.8-30402.12
-Info: 0.14 ns logic, 7.84 ns routing
-
 Info: Critical path report for cross-domain path '<async>' -> 'posedge $glbnet$clk_sys':
 Info:       type curr  total name
-Info:     source  0.00  0.00 Source sw[7]$tr_io.O
-Info:    routing  3.65  3.65 Net n219 (90,32) -> (23,9)
-Info:                          Sink u_int_button.n709_TRELLIS_FF_Q.M
+Info:     source  0.00  0.00 Source uart_rx$tr_io.O
+Info:    routing  1.46  1.46 Net uart_rx$TRELLIS_IO_IN (44,0) -> (24,8)
+Info:                          Sink u_uart.usart_inst.n2083_TRELLIS_FF_Q.M
 Info:                          Defined in:
-Info:                               build/b8008_monitor_top.v:29450.11-29450.21
-Info:      setup  0.00  3.65 Source u_int_button.n709_TRELLIS_FF_Q.M
-Info: 0.00 ns logic, 3.65 ns routing
+Info:                               build/b8008_monitor_top.v:30148.11-30148.18
+Info:      setup  0.00  1.46 Source u_uart.usart_inst.n2083_TRELLIS_FF_Q.M
+Info: 0.00 ns logic, 1.46 ns routing
 
 Info: Critical path report for cross-domain path 'posedge $glbnet$clk_sys' -> '<async>':
 Info:       type curr  total name
-Info:   clk-to-q  0.31  0.31 Source u_system.u_cpu.u_instruction_register.n4699_TRELLIS_FF_CE_1_Q_TRELLIS_FF_Q.Q
-Info:    routing  0.57  0.88 Net u_system.u_cpu.u_alu.flag_parity_TRELLIS_FF_DI_Q[3] (13,5) -> (13,5)
-Info:                          Sink u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_D_Z_L6MUX21_Z_SD_LUT4_Z.D
+Info:   clk-to-q  0.31  0.31 Source u_system.u_cpu.u_machine_cycle.n2666_TRELLIS_FF_DI.Q
+Info:    routing  0.57  0.88 Net u_system.u_cpu.state_t2_LUT4_C_Z[0] (4,4) -> (4,4)
+Info:                          Sink cpu_s2_LUT4_C_Z_LUT4_Z_C_LUT4_Z.C
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.14  1.02 Source u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_D_Z_L6MUX21_Z_SD_LUT4_Z.F
-Info:    routing  0.49  1.51 Net u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_D_Z_L6MUX21_Z_SD[6] (13,5) -> (13,4)
-Info:                          Sink u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_D_Z_L6MUX21_Z_SD_L6MUX21_SD_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.M
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.14  1.02 Source cpu_s2_LUT4_C_Z_LUT4_Z_C_LUT4_Z.F
+Info:    routing  0.47  1.49 Net cpu_s2_LUT4_C_Z_LUT4_Z_C[5] (4,4) -> (6,4)
+Info:                          Sink cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_D1_PFUMX_Z_ALUT_LUT4_Z.M
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.15  1.66 Source u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_D_Z_L6MUX21_Z_SD_L6MUX21_SD_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.OFX
-Info:    routing  0.67  2.33 Net u_system.u_cpu.u_machine_cycle.n2696_LUT4_Z_1_D_LUT4_D_Z_L6MUX21_Z_SD_L6MUX21_SD_Z[2] (13,4) -> (16,3)
-Info:                          Sink u_system.u_cpu.u_machine_cycle.n2700_TRELLIS_FF_CE_Q_LUT4_Z_1.D
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.15  1.64 Source cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_D1_PFUMX_Z_ALUT_LUT4_Z.OFX
+Info:    routing  0.00  1.64 Net cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_Z (6,4) -> (6,4)
+Info:                          Sink cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_D0_PFUMX_Z_ALUT_LUT4_Z.FXB
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.14  2.47 Source u_system.u_cpu.u_machine_cycle.n2700_TRELLIS_FF_CE_Q_LUT4_Z_1.F
-Info:    routing  0.47  2.94 Net n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_LUT4_Z_2_C_LUT4_C_Z_PFUMX_BLUT_Z_LUT4_Z_C_LUT4_B_Z_PFUMX_ALUT_Z_L6MUX21_D0_Z[2] (16,3) -> (16,2)
-Info:                          Sink n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D1_PFUMX_Z_ALUT_LUT4_Z.B
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:157.70-157.72
+Info:      logic  0.14  1.78 Source cpu_s2_LUT4_C_Z_LUT4_Z_C_L6MUX21_SD_D0_PFUMX_Z_ALUT_LUT4_Z.OFX
+Info:    routing  0.66  2.44 Net cpu_s0_LUT4_Z_D_LUT4_D_C_LUT4_D_Z[3] (6,4) -> (8,3)
+Info:                          Sink cpu_s2_LUT4_C_Z_LUT4_B_C_LUT4_Z_2.D
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.14  3.08 Source n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D1_PFUMX_Z_ALUT_LUT4_Z.F
-Info:    routing  0.00  3.08 Net n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D1_PFUMX_Z_ALUT (16,2) -> (16,2)
-Info:                          Sink n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D1_PFUMX_Z_BLUT_LUT4_Z.F1
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.14  2.58 Source cpu_s2_LUT4_C_Z_LUT4_B_C_LUT4_Z_2.F
+Info:    routing  0.56  3.14 Net cpu_s2_LUT4_C_Z_LUT4_B_C[4] (8,3) -> (8,3)
+Info:                          Sink u_system.u_cpu.u_register_file.n4154_LUT4_Z_D_LUT4_Z_D_LUT4_Z_D_LUT4_Z_D_LUT4_D.C
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:157.46-157.48
-Info:      logic  0.10  3.18 Source n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D1_PFUMX_Z_BLUT_LUT4_Z.OFX
-Info:    routing  0.00  3.18 Net n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D1 (16,2) -> (16,2)
-Info:                          Sink n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D1_PFUMX_Z_ALUT_LUT4_Z.FXB
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.14  3.28 Source u_system.u_cpu.u_register_file.n4154_LUT4_Z_D_LUT4_Z_D_LUT4_Z_D_LUT4_Z_D_LUT4_D.F
+Info:    routing  0.51  3.79 Net u_system.u_cpu.u_memory_io_control.n3279_LUT4_Z_C_LUT4_B_D_LUT4_C_Z[5] (8,3) -> (9,4)
+Info:                          Sink u_system.u_cpu.u_register_file.n4160_TRELLIS_FF_CE_4_Q_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.M
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:157.62-157.64
-Info:      logic  0.14  3.32 Source n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D1_PFUMX_Z_ALUT_LUT4_Z.OFX
-Info:    routing  0.00  3.32 Net n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1 (16,2) -> (16,2)
-Info:                          Sink n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.FXB
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.15  3.94 Source u_system.u_cpu.u_register_file.n4160_TRELLIS_FF_CE_4_Q_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.OFX
+Info:    routing  0.81  4.75 Net n373_LUT4_A_Z_PFUMX_ALUT_Z_LUT4_C_Z_LUT4_Z_2_A[3] (9,4) -> (12,3)
+Info:                          Sink u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_SD_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.D
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:157.70-157.72
-Info:      logic  0.14  3.46 Source n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.OFX
-Info:    routing  0.80  4.26 Net n238_TRELLIS_FF_DI_Q_LUT4_Z_B_LUT4_B_Z_LUT4_Z_3_D_LUT4_Z_1_B_LUT4_D_Z[0] (16,2) -> (18,5)
-Info:                          Sink u_system.u_cpu.u_alu.flag_sign_TRELLIS_FF_DI_Q_LUT4_D_Z_PFUMX_Z_1_BLUT_LUT4_Z.D
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
+Info:      logic  0.14  4.89 Source u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_SD_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.F
+Info:    routing  0.00  4.89 Net u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_SD_L6MUX21_Z_D0_PFUMX_Z_ALUT (12,3) -> (12,3)
+Info:                          Sink u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_SD_L6MUX21_Z_D0_PFUMX_Z_BLUT_LUT4_Z.F1
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.24  4.50 Source u_system.u_cpu.u_alu.flag_sign_TRELLIS_FF_DI_Q_LUT4_D_Z_PFUMX_Z_1_BLUT_LUT4_Z.OFX
-Info:    routing  0.68  5.19 Net data_sig_LUT4_Z_4_D_LUT4_Z_D_LUT4_Z_1_D_LUT4_D_Z_L6MUX21_Z_1_D1_L6MUX21_Z_D1_PFUMX_Z_BLUT_LUT4_Z_C[3] (18,5) -> (15,6)
-Info:                          Sink u_system.u_cpu.u_stack_memory.addr_out_LUT4_Z_1_D_LUT4_D_Z_LUT4_Z_D_LUT4_D_Z_L6MUX21_Z_2_SD_LUT4_Z.B
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:141.22-141.24
+Info:      logic  0.10  4.99 Source u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_SD_L6MUX21_Z_D0_PFUMX_Z_BLUT_LUT4_Z.OFX
+Info:    routing  0.00  4.99 Net u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_SD_L6MUX21_Z_D0 (12,3) -> (12,3)
+Info:                          Sink u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_SD_L6MUX21_Z_D1_PFUMX_Z_ALUT_LUT4_Z.FXA
 Info:                          Defined in:
-Info:                               /Users/hackbook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:108.23-108.24
-Info:      logic  0.14  5.33 Source u_system.u_cpu.u_stack_memory.addr_out_LUT4_Z_1_D_LUT4_D_Z_LUT4_Z_D_LUT4_D_Z_L6MUX21_Z_2_SD_LUT4_Z.F
-Info:    routing  0.27  5.60 Net u_system.u_cpu.u_stack_memory.addr_out_LUT4_Z_1_D_LUT4_D_Z_LUT4_Z_D_LUT4_D_Z_L6MUX21_Z_2_SD[6] (15,6) -> (16,6)
-Info:                          Sink u_system.u_cpu.u_stack_memory.addr_out_LUT4_Z_1_D_LUT4_D_Z_LUT4_Z_D_LUT4_D_Z_L6MUX21_Z_2_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.M
+Info:                               /Users/hambook/oss-cad-suite/libexec/../share/yosys/lattice/cells_map_trellis.v:141.34-141.36
+Info:      logic  0.14  5.12 Source u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_SD_L6MUX21_Z_D1_PFUMX_Z_ALUT_LUT4_Z.OFX
+Info:    routing  0.43  5.56 Net u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_SD[6] (12,3) -> (13,3)
+Info:                          Sink u_int_button.n649_LUT4_B_1_Z_LUT4_D_Z_L6MUX21_Z_1_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LUT4_Z.M
 Info:                          Defined in:
-Info: Max frequency for clock '$glbnet$clk_sys': 102.74 MHz (PASS at 25.00 MHz)
-Info: Max delay <async>                 -> <async>                : 11.32 ns
-Info: Max delay <async>                 -> posedge $glbnet$clk_sys: 5.62 ns
-Info: Max delay posedge $glbnet$clk_sys -> <async>                : 10.04 ns
+Info: Max frequency for clock '$glbnet$clk_sys': 102.18 MHz (PASS at 25.00 MHz)
+Info: Max delay <async>                 -> posedge $glbnet$clk_sys: 2.33 ns
+Info: Max delay posedge $glbnet$clk_sys -> <async>                : 9.73 ns
 Info: Slack histogram:
-Info: Max frequency for clock '$glbnet$clk_sys': 121.82 MHz (PASS at 25.00 MHz)
-Info: Max delay <async>                 -> <async>                : 7.98 ns
-Info: Max delay <async>                 -> posedge $glbnet$clk_sys: 3.65 ns
-Info: Max delay posedge $glbnet$clk_sys -> <async>                : 8.25 ns
+Info: Max frequency for clock '$glbnet$clk_sys': 121.73 MHz (PASS at 25.00 MHz)
+Info: Max delay <async>                 -> posedge $glbnet$clk_sys: 1.46 ns
+Info: Max delay posedge $glbnet$clk_sys -> <async>                : 8.01 ns
 Info: Slack histogram:

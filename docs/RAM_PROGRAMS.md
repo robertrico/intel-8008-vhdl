@@ -13,7 +13,8 @@ ports run.
 | 0x0000 - 0x1FFF | Monitor ROM  | Read-only. RST 0 boots the monitor.            |
 | 0x2000 - 0x3EFF | **Your program** | Code + data, loaded via `L`.               |
 | 0x3F00 - 0x3FBF | Monitor scratch | Reserved (command buffer, parser, loader vars, G trampoline at 0x3F80). |
-| 0x3FC0 - 0x3FFF | RST vector slots | Yours to install handlers in (see below).  |
+| 0x3FC0 - 0x3FFE | RST vector slots | Yours to install handlers in (see below).  |
+| 0x3FFF          | **LED register** | Plain RAM, also shadowed to the LEDs: bit n -> LED n, 1 = on, bit 0 unused (LED0/D25 = CPU running). `W 3FFF,FE` / `W 3FFF,00`. |
 
 Programs execute from RAM, so self-modifying code and inline data (the
 SCELBI style) work fine.
@@ -47,7 +48,11 @@ GETCH:  IN      1
         RET                     ; add ORI 80H if your code expects MSB set
 ```
 
-**LEDs** - `OUT 8` drives the LED bank (active low).
+**LEDs** - write RAM `0x3FFF`: bit n lights LED n (1 = on); bit 0 is
+ignored because LED0 (D25) is the CPU-running light. From the monitor,
+`W 3FFF,FE` turns all seven on, `W 3FFF,F0` the four reds, `W 3FFF,00`
+off; `D 3FFF` reads back. `OUT 8` is latched by the core but not displayed
+on this board.
 
 ## RST instructions
 
@@ -117,12 +122,17 @@ If your code addresses data page-locally (`MVI H,page` once, then
 # assemble (file in test_programs/samples/)
 make assemble-sample PROG=myprog
 
-# stream it into RAM (kill minicom first - one process owns the port)
-./send_hex.py test_programs/samples/myprog.hex
+# from projects/b8008_monitor: kill minicom, stream into RAM, jump
+make send-hex HEX=myprog.hex GO=2000
 
-# reattach minicom, then at the monitor prompt:
-G 2000
+# reattach the console
+make monitor
 ```
+
+Or by hand: `./send_hex.py test_programs/samples/myprog.hex --go 2000` from
+the repo root, with minicom closed first (one process owns the port;
+`make kill-monitor` in `projects/b8008_monitor` does that). Without `--go`,
+type `G 2000` at the monitor prompt after reattaching.
 
 `send_hex.py` paces characters (the USART buffers exactly one RX byte),
 prints the monitor's `.` per record and the OK/ERR verdict, and refuses to
@@ -132,14 +142,16 @@ spot-check the load; `W addr,val` patches single bytes.
 
 ## Front-panel switches (SW3 DIP bank)
 
-DIP resting level is '0'; "flip" means toggling the switch to the other
-position (the interrupt trigger fires on ANY debounced change).
+**Only DIP1 is connected: ON = run, OFF = reset.** (DIP ON = logic '0'.)
+Since 2026-09-03 `sw(1..7)` are no-connects in both board tops: no LED
+debug-capture modes, no switch-driven interrupts, no READY hold, no
+post-bootstrap break. The interrupt and READY hardware tests that used
+sw(5)/sw(6)/sw(7) need those lines re-wired in the top to run again.
 
-| Switch | Function |
-|---|---|
-| sw(5) | Interrupt trigger: any flip = one debounced interrupt (armed after bootstrap) |
-| sw(6) | READY hold: flip to '1' = CPU parked in the WAIT state, back to '0' = resume |
-| sw(7) | Interrupt vector: '0' = RST 5, '1' = RST 7 (sampled when the flip is accepted) |
+Front-panel demo:
+
+- `cylon_ram` - `G 2100`, Knight Rider sweep across the seven user LEDs via
+  the memory-mapped LED byte at 0x3FFF. Any typed character exits to the monitor.
 
 Interrupt test programs (install their own RST 5/7 slot handlers):
 

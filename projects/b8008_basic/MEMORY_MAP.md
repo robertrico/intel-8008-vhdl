@@ -12,7 +12,8 @@ cites this ledger.
 | 0x0003-0x0007 | reserved | zeros |
 | 0x0008-0x003F | RST 1-7 vectors | writable RAM — programs install `JMP handler` directly, period-authentic; no forwarding slots in this personality |
 | 0x0040-0x00BF | monitor scratch | CMD_LEN 0x0040, CMD_BUF 0x0041-0x0050, DUMP vars 0x0060-0x0062, HEX loader vars 0x0070-0x0075, trampoline 0x00B0-0x00B2 |
-| 0x00C0-0x00FF | reserved | |
+| 0x00C0-0x00FE | reserved | |
+| 0x00FF | **LED register** | plain RAM, shadowed to the LEDs: bit n -> LED n, 1 = on, bit 0 unused (LED0/D25 = CPU running). From BASIC: `MON`, `W 00FF,FE`, `G 1FB6` |
 | 0x0100-0x0BFF | user BASIC programs | BGNPGRAM=0x01, ENDPGRAM=0x0C (~2.75KB) |
 | 0x0C00-0x0FFF | SCELBAL variables | OLDPG1=0x0C00, OLDPG26=0x0D00, OLDPG27=0x0E00, OLDPG57=0x0F00 |
 

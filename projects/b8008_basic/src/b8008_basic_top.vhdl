@@ -7,15 +7,16 @@
 --
 -- I/O Port Mapping:
 --   IN 1:   UART RX - bit 7 = ready flag, bits 6:0 = received data
---   OUT 8:  LED bank (directly active, accent active low)
+--   OUT 8:  latched by the core, not displayed
+--   RAM 0x00FF: memory-mapped LEDs, bit n -> LED n (bit 0 unused), 1 = on.
+--           From BASIC: MON, then W 00FF,FE / W 00FF,00, G 1FB6 back.
+--           LED0 (D25) = CPU running.
 --   OUT 9:  UART TX - sends byte immediately at 115200 baud
 --
--- Front-panel switches (DIP resting level '0'):
---   sw(0):  reset          sw(1): '1' = post-bootstrap breakpoint off
---   sw(2..4): LED debug capture modes (data / addr low / addr high)
---   sw(5):  interrupt trigger - any debounced flip = one interrupt
---   sw(6):  READY hold - '1' parks the CPU in WAIT, '0' resumes
---   sw(7):  interrupt vector select - '0' = RST 5, '1' = RST 7
+-- Front-panel switches: ONLY sw(0) (DIP1) is used = reset (ON = '0' = run).
+--   sw(1..7) are no-connects: no LED debug modes, no switch interrupts,
+--   no READY hold, no post-bootstrap break. The port stays 8 bits wide so
+--   the LPF pin locations remain valid.
 --
 -- UART Settings:
 --   Baud Rate: 115200
@@ -123,7 +124,8 @@ architecture rtl of b8008_basic_top is
             ROM_LAST      : integer := 16#0FFF#;
             RAM_BASE      : integer := 16#1000#;
             RAM_LAST      : integer := 16#3FFF#;
-            RAM_ADDR_BITS : integer := 14
+            RAM_ADDR_BITS : integer := 14;
+            LED_SHADOW_ADDR : integer := 16#3FFF#
         );
         port (
             clk_in      : in std_logic;
@@ -141,6 +143,7 @@ architecture rtl of b8008_basic_top is
             address_out : out std_logic_vector(13 downto 0);
             data_out    : out std_logic_vector(7 downto 0);
             ram_byte_0  : out std_logic_vector(7 downto 0);
+            ram_byte_led : out std_logic_vector(7 downto 0);
             debug_reg_a         : out std_logic_vector(7 downto 0);
             debug_reg_b         : out std_logic_vector(7 downto 0);
             debug_reg_c         : out std_logic_vector(7 downto 0);
@@ -340,6 +343,7 @@ architecture rtl of b8008_basic_top is
 
     -- I/O port signals
     signal io_port_8    : std_logic_vector(7 downto 0);
+    signal ram_byte_led : std_logic_vector(7 downto 0);   -- shadow of RAM[0x00FF]
     signal io_port_9    : std_logic_vector(7 downto 0);
     signal io_port_10   : std_logic_vector(7 downto 0);
     signal io_port_out  : std_logic_vector(7 downto 0);
@@ -440,7 +444,7 @@ begin
     ready_hold : process(clk_sys)
     begin
         if rising_edge(clk_sys) then
-            ready_sync <= ready_sync(0) & sw(6);
+            ready_sync <= ready_sync(0) & '0';   -- sw(6) NC: READY never held
             if reset_int = '1' then
                 sw6_base_cnt <= 0;
             elsif sw6_base_cnt < 25000 then   -- ~1 ms at 25 MHz
@@ -570,7 +574,7 @@ begin
             phi1_in         => phi1,
             phi2_in         => phi2,
             sync_in         => sync_sig,
-            bootstrap_done  => bootstrap_done and not sw(1),  -- Hardware break after bootstrap (SW1 ON = low = enables)
+            bootstrap_done  => '0',              -- sw(1) NC: hardware break after bootstrap disabled
             run_enable      => dbg_run_enable,
             is_running      => dbg_is_running,
             next_is_phi1    => dbg_next_is_phi1,
@@ -632,8 +636,8 @@ begin
         port map (
             clk        => clk_sys,
             reset      => reset_int,
-            sw_raw     => sw(5),
-            vector_sel => sw(7),
+            sw_raw     => '0',                   -- sw(5) NC: no switch interrupts
+            vector_sel => '0',                   -- sw(7) NC
             armed      => bootstrap_done,
             t1i_ack    => t1i_ack_sig,
             int_req    => btn_int_req,
@@ -670,7 +674,8 @@ begin
             ROM_LAST      => 16#3FFF#,
             RAM_BASE      => 16#0000#,
             RAM_LAST      => 16#0FFF#,
-            RAM_ADDR_BITS => 12
+            RAM_ADDR_BITS => 12,
+            LED_SHADOW_ADDR => 16#00FF#   -- memory-mapped LEDs: reserved page-0 byte, never written by SCELBAL
         )
         port map (
             clk_in      => clk_sys,            -- 25 MHz from on-chip PLL
@@ -678,7 +683,7 @@ begin
             run_enable  => dbg_run_enable,    -- Debug hold: '0' freezes phi state machine
             interrupt   => bootstrap_int or btn_int_req,
             int_instruction => jam_instruction,  -- RST 0 for bootstrap, sw(7) pick after
-            ready_in    => not (ready_sync(1) xor sw6_base),  -- sw(6) flipped from baseline = WAIT
+            ready_in    => '1',                -- sw(6) NC: always READY
             phi1_out    => phi1,
             phi2_out    => phi2,
             sync_out    => sync_sig,
@@ -688,6 +693,7 @@ begin
             address_out => address_sig,
             data_out    => data_sig,
             ram_byte_0  => ram_byte_0,
+            ram_byte_led => ram_byte_led,
             debug_reg_a         => debug_reg_a,
             debug_reg_b         => debug_reg_b,
             debug_reg_c         => debug_reg_c,
@@ -779,18 +785,17 @@ begin
     -- LEDs 4-7: CPU I/O port 8 output (directly active, accent active low)
     -- Normal mode: status + I/O port. Debug capture modes via sw(2)/sw(3)/sw(4)
     -- show the rolling fetch capture (LED ON = bit set).
-    led <= not last_fetch                        when sw(2) = '1' else
-           not last_fetch_addr(7 downto 0)       when sw(3) = '1' else
-           not ("00" & last_fetch_addr(13 downto 8)) when sw(4) = '1' else
-           io_port_8(7 downto 4) & (not dbg_triggered) & (not sync_sig) &
-           (not dbg_next_is_phi2) & (not dbg_is_running);
+    -- LEDs 7:1 are memory-mapped: RAM[0x00FF] bit n -> LED n, 1 = on
+    -- (MON, then W 00FF,FE lights all seven). LED0 (D25) = CPU running.
+    -- Port 8 is not displayed. Same scheme as b8008_monitor (there at 0x3FFF).
+    led <= (not ram_byte_led(7 downto 1)) &
+           (not dbg_is_running);
 
     -- M20: TX busy indicator (ON = UART transmitting)
     led_M20 <= not uart_tx_busy;
 
     -- L18: Running indicator (ON when running, active-low LED)
-    led_L18 <= not fetch_seen when (sw(2) = '1' or sw(3) = '1' or sw(4) = '1')
-               else not dbg_is_running;
+    led_L18 <= not dbg_is_running;   -- sw(2..4) NC: fetch-capture LED modes removed
 
     --------------------------------------------------------------------------------
     -- CPU Debug Outputs (directly connected for logic analyzer)
